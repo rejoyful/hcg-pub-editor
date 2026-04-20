@@ -157,7 +157,9 @@ input,select{font-family:inherit;font-size:13px}
    ============================================================ */
 .stage{
   overflow-y:auto;overflow-x:auto;
-  background:var(--bg);padding:0 32px 80px;
+  background:var(--bg);
+  /* bottom padding = dock height + statusbar + small gap */
+  padding:0 32px calc(var(--edit-dock-h) + 60px);
   position:relative;
 }
 .stage.drop-active::after{
@@ -169,22 +171,44 @@ input,select{font-family:inherit;font-size:13px}
 }
 
 /* ============================================================
-   Edit pane — "Living Page" continuous editor
+   Edit pane — docked at bottom of viewport ("Living Dock")
+   Always-visible work surface; book preview above scrolls freely.
+   Drag handle at top to resize.
    ============================================================ */
-#edit-pane{
-  width:var(--page-w);max-width:100%;
-  margin:24px auto 18px;
-  background:#fff;
-  border:1px solid var(--line);
-  border-radius:6px;
-  box-shadow:0 4px 16px rgba(0,0,0,.08);
-  overflow:hidden;
+:root{
+  --edit-dock-h: 260px;   /* JS updates this on drag */
 }
+#edit-pane{
+  position:fixed;
+  left:280px;                 /* sidebar width */
+  right:0;
+  bottom:22px;                /* sits above the statusbar (22px high) */
+  height:var(--edit-dock-h);
+  min-height:120px;
+  max-height:72vh;
+  background:#fff;
+  border-top:2px solid var(--accent);
+  box-shadow:0 -10px 24px rgba(0,0,0,.08), 0 -1px 0 var(--line);
+  display:flex;flex-direction:column;
+  z-index:40;
+}
+#edit-pane .edit-resize{
+  height:6px;cursor:ns-resize;flex:0 0 auto;
+  background:linear-gradient(180deg, transparent, rgba(0,0,0,.04));
+  position:relative;
+}
+#edit-pane .edit-resize::after{
+  content:"";position:absolute;left:50%;top:2px;
+  width:42px;height:3px;border-radius:2px;
+  background:var(--line);transform:translateX(-50%);
+}
+#edit-pane .edit-resize:hover::after{background:var(--accent)}
 #edit-pane .edit-head{
-  display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
-  padding:10px 18px;
+  display:flex;align-items:center;gap:10px;flex-wrap:nowrap;
+  padding:8px 14px;
   background:linear-gradient(180deg, var(--panel), #fff);
   border-bottom:1px solid var(--line);
+  flex:0 0 auto;
 }
 #edit-pane .edit-label{
   font-size:12px;font-weight:700;color:var(--ink);
@@ -192,24 +216,44 @@ input,select{font-family:inherit;font-size:13px}
   letter-spacing:.3px;
 }
 #edit-pane .edit-label .ph{font-size:14px;color:var(--accent)}
-#edit-pane .edit-hint{font-size:11px;color:var(--meta)}
+#edit-pane .edit-hint{font-size:11px;color:var(--meta);flex:1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#edit-pane .edit-actions{display:inline-flex;gap:6px;flex:0 0 auto}
+#edit-pane .edit-actions .btn{
+  padding:4px 10px;font-size:11px;border-radius:4px;
+  background:var(--accent);color:#fff;border:1px solid var(--accent);
+  cursor:pointer;display:inline-flex;align-items:center;gap:5px;
+}
+#edit-pane .edit-actions .btn:hover{filter:brightness(1.08)}
+#edit-pane .edit-actions .btn.ghost{
+  background:transparent;color:var(--ink);border-color:var(--line);
+}
+#edit-pane .edit-actions .btn .ph{font-size:13px}
 #edit-pane .edit-body{
-  padding:var(--page-mt) var(--page-mr) var(--page-mb) var(--page-ml);
-  min-height:calc(var(--page-h) * 0.6);
+  flex:1 1 auto;overflow-y:auto;overflow-x:hidden;
+  padding:12px 22px;
   font-family:var(--body-family);
   font-size:var(--body-size);
   line-height:var(--body-leading);
   color:var(--ink);
+  scrollbar-width:thin;scrollbar-color:var(--line) transparent;
 }
-#edit-pane #editor{outline:none;min-height:100px}
+#edit-pane .edit-body::-webkit-scrollbar{width:8px}
+#edit-pane .edit-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+#edit-pane #editor{outline:none;min-height:80px}
+
+/* When edit pane is collapsed */
+#edit-pane.collapsed{height:38px !important;min-height:38px}
+#edit-pane.collapsed .edit-resize{display:none}
+#edit-pane.collapsed .edit-body{display:none}
+#edit-pane.collapsed .edit-head{border-bottom:0}
 
 /* Divider label before the book preview */
 .book-head{
-  width:var(--page-w);max-width:100%;
-  margin:12px auto 0;
+  width:100%;max-width:var(--page-w);
+  margin:4px auto 0;
   display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
   padding:6px 18px;color:var(--meta);
-  border-top:1px dashed var(--line);padding-top:14px;
 }
 .book-label{
   font-size:12px;font-weight:700;color:var(--ink);
@@ -221,7 +265,7 @@ input,select{font-family:inherit;font-size:13px}
 /* Book container — vertical stack of spreads */
 .book{
   display:flex;flex-direction:column;align-items:center;gap:28px;
-  padding:14px 0 60px;min-width:max-content;
+  padding:14px 0 40px;min-width:max-content;
 }
 
 /* Spread = a pair of facing pages (좌·우 페이지) */
@@ -475,6 +519,41 @@ input,select{font-family:inherit;font-size:13px}
 .modal .opt .demo{font-size:24px;display:block;margin-bottom:4px}
 .modal .foot{display:flex;justify-content:flex-end;gap:8px}
 
+/* AI auto-style modal */
+.modal .card.ai-card{max-width:520px;padding:24px}
+.modal .card.ai-card h4{display:flex;align-items:center;gap:8px;font-size:15px}
+.modal .card.ai-card h4 .ph{color:var(--accent);font-size:18px}
+.modal .ai-desc{font-size:12px;color:var(--meta);margin:0 0 16px;line-height:1.5}
+.modal .ai-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.modal .ai-row label{font-size:11px;color:var(--ink);min-width:64px;font-weight:600}
+.modal .ai-row input[type="password"],
+.modal .ai-row input[type="text"],
+.modal .ai-row select,
+.modal .ai-row textarea{
+  flex:1;padding:7px 10px;border:1px solid var(--line);border-radius:4px;
+  font-size:12px;font-family:inherit;color:var(--ink);background:#fff;
+  outline:none;transition:border-color .12s;
+}
+.modal .ai-row input:focus,
+.modal .ai-row select:focus,
+.modal .ai-row textarea:focus{border-color:var(--accent)}
+.modal .ai-row textarea{resize:vertical;min-height:42px;line-height:1.4}
+.modal .ai-row.ai-prompt-row{align-items:flex-start}
+.modal .ai-row.ai-prompt-row label{padding-top:6px}
+.modal .ai-checks{gap:18px}
+.modal .ai-checks .check{
+  display:inline-flex;align-items:center;gap:6px;font-size:11px;
+  color:var(--ink);font-weight:400;cursor:pointer;min-width:0;
+}
+.modal .ai-checks .check input{margin:0;width:13px;height:13px;cursor:pointer}
+.modal .ai-status{
+  font-size:11px;color:var(--meta);min-height:18px;margin:6px 0 12px;
+  font-family:var(--ui-family);
+}
+.modal .ai-status.busy{color:var(--accent)}
+.modal .ai-status.err{color:var(--warn)}
+.modal .ai-status.ok{color:var(--ok)}
+
 /* ============================================================
    Print / PDF export
    ============================================================ */
@@ -665,23 +744,6 @@ input,select{font-family:inherit;font-size:13px}
           </div>
         </div>
       </div>
-      <!-- Edit pane — continuous editor ("Living Page"). User types here;
-           the book below repaginates in real time. -->
-      <div id="edit-pane" aria-label="편집 영역">
-        <div class="edit-head">
-          <span class="edit-label"><i class="ph ph-pencil-simple"></i> 편집 (Living Page)</span>
-          <span class="edit-hint">이 영역에서 자유롭게 작성·붙여넣기 하면 아래 책 뷰로 자동 조판됩니다.</span>
-        </div>
-        <div class="edit-body">
-          <div id="editor"></div>
-        </div>
-      </div>
-
-      <div class="book-head">
-        <span class="book-label"><i class="ph ph-book-open"></i> 미리보기 (자동 조판)</span>
-        <span class="book-hint">Word·한글처럼 텍스트가 넘치면 자동으로 다음 페이지로 흐릅니다.</span>
-      </div>
-
       <div class="book" id="book">
         <!-- Spreads are populated by the pagination engine.
              Each page has .page-content where chunked blocks are placed. -->
@@ -710,6 +772,26 @@ input,select{font-family:inherit;font-size:13px}
 
   </div>
 
+  <!-- Bottom dock: edit pane (always visible). Book preview above stays in view. -->
+  <div id="edit-pane" aria-label="편집 영역">
+    <div class="edit-resize" id="edit-resize" title="드래그해서 높이 조절"></div>
+    <div class="edit-head">
+      <span class="edit-label"><i class="ph ph-pencil-simple"></i> 편집</span>
+      <span class="edit-hint">여기에 작성·붙여넣기 하면 위 책 뷰로 자동 조판됩니다.</span>
+      <span class="edit-actions">
+        <button class="btn" id="btn-ai-style" title="Claude AI로 제목·소제목·목차 자동 스타일링">
+          <i class="ph ph-sparkle"></i> AI 자동 스타일
+        </button>
+        <button class="btn ghost" id="btn-edit-toggle" title="편집 영역 접기/펼치기">
+          <i class="ph ph-caret-down"></i>
+        </button>
+      </span>
+    </div>
+    <div class="edit-body">
+      <div id="editor"></div>
+    </div>
+  </div>
+
   <footer class="statusbar">
     <span class="dot" id="status-dot"></span>
     <span id="status-msg">준비</span>
@@ -717,6 +799,39 @@ input,select{font-family:inherit;font-size:13px}
     <span id="status-counts">단락 0 · 문자 0</span>
   </footer>
 
+</div>
+
+<!-- AI auto-style modal -->
+<div class="modal" id="ai-modal">
+  <div class="card ai-card">
+    <h4><i class="ph ph-sparkle"></i> Claude AI 자동 스타일</h4>
+    <p class="ai-desc">본문을 분석해 제목·소제목·목차를 자동으로 인식하고 스타일을 적용합니다.</p>
+    <div class="ai-row">
+      <label>API 키</label>
+      <input type="password" id="ai-key" placeholder="sk-ant-api03-..." autocomplete="off">
+    </div>
+    <div class="ai-row">
+      <label>모델</label>
+      <select id="ai-model">
+        <option value="claude-sonnet-4-5" selected>Claude Sonnet 4.5 (권장)</option>
+        <option value="claude-opus-4-5">Claude Opus 4.5 (최고 품질)</option>
+        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (빠름)</option>
+      </select>
+    </div>
+    <div class="ai-row ai-checks">
+      <label class="check"><input type="checkbox" id="ai-save-key" checked> 이 브라우저에 키 저장</label>
+      <label class="check"><input type="checkbox" id="ai-add-toc"> 목차 자동 생성</label>
+    </div>
+    <div class="ai-row ai-prompt-row">
+      <label>추가 지시(선택)</label>
+      <textarea id="ai-prompt" rows="2" placeholder="예: 번호가 매겨진 항목은 소제목(h3)으로 처리"></textarea>
+    </div>
+    <div class="ai-status" id="ai-status"></div>
+    <div class="foot">
+      <button class="btn" id="ai-cancel">취소</button>
+      <button class="btn primary" id="ai-apply">분석 & 적용</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -2070,6 +2185,189 @@ setTimeout(()=>{ rescanEditorImages(); scheduleReflow(); }, 80);
 setTimeout(()=>{ scheduleReflow(); }, 400);
 setStatus('에디터 준비 완료', 'ok');
 console.log('[HCG typesetting editor] ready');
+
+/* ============================================================
+   Edit dock — drag-to-resize + collapse
+   ============================================================ */
+const editPane = $('#edit-pane');
+const editResize = $('#edit-resize');
+const editToggle = $('#btn-edit-toggle');
+
+/* Restore persisted height */
+try {
+  const savedH = parseInt(localStorage.getItem('hcg_dock_h') || '0', 10);
+  if (savedH >= 120 && savedH <= window.innerHeight * 0.72){
+    document.documentElement.style.setProperty('--edit-dock-h', savedH + 'px');
+  }
+} catch(e){}
+
+let _dockDrag = null;
+editResize.addEventListener('mousedown', e=>{
+  e.preventDefault();
+  _dockDrag = { startY: e.clientY, startH: editPane.getBoundingClientRect().height };
+  document.body.style.cursor = 'ns-resize';
+  document.body.style.userSelect = 'none';
+});
+window.addEventListener('mousemove', e=>{
+  if (!_dockDrag) return;
+  const delta = _dockDrag.startY - e.clientY;   // dragging up = increase height
+  const newH = Math.max(120, Math.min(window.innerHeight * 0.72, _dockDrag.startH + delta));
+  document.documentElement.style.setProperty('--edit-dock-h', newH + 'px');
+});
+window.addEventListener('mouseup', ()=>{
+  if (!_dockDrag) return;
+  _dockDrag = null;
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  try {
+    const h = editPane.getBoundingClientRect().height;
+    localStorage.setItem('hcg_dock_h', String(Math.round(h)));
+  } catch(e){}
+  setTimeout(scheduleReflow, 80);
+});
+
+editToggle.addEventListener('click', ()=>{
+  const collapsed = editPane.classList.toggle('collapsed');
+  editToggle.querySelector('i').className = collapsed ? 'ph ph-caret-up' : 'ph ph-caret-down';
+  if (collapsed){
+    document.documentElement.style.setProperty('--edit-dock-h', '38px');
+  } else {
+    const savedH = parseInt(localStorage.getItem('hcg_dock_h') || '260', 10);
+    document.documentElement.style.setProperty('--edit-dock-h', Math.max(120, savedH) + 'px');
+  }
+  setTimeout(scheduleReflow, 80);
+});
+
+/* ============================================================
+   Claude AI — auto-style (headings, sub-headings, TOC)
+   Calls the Anthropic Messages API directly from the browser
+   (requires anthropic-dangerous-direct-browser-access header).
+   API key stored in localStorage if user opts in.
+   ============================================================ */
+const aiModal   = $('#ai-modal');
+const aiKeyInp  = $('#ai-key');
+const aiModel   = $('#ai-model');
+const aiSaveKey = $('#ai-save-key');
+const aiAddToc  = $('#ai-add-toc');
+const aiPrompt  = $('#ai-prompt');
+const aiStatus  = $('#ai-status');
+const btnAi     = $('#btn-ai-style');
+
+function aiSetStatus(msg, kind=''){
+  aiStatus.className = 'ai-status ' + kind;
+  aiStatus.textContent = msg;
+}
+
+btnAi.addEventListener('click', ()=>{
+  /* Pre-fill from localStorage */
+  try {
+    const k = localStorage.getItem('hcg_ai_key') || '';
+    const m = localStorage.getItem('hcg_ai_model') || 'claude-sonnet-4-5';
+    aiKeyInp.value = k;
+    aiModel.value = m;
+  } catch(e){}
+  aiSetStatus('');
+  aiModal.classList.add('show');
+});
+$('#ai-cancel').addEventListener('click', ()=>aiModal.classList.remove('show'));
+aiModal.addEventListener('click', e=>{
+  if (e.target === aiModal) aiModal.classList.remove('show');
+});
+
+$('#ai-apply').addEventListener('click', async ()=>{
+  const key = aiKeyInp.value.trim();
+  const model = aiModel.value;
+  if (!key){ aiSetStatus('API 키를 입력하세요.', 'err'); return; }
+  if (aiSaveKey.checked){
+    try { localStorage.setItem('hcg_ai_key', key); localStorage.setItem('hcg_ai_model', model); } catch(e){}
+  } else {
+    try { localStorage.removeItem('hcg_ai_key'); } catch(e){}
+  }
+  const html = editor.getHTML();
+  if (!html || editor.getText().trim().length < 20){
+    aiSetStatus('본문이 너무 짧습니다. 먼저 원고를 불러오거나 붙여넣기 하세요.', 'err');
+    return;
+  }
+
+  aiSetStatus('Claude가 본문을 분석하고 있습니다…', 'busy');
+  $('#ai-apply').disabled = true;
+
+  try {
+    const styled = await callClaudeForAutoStyle({
+      apiKey: key,
+      model,
+      html,
+      addToc: aiAddToc.checked,
+      userDirective: aiPrompt.value.trim(),
+    });
+    editor.commands.setContent(styled, false);
+    setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 40);
+    aiSetStatus('완료되었습니다.', 'ok');
+    toast('AI 자동 스타일 적용 완료', 'ok');
+    setTimeout(()=>aiModal.classList.remove('show'), 600);
+  } catch(err){
+    console.error(err);
+    aiSetStatus('실패: ' + (err.message || err), 'err');
+  } finally {
+    $('#ai-apply').disabled = false;
+  }
+});
+
+async function callClaudeForAutoStyle({ apiKey, model, html, addToc, userDirective }){
+  /* Strip scripts/styles that might confuse; send the raw body HTML. */
+  const system = [
+    '당신은 한국어 출판물의 교정·조판 전문가입니다.',
+    '입력으로 저자가 작성한 본문 HTML을 받습니다.',
+    '문단의 역할을 파악하여 다음 규칙대로 HTML 태그를 다시 씌운 결과를 반환하세요:',
+    '- 문서 제목/대제목 → <h1>',
+    '- 장(Chapter) 제목 → <h2>',
+    '- 절·소제목 → <h3>',
+    '- 본문 단락 → <p>',
+    '- 나열/번호 목록은 <ul>·<ol>·<li>로 명확히 표현',
+    '- 인용문은 <blockquote>',
+    '- 기존 이미지(<img>)·표(<table>)는 절대 수정·삭제하지 말고 그대로 유지',
+    addToc ? '- 결과 최상단에 <nav class="toc"><h2>목차</h2><ol>…</ol></nav> 형태의 목차를 생성 (각 <h2>, <h3> 제목을 참조)' : '',
+    userDirective ? `- 추가 지시: ${userDirective}` : '',
+    '',
+    '출력 형식: 오직 결과 HTML만 반환. 설명·마크다운 코드펜스·여는 말 금지. <body>나 <html>은 감싸지 마세요. 내용 순서는 보존하되 태그만 교정합니다.',
+  ].filter(Boolean).join('\n');
+
+  const userMsg = `다음 HTML을 분석하여 규칙에 맞게 태그를 재조정한 HTML만 반환하세요.\n\n---\n${html}`;
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 8192,
+      system,
+      messages: [{ role: 'user', content: userMsg }],
+    }),
+  });
+
+  if (!resp.ok){
+    const errText = await resp.text().catch(()=>'');
+    let msg = `Claude API 오류 (${resp.status})`;
+    try { const j = JSON.parse(errText); if (j?.error?.message) msg += `: ${j.error.message}`; }
+    catch(e){ if (errText) msg += `: ${errText.slice(0,200)}`; }
+    throw new Error(msg);
+  }
+
+  const data = await resp.json();
+  const text = (data?.content || []).map(b => b.type === 'text' ? b.text : '').join('').trim();
+  if (!text) throw new Error('빈 응답');
+
+  /* Claude may wrap output in code fences despite instructions; strip them. */
+  return text
+    .replace(/^```(?:html)?\s*/i, '')
+    .replace(/\s*```\s*$/, '')
+    .trim();
+}
 </script>
 
 </body>
