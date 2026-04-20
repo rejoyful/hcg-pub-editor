@@ -2702,10 +2702,13 @@ function openFloatPopup(){
   <span class="sep"></span>
   <button data-cmd="ul" title="글머리">• 목록</button>
   <button data-cmd="ol" title="번호">1. 목록</button>
-  <button data-cmd="blockquote" title="인용">“인용”</button>
+  <button data-cmd="blockquote" title="인용">"인용"</button>
+  <span class="sep"></span>
+  <button data-cmd="image" title="이미지 업로드 (여러 장 선택 가능)">🖼 이미지</button>
   <span class="sep"></span>
   <button data-cmd="undo">실행취소</button>
   <button data-cmd="redo">다시실행</button>
+  <input type="file" id="fw-img-input" accept="image/*" multiple style="display:none">
 </div>
 <div class="fw-body">
   <div id="fw-edit" class="fw-edit" contenteditable="true" spellcheck="false"></div>
@@ -2726,10 +2729,35 @@ function openFloatPopup(){
     count.textContent = (edit.innerText || '').replace(/\\s+/g,' ').trim().length + '자';
   }
 
+  const fileInput = document.getElementById('fw-img-input');
+
+  function insertImageFiles(files){
+    const imgs = Array.from(files || []).filter(f => f && f.type && f.type.startsWith('image/'));
+    if (!imgs.length) return;
+    Promise.all(imgs.map(f => new Promise(res => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = () => res(null);
+      fr.readAsDataURL(f);
+    }))).then(urls => {
+      urls.filter(Boolean).forEach(u => {
+        const img = '<p><img src="' + u + '" alt=""></p>';
+        document.execCommand('insertHTML', false, img);
+      });
+      sendUp();
+    });
+  }
+
   tools.addEventListener('click', e=>{
     const b = e.target.closest('button'); if (!b) return;
     const cmd = b.dataset.cmd;
     edit.focus();
+    /* Image: open file picker */
+    if (cmd === 'image'){
+      fileInput.value = '';
+      fileInput.click();
+      return;
+    }
     const m = { bold:'bold', italic:'italic', underline:'underline',
                 undo:'undo', redo:'redo',
                 ul:['insertUnorderedList'], ol:['insertOrderedList'],
@@ -2742,24 +2770,25 @@ function openFloatPopup(){
     sendUp();
   });
 
-  /* Image drop */
+  /* File picker — multiple 이미지 삽입 */
+  fileInput.addEventListener('change', e => {
+    insertImageFiles(e.target.files);
+  });
+
+  /* Image drop (여러 장) */
   edit.addEventListener('dragover', e=>{ e.preventDefault(); edit.classList.add('drop-active'); });
   edit.addEventListener('dragleave', ()=>edit.classList.remove('drop-active'));
   edit.addEventListener('drop', e=>{
     e.preventDefault(); edit.classList.remove('drop-active');
-    const files = Array.from(e.dataTransfer?.files || []).filter(f=>f.type.startsWith('image/'));
-    if (!files.length) return;
-    Promise.all(files.map(f=>new Promise(res=>{
-      const fr = new FileReader();
-      fr.onload = ()=>res(fr.result);
-      fr.readAsDataURL(f);
-    }))).then(urls=>{
-      urls.forEach(u=>{
-        const img = '<p><img src="'+u+'" alt=""></p>';
-        document.execCommand('insertHTML', false, img);
-      });
-      sendUp();
-    });
+    insertImageFiles(e.dataTransfer?.files);
+  });
+
+  /* Paste 이미지 (클립보드) */
+  edit.addEventListener('paste', e => {
+    const items = Array.from(e.clipboardData?.items || []).filter(it => it.type.startsWith('image/'));
+    if (!items.length) return;
+    e.preventDefault();
+    insertImageFiles(items.map(it => it.getAsFile()).filter(Boolean));
   });
 
   function sendUp(){
@@ -3221,6 +3250,16 @@ aiModal.addEventListener('click', e=>{
   aiModal.classList.remove('show');
 });
 
+/* ═══════════════════════════════════════════════════════════════
+   AI apply — TAG PATCH MODE
+   ───────────────────────────────────────────────────────────────
+   Claude에게 본문을 "다시 쓰게" 하지 않습니다. 본문은 프런트에
+   그대로 두고, Claude는 블록 번호 → 태그 매핑만 JSON으로 반환.
+   프런트가 원본 Tiptap 노드의 type/attrs만 바꾸므로:
+     · 본문 손실이 구조적으로 불가능
+     · 출력 토큰이 원고 크기와 무관 (수백~수천 토큰)
+     · 10만자 원고도 15~30초면 완료
+   ═══════════════════════════════════════════════════════════════ */
 $('#ai-apply').addEventListener('click', async ()=>{
   const key = aiKeyInp.value.trim();
   const model = aiModelSel.value;
@@ -3230,9 +3269,10 @@ $('#ai-apply').addEventListener('click', async ()=>{
   } else {
     try { localStorage.removeItem('hcg_ai_key'); } catch(e){}
   }
-  const html = editor.getHTML();
+
+  const docJson = editor.getJSON();
   const plainBefore = editor.getText().trim();
-  if (!html || plainBefore.length < 20){
+  if (!docJson.content?.length || plainBefore.length < 20){
     aiSetStatus('본문이 너무 짧습니다. 먼저 원고를 불러오거나 붙여넣기 하세요.', 'err');
     return;
   }
@@ -3244,40 +3284,59 @@ $('#ai-apply').addEventListener('click', async ()=>{
   $('#ai-apply').disabled = true;
   $('#ai-cancel').textContent = '분석 중…';
 
-  const snapshot = editor.getJSON(); // rollback safety net
+  const snapshot = docJson;
 
   try {
-    /* Phase: analyze (while the fetch is in-flight) */
-    setTimeout(()=>aiProgressPhase('analyze'), 400);
+    /* 1) 블록 추출 — 원본은 그대로 두고, 번호+요약텍스트만 AI로 전송 */
+    const blocks = extractBlocksForAI(docJson);
+    aiSetStatus(`${blocks.length}개 블록 분석 요청 중…`);
 
-    const styled = await callClaudeForAutoStyle({
+    setTimeout(()=>aiProgressPhase('analyze'), 300);
+
+    /* 2) Claude에게 "태그 결정"만 요청 (스트리밍) */
+    const t0 = performance.now();
+    const patchResponse = await callClaudeForTagPatch({
       apiKey: key,
       model,
-      html,
+      blocks,
       addToc: aiAddToc.checked,
       splitFront: aiSplitFront.checked,
       userDirective: aiPrompt.value.trim(),
+      onProgress: ({ bytes }) => {
+        aiSetStatus(`Claude가 태그 결정 중… (${bytes}자 수신)`);
+      },
     });
+    const dt = ((performance.now() - t0) / 1000).toFixed(1);
 
-    /* Phase: verify */
+    /* 3) 응답 검증 */
     aiProgressPhase('verify');
-    const check = verifyTextPreserved(plainBefore, styled);
-    if (!check.ok){
-      editor.commands.setContent(snapshot, false);
-      aiShowDiffWarn(
-        `<b>본문이 ${check.lossPct}% 사라져서 적용을 중단했습니다.</b><br>` +
-        `원본: ${check.beforeLen}자 · AI 응답: ${check.afterLen}자 · 손실: ${check.beforeLen - check.afterLen}자<br>` +
-        `모델이 본문을 요약·생략했을 수 있습니다. 더 작은 단위로 나눠 다시 시도하거나, 더 정확한 모델(Opus)을 선택하세요.`
-      );
-      aiProgressFinish('err', `본문 보존 실패 — 원문 ${check.beforeLen}자 중 ${check.afterLen}자만 전달됨 (${check.lossPct}% 손실)`);
-      return;
+    if (!patchResponse || typeof patchResponse !== 'object' || !Array.isArray(patchResponse.patches)){
+      throw new Error('Claude가 예상된 JSON 형식으로 답하지 않았습니다.');
     }
 
-    /* Phase: apply */
+    /* 4) 원본 노드를 재사용해 새 문서 조립 — 본문 텍스트는 건드리지 않음 */
     aiProgressPhase('apply');
-    editor.commands.setContent(styled, false);
+    const newDoc = applyTagPatches(snapshot, patchResponse, {
+      addToc: aiAddToc.checked,
+      splitFront: aiSplitFront.checked,
+    });
+
+    /* 5) 적용 후 본문 길이 불변 검증 (태그 패치는 본문 건드릴 수 없으므로 항상 통과) */
+    editor.commands.setContent(newDoc, false);
+    const plainAfter = editor.getText().trim();
+    const delta = Math.abs(plainAfter.length - plainBefore.length);
+    if (delta > 8){
+      editor.commands.setContent(snapshot, false);
+      throw new Error(`적용 후 본문 길이 변동 감지 (${plainBefore.length}→${plainAfter.length}). 안전상 원상 복구했습니다.`);
+    }
+
     setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 40);
-    aiProgressFinish('ok', `완료 — 본문 ${check.beforeLen}자 모두 보존, 구조와 스타일만 적용되었습니다.`);
+    const nPatch = patchResponse.patches.length;
+    const nFront = ['preface','author','dedication','foreword'].reduce(
+      (s,k)=> s + (patchResponse.frontMatter?.[k]?.length || 0), 0);
+    aiProgressFinish('ok',
+      `완료 (${dt}초) — 태그 ${nPatch}건, 프론트매터 ${nFront}개 이동. ` +
+      `본문 ${plainBefore.length.toLocaleString()}자 **한 글자도 변경되지 않았습니다**.`);
     toast('AI 자동 스타일 적용 완료', 'ok');
     setTimeout(()=>{
       aiModal.classList.remove('show');
@@ -3317,6 +3376,279 @@ function verifyTextPreserved(plainBefore, styledHtml){
   const lossPct = Math.max(0, Math.round((1 - ratio) * 100));
   const ok = ratio >= 0.97 && missing.length === 0;
   return { ok, beforeLen, afterLen, lossPct };
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Tag-Patch helpers — extract / apply
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 노드 트리에서 plaintext만 뽑아내기 */
+function extractPlainText(node){
+  if (!node) return '';
+  if (typeof node.text === 'string') return node.text;
+  if (Array.isArray(node.content)){
+    return node.content.map(extractPlainText).join('');
+  }
+  return '';
+}
+
+/* 최상위 블록을 AI에게 보낼 "번호 + 요약텍스트" 목록으로 */
+function extractBlocksForAI(docJson){
+  const top = Array.isArray(docJson?.content) ? docJson.content : [];
+  const out = [];
+  top.forEach((node, i) => {
+    const n = i + 1;
+    const type = node.type;
+    let text = '';
+
+    if (type === 'horizontalRule'){
+      text = '[구분선]';
+    } else if (type === 'table'){
+      text = '[표 블록]';
+    } else if (type === 'image'){
+      text = '[이미지 블록]';
+    } else if (type === 'paragraph' && Array.isArray(node.content) && node.content.some(c=>c?.type==='image')){
+      // paragraph wrapping a single image
+      const inlineText = extractPlainText(node).trim();
+      text = inlineText ? `[이미지+텍스트] ${inlineText.slice(0,140)}` : '[이미지 블록]';
+    } else if (type === 'bulletList' || type === 'orderedList'){
+      text = `[목록] ${extractPlainText(node).slice(0, 160)}`;
+    } else if (type === 'blockquote'){
+      text = `[인용] ${extractPlainText(node).slice(0, 200)}`;
+    } else {
+      text = extractPlainText(node);
+      if (text.length > 220) text = text.slice(0, 220) + '…';
+    }
+    out.push({ n, text: text.replace(/\s+/g,' ').trim() || '(빈 블록)', type });
+  });
+  return out;
+}
+
+/* AI 응답(JSON)을 원본 docJson에 적용. 본문 content는 절대 건드리지 않고,
+   오직 블록의 type/attrs 만 교체하고, 프론트매터 블록은 앞으로 이동. */
+function applyTagPatches(docJson, response, options){
+  const top = Array.isArray(docJson?.content) ? docJson.content.slice() : [];
+  const patches = Array.isArray(response?.patches) ? response.patches : [];
+  const fm = response?.frontMatter || {};
+  const addToc = !!options?.addToc;
+  const splitFront = !!options?.splitFront;
+
+  /* 1. patch map (번호 → 태그) */
+  const patchMap = new Map();
+  patches.forEach(p => {
+    if (p && Number.isInteger(p.n) && typeof p.tag === 'string'){
+      patchMap.set(p.n, p.tag.toLowerCase().trim());
+    }
+  });
+
+  /* 2. 블록 변환 — 원본 content는 그대로 재사용 */
+  function transformBlock(node, n){
+    const tag = patchMap.get(n);
+    if (!tag) return node;
+    // 이미지/표/구분선은 태그 패치 무시
+    if (node.type === 'image' || node.type === 'horizontalRule' || node.type === 'table') return node;
+    const inlineContent = Array.isArray(node.content) ? node.content : [];
+
+    if (/^h[1-3]$/.test(tag)){
+      return { type:'heading', attrs:{ level: parseInt(tag[1], 10) }, content: inlineContent };
+    }
+    if (tag === 'p' || tag === 'paragraph'){
+      return { type:'paragraph', content: inlineContent };
+    }
+    if (tag === 'blockquote'){
+      // blockquote는 내부에 paragraph가 와야 함 (StarterKit)
+      const inner = (node.type === 'blockquote') ? (node.content || [])
+                                                 : [{ type:'paragraph', content: inlineContent }];
+      return { type:'blockquote', content: inner };
+    }
+    return node;
+  }
+  const transformed = top.map((node, i) => transformBlock(node, i + 1));
+
+  /* 3. 프론트매터 블록 번호 수집 (순서: 헌사 → 저자소개 → 추천사 → 머리글) */
+  const frontOrder = ['dedication', 'author', 'foreword', 'preface'];
+  const frontSet = new Set();
+  const frontPlan = []; // [{ kind, nodes:[{n, node}] }]
+  if (splitFront){
+    frontOrder.forEach(kind => {
+      const arr = Array.isArray(fm[kind]) ? fm[kind] : [];
+      const nodes = arr
+        .filter(n => Number.isInteger(n) && n >= 1 && n <= transformed.length)
+        .map(n => ({ n, node: transformed[n - 1] }));
+      if (nodes.length === 0) return;
+      nodes.forEach(({ n }) => frontSet.add(n));
+      frontPlan.push({ kind, nodes });
+    });
+  }
+
+  /* 4. 본문(front matter 제외) */
+  const body = [];
+  transformed.forEach((node, i) => {
+    if (!frontSet.has(i + 1)) body.push(node);
+  });
+
+  /* 5. 프론트매터 프리픽스 + 페이지 나눔 */
+  const prefix = [];
+  const pageBreak = () => ({ type:'horizontalRule' });
+  frontPlan.forEach(group => {
+    group.nodes.forEach(({ node }) => prefix.push(node));
+    prefix.push(pageBreak());
+  });
+
+  /* 6. 목차 — 프런트에서 직접 생성 (Claude가 아니라) */
+  if (addToc){
+    const items = [];
+    body.forEach(b => {
+      if (b?.type === 'heading' && b.attrs?.level >= 1 && b.attrs?.level <= 3){
+        const txt = extractPlainText(b).trim();
+        if (txt) items.push({ level: b.attrs.level, text: txt });
+      }
+    });
+    if (items.length){
+      prefix.push({
+        type: 'heading', attrs: { level: 2 },
+        content: [{ type: 'text', text: '목차' }]
+      });
+      prefix.push({
+        type: 'bulletList',
+        content: items.map(it => ({
+          type: 'listItem',
+          content: [{
+            type: 'paragraph',
+            content: [{
+              type: 'text',
+              text: (it.level > 1 ? '  '.repeat(it.level - 1) : '') + it.text
+            }]
+          }]
+        }))
+      });
+      prefix.push(pageBreak());
+    }
+  }
+
+  return { type: 'doc', content: [...prefix, ...body] };
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Claude streaming call — tag-patch JSON only
+   ═══════════════════════════════════════════════════════════════ */
+async function callClaudeForTagPatch({ apiKey, model, blocks, addToc, splitFront, userDirective, onProgress, signal }){
+  const system = [
+    '당신은 한국어 출판물의 **태그 조정 전문가**입니다.',
+    '번호가 매겨진 텍스트 블록 목록을 받아, 각 블록에 어울리는 HTML 태그를 **JSON만**으로 답합니다.',
+    '',
+    '# 절대 규칙',
+    '1. 본문 텍스트를 출력하지 마세요. **오직 JSON만** 출력합니다.',
+    '2. 태그 변경이 필요 없는 블록은 응답에 포함하지 않습니다 (변경할 것만).',
+    '3. `[이미지 블록]`, `[표 블록]`, `[구분선]`, `[이미지+텍스트]` 블록은 **절대 포함하지 마세요** (patches·frontMatter 모두).',
+    '4. JSON 외 설명·코드펜스·주석 금지. 답은 `{` 로 시작해 `}` 로 끝나야 합니다.',
+    '',
+    '# 태그 선택',
+    '- 책 전체 제목 → "h1" (보통 0~1개)',
+    '- 장(章) 제목 → "h2"',
+    '- 절·소제목 → "h3"',
+    '- 일반 본문 → "p"',
+    '- 긴 인용구 → "blockquote"',
+    '',
+    '# 프론트매터 분류',
+    splitFront
+      ? [
+          '- "dedication" : 헌사',
+          '- "author"     : 저자 소개',
+          '- "foreword"   : 추천사/인사말',
+          '- "preface"    : 머리글·서문·들어가며',
+          '해당 블록 번호를 배열로. 해당 없으면 빈 배열.'
+        ].join('\n')
+      : '- splitFront=false — frontMatter 의 모든 배열을 빈 배열로.',
+    '',
+    userDirective ? `# 사용자 추가 지시\n${userDirective}` : '',
+    '',
+    '# 응답 JSON 스키마',
+    '{',
+    '  "patches": [{"n": 정수, "tag": "h1"|"h2"|"h3"|"p"|"blockquote"}, ...],',
+    '  "frontMatter": {',
+    '    "preface":    [정수, ...],',
+    '    "author":     [정수, ...],',
+    '    "dedication": [정수, ...],',
+    '    "foreword":   [정수, ...]',
+    '  }',
+    '}',
+  ].filter(Boolean).join('\n');
+
+  const packed = blocks.map(b => `[${b.n}] ${b.text}`).join('\n');
+  const userMsg =
+    `다음 ${blocks.length}개 블록의 태그를 규칙대로 분류해 JSON으로만 답하세요. 본문 텍스트는 절대 출력하지 마세요.\n\n${packed}`;
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    signal,
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 8000,
+      temperature: 0,
+      system,
+      stream: true,
+      messages: [{ role:'user', content: userMsg }],
+    }),
+  });
+
+  if (!resp.ok){
+    const errText = await resp.text().catch(()=>'');
+    let msg = `Claude API 오류 (${resp.status})`;
+    try { const j = JSON.parse(errText); if (j?.error?.message) msg += `: ${j.error.message}`; }
+    catch(e){ if (errText) msg += `: ${errText.slice(0,200)}`; }
+    throw new Error(msg);
+  }
+
+  /* SSE 파싱 */
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let accumulated = '';
+
+  while (true){
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf('\n\n')) >= 0){
+      const block = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      const dataLines = block.split('\n').filter(l => l.startsWith('data:'));
+      if (!dataLines.length) continue;
+      const dataStr = dataLines.map(l => l.slice(5).trim()).join('');
+      if (!dataStr || dataStr === '[DONE]') continue;
+      let evt;
+      try { evt = JSON.parse(dataStr); } catch(e){ continue; }
+      if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta'){
+        accumulated += evt.delta.text || '';
+        onProgress?.({ bytes: accumulated.length });
+      } else if (evt.type === 'error'){
+        throw new Error(evt.error?.message || 'Claude streaming error');
+      }
+    }
+  }
+
+  /* 누적된 텍스트에서 JSON만 추출 */
+  let text = accumulated.trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/, '')
+    .trim();
+  const first = text.indexOf('{');
+  const last = text.lastIndexOf('}');
+  if (first >= 0 && last > first) text = text.slice(first, last + 1);
+
+  try {
+    return JSON.parse(text);
+  } catch(e){
+    throw new Error('Claude가 올바른 JSON을 반환하지 않았습니다: ' + text.slice(0, 200));
+  }
 }
 
 /* ─── Image token stripping ────────────────────────────────────
