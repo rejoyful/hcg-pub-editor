@@ -55,7 +55,7 @@ input,select{font-family:inherit;font-size:13px}
 /* ============================================================
    App layout
    ============================================================ */
-.app{display:grid;grid-template-rows:52px 1fr 28px;min-height:100vh}
+.app{display:grid;grid-template-rows:52px 1fr 28px;height:100vh;overflow:hidden}
 
 /* Top bar */
 .topbar{
@@ -102,23 +102,19 @@ input,select{font-family:inherit;font-size:13px}
 .menu button:hover{background:var(--soft)}
 .menu button small{color:var(--meta);font-size:11px;margin-left:auto}
 
-/* Main layout — sidebar is position:fixed so it stays visible while the
-   stage scrolls. The grid keeps the column reserved so the stage starts
-   at the correct x-offset. */
-.main{display:grid;grid-template-columns:280px 1fr;overflow:hidden;position:relative}
+/* Main layout — 2-column grid. Sidebar and stage each own their own
+   independent scroll, so scrolling the book doesn't move the sidebar. */
+.main{display:grid;grid-template-columns:280px 1fr;overflow:hidden;min-height:0}
 
 /* ============================================================
-   Sidebar — fully fixed on the left (like app navigation)
+   Sidebar — first grid column with its own scroll context
+   (stays visually fixed because .main row is height-capped by .app grid)
    ============================================================ */
 .side{
-  position:fixed;
-  left:0;
-  top:52px;     /* below topbar */
-  bottom:22px;  /* above statusbar */
-  width:280px;
   background:var(--panel);border-right:1px solid var(--line);
-  overflow-y:auto;padding:14px 16px 40px;
-  z-index:30;
+  overflow-y:auto;overflow-x:hidden;padding:14px 16px 40px;
+  grid-column:1;grid-row:1;
+  min-height:0;height:100%;
   box-sizing:border-box;
 }
 .side h3{
@@ -165,11 +161,13 @@ input,select{font-family:inherit;font-size:13px}
 .pipeline .step .ic{width:14px;text-align:center;font-weight:700}
 
 /* ============================================================
-   Editor area = the book itself
+   Editor area = the book itself — sits in grid column 2
    ============================================================ */
 .stage{
+  grid-column:2;grid-row:1;
   overflow-y:auto;overflow-x:auto;
   background:var(--bg);
+  min-height:0;height:100%;
   /* bottom padding = dock height + statusbar + small gap */
   padding:0 32px calc(var(--edit-dock-h) + 60px);
   position:relative;
@@ -2582,6 +2580,14 @@ try {
   /* (legacy float position vars removed — float now uses real popup window) */
 } catch(e){}
 
+/* Float popup state — declared BEFORE applyDockMode because the init call
+   applyDockMode('bottom') → closeFloatPopup() uses these vars.
+   Declaring them later puts them in the Temporal Dead Zone and the whole
+   module aborts, preventing dock buttons and AI from binding. */
+let _floatWin = null;
+let _floatSyncing = false;
+let _floatSyncHandle = 0;
+
 function applyDockMode(mode){
   /* 'float' uses a REAL browser popup (window.open). When clicking the
      float button, we open the popup and show a compact status bar in
@@ -2628,10 +2634,9 @@ for (const [k,b] of Object.entries(dockBtns)){
      shell (contenteditable + basic toolbar).
    • Syncs HTML bidirectionally with the main editor.
    • Falls back to alert if the browser blocks popups.
+   (State vars _floatWin/_floatSyncing/_floatSyncHandle are declared
+   above applyDockMode to avoid TDZ when init calls closeFloatPopup.)
    ============================================================ */
-let _floatWin = null;
-let _floatSyncing = false;
-let _floatSyncHandle = 0;
 
 function openFloatPopup(){
   if (_floatWin && !_floatWin.closed){ _floatWin.focus(); return; }
