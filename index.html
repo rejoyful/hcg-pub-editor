@@ -155,7 +155,7 @@ input,select{font-family:inherit;font-size:13px}
    ============================================================ */
 .stage{
   overflow-y:auto;overflow-x:auto;
-  background:var(--bg);padding:28px 32px 80px;
+  background:var(--bg);padding:0 32px 80px;
   position:relative;
 }
 .stage.drop-active::after{
@@ -166,21 +166,45 @@ input,select{font-family:inherit;font-size:13px}
   border:3px dashed #fff;pointer-events:none;
 }
 
-/* Book container */
+/* Book container — vertical stack of spreads */
 .book{
-  display:flex;flex-direction:column;gap:18px;align-items:center;
-  counter-reset:page;
+  display:flex;flex-direction:column;align-items:center;gap:28px;
+  padding:32px 0 60px;min-width:max-content;
+}
+
+/* Spread = a pair of facing pages (좌·우 페이지) */
+.spread{
+  display:grid;
+  grid-template-columns:var(--page-w) var(--page-w);
+  background:#fff;
+  box-shadow:var(--page-shadow);
+  position:relative;
+}
+/* Centerline between left and right page */
+.spread::before{
+  content:"";position:absolute;top:0;bottom:0;left:50%;width:1px;
+  background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.10) 6%, rgba(0,0,0,.10) 94%, rgba(0,0,0,0) 100%);
+  pointer-events:none;z-index:2;
+}
+/* Subtle inner gutter shadow on each page edge near the spine */
+.spread::after{
+  content:"";position:absolute;top:0;bottom:0;left:50%;width:24px;
+  transform:translateX(-50%);
+  background:radial-gradient(ellipse at center, rgba(0,0,0,.05), rgba(0,0,0,0) 70%);
+  pointer-events:none;z-index:1;
 }
 
 /* Single page card */
 .page{
   width:var(--page-w);
-  min-height:var(--page-h);
+  height:var(--page-h);
   background:#fff;
-  box-shadow:var(--page-shadow);
   position:relative;
-  counter-increment:page;
   overflow:hidden;
+}
+.page.live{
+  /* live page hosts the actual #editor; its scroll is internal */
+  height:var(--page-h);
 }
 .page-head,.page-foot{
   position:absolute;left:0;right:0;
@@ -188,7 +212,7 @@ input,select{font-family:inherit;font-size:13px}
   font-family:var(--ui-family);
   padding:0 var(--page-mr) 0 var(--page-ml);
   display:flex;align-items:center;justify-content:space-between;
-  pointer-events:none;
+  pointer-events:none;z-index:3;
 }
 .page-head{top:calc(var(--page-mt) * 0.35);height:12pt}
 .page-foot{bottom:calc(var(--page-mb) * 0.35);height:12pt}
@@ -196,18 +220,59 @@ input,select{font-family:inherit;font-size:13px}
 .page-head.center,.page-foot.center{justify-content:center}
 .page-head.right,.page-foot.right{justify-content:flex-end}
 .page-head.outer,.page-foot.outer{justify-content:flex-end}
-.page-foot .pagenum::before{content:counter(page)}
+.page-left .page-head.outer,.page-left .page-foot.outer{justify-content:flex-start}
+.page-right .page-head.outer,.page-right .page-foot.outer{justify-content:flex-end}
 
-/* Page content — where Tiptap mounts or preview content flows */
+/* Page inner = padded margin box */
 .page-inner{
   padding:var(--page-mt) var(--page-mr) var(--page-mb) var(--page-ml);
-  min-height:var(--page-h);
+  height:100%;
+  position:relative;
   font-family:var(--body-family);
   font-size:var(--body-size);
   line-height:var(--body-leading);
   color:var(--ink);
+}
+
+/* Page clip = the cell where editor or mirror lives, clipped to page-inner box */
+.page-clip{
+  position:relative;
+  height:calc(var(--page-h) - var(--page-mt) - var(--page-mb));
+  overflow:hidden;
   column-count:var(--columns);
   column-gap:8mm;
+}
+.page.live .page-clip{
+  /* Active editing window — internal scroll inside page bounds */
+  overflow-y:auto;overflow-x:hidden;
+  scrollbar-width:thin;scrollbar-color:var(--line) transparent;
+}
+.page.live .page-clip::-webkit-scrollbar{width:6px}
+.page.live .page-clip::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.page.live .page-clip::-webkit-scrollbar-track{background:transparent}
+
+/* Subtle highlight on the active edit page */
+.page.live::after{
+  content:"";position:absolute;inset:0;
+  border:1px solid var(--accent-soft);pointer-events:none;
+  box-shadow:inset 0 0 0 1px rgba(46,107,82,.12);
+}
+
+/* Mirror = read-only print preview of the editor's content (offset slice) */
+.mirror{
+  position:relative;
+  pointer-events:none;
+  user-select:none;
+}
+.mirror .ProseMirror{
+  cursor:default;
+}
+.mirror::after{
+  /* tiny "page X 미리보기" label at top-right of mirror */
+  content:attr(data-label);
+  position:absolute;top:-18px;right:0;
+  font-size:9px;color:var(--meta);font-family:var(--ui-family);
+  letter-spacing:.4px;text-transform:uppercase;opacity:.7;
 }
 
 /* ProseMirror / Tiptap content styles */
@@ -239,10 +304,12 @@ input,select{font-family:inherit;font-size:13px}
   max-width:100%;height:auto;border-radius:2pt;vertical-align:middle;
   cursor:pointer;
 }
-.ProseMirror img.float-left{float:left;margin:0 12pt 6pt 0;max-width:50%;shape-outside:margin-box}
-.ProseMirror img.float-right{float:right;margin:0 0 6pt 12pt;max-width:50%;shape-outside:margin-box}
+.ProseMirror img.float-left{float:left;margin:0 12pt 6pt 0;max-width:50%;shape-outside:margin-box;shape-margin:6px}
+.ProseMirror img.float-right{float:right;margin:0 0 6pt 12pt;max-width:50%;shape-outside:margin-box;shape-margin:6px}
 .ProseMirror img.center{display:block;margin:10pt auto}
 .ProseMirror img.selected{outline:2px solid var(--accent)}
+.ProseMirror img.shape-loading{outline:1px dashed var(--mute)}
+.ProseMirror img[data-shape="polygon"]{/* computed polygon applied inline via style.shapeOutside */}
 
 .ProseMirror table{
   border-collapse:collapse;width:100%;margin:10pt 0;table-layout:fixed;
@@ -260,9 +327,8 @@ input,select{font-family:inherit;font-size:13px}
    Toolbar (floating, contextual)
    ============================================================ */
 .toolbar{
-  position:sticky;top:0;z-index:10;
-  display:flex;gap:2px;padding:6px 8px;
-  background:var(--panel);border-bottom:1px solid var(--line);
+  display:flex;gap:2px;padding:8px 10px;
+  background:var(--panel);
   overflow-x:auto;scrollbar-width:thin;
 }
 .toolbar .grp{display:flex;gap:1px;padding-right:8px;margin-right:4px;border-right:1px solid var(--line)}
@@ -279,9 +345,12 @@ input,select{font-family:inherit;font-size:13px}
 .toolbar button u{text-decoration:underline}
 
 .sub-top{
-  position:sticky;top:0;z-index:15;
+  position:sticky;top:0;z-index:30;
   display:flex;
-  background:var(--panel);border-bottom:1px solid var(--line);
+  background:var(--panel);
+  border-bottom:1px solid var(--line);
+  box-shadow:0 2px 10px rgba(0,0,0,.04);
+  backdrop-filter:saturate(1.2);
 }
 .sub-top .toolbar{flex:1;border-bottom:0}
 
@@ -358,19 +427,26 @@ input,select{font-family:inherit;font-size:13px}
   .topbar,.side,.sub-top,.statusbar,.toast,.loader,.modal{display:none !important}
   .main{grid-template-columns:1fr}
   .stage{padding:0;overflow:visible;background:#fff}
-  .book{gap:0}
+  .book{gap:0;padding:0;min-width:0}
+  .spread{display:block;box-shadow:none;background:transparent}
+  .spread::before,.spread::after{display:none}
+  .mirror::after{display:none}
   .page{
-    width:auto;min-height:auto;box-shadow:none;
+    width:auto;height:auto;box-shadow:none;
     page-break-after:always;overflow:visible;
   }
+  .page::after{display:none}
   .page:last-child{page-break-after:auto}
+  .page.live{display:block}
+  .page:not(.live){display:none}  /* print only the live editor content (the single source) */
   .page-head,.page-foot{display:none}
   .page-inner{
-    padding:0;min-height:auto;
+    padding:0;height:auto;
     font-family:var(--body-family);
     font-size:var(--body-size);
     line-height:var(--body-leading);
   }
+  .page-clip{height:auto;overflow:visible;column-count:var(--columns)}
   .ProseMirror{min-height:auto}
 }
 </style>
@@ -405,6 +481,10 @@ input,select{font-family:inherit;font-size:13px}
         <span class="big">⤓</span>
         <div class="t">파일 업로드 / 드롭</div>
         <div class="s">HWPX · DOCX · PPTX · HTML · MD · TXT · IDML</div>
+        <div class="s" style="margin-top:8px;color:var(--warn);font-size:10.5px;line-height:1.45">
+          ※ <b>HWP (바이너리)는 지원되지 않습니다</b><br>
+          한글 → <i>다른 이름으로 저장</i> → <b>.hwpx</b>로 저장 후 업로드하세요.
+        </div>
       </div>
       <input type="file" id="file-input" accept=".hwpx,.hwp,.docx,.pptx,.html,.htm,.md,.markdown,.txt,.idml,.indd,.xml,.zip" style="display:none" multiple>
       <button class="btn" style="width:100%;margin-top:4px" id="btn-sample">샘플 원고 불러오기</button>
@@ -529,12 +609,27 @@ input,select{font-family:inherit;font-size:13px}
         </div>
       </div>
       <div class="book" id="book">
-        <div class="page" id="page-1">
-          <div class="page-head center" id="page-head"></div>
-          <div class="page-inner">
-            <div id="editor"></div>
+        <!-- First spread: left = live editor, right = page-2 mirror.
+             Additional spreads are appended by the pagination engine. -->
+        <div class="spread" data-spread-idx="0">
+          <div class="page page-left live" data-page-idx="0">
+            <div class="page-head center" data-head></div>
+            <div class="page-inner">
+              <div class="page-clip">
+                <div id="editor"></div>
+              </div>
+            </div>
+            <div class="page-foot center" data-foot><span class="pagenum">1</span></div>
           </div>
-          <div class="page-foot center" id="page-foot"><span class="pagenum"></span></div>
+          <div class="page page-right" data-page-idx="1">
+            <div class="page-head center" data-head></div>
+            <div class="page-inner">
+              <div class="page-clip">
+                <div class="mirror" data-page-idx="1" data-label="page 2 preview"></div>
+              </div>
+            </div>
+            <div class="page-foot center" data-foot><span class="pagenum">2</span></div>
+          </div>
         </div>
       </div>
     </section>
@@ -932,6 +1027,7 @@ async function handleUploadedFile(file){
 
     stepActive('editor');
     editor.commands.setContent(html, false);
+    setTimeout(()=>{ rescanEditorImages(); scheduleReflow(); }, 50);
     stepDone('editor');
     pipelineHide();
     setStatus(`완료: ${name}`, 'ok');
@@ -973,7 +1069,7 @@ const editor = new Editor({
     <h2>3. WYSIWYG 조판</h2>
     <p>용지 크기, 여백, 단 구성, 본문 서체·크기·행간, 도곽 머리말/꼬리말 — 왼쪽 사이드바에서 조정하면 에디터 영역에 즉시 반영됩니다. "내보내기 → PDF"를 누르면 같은 모습으로 출력됩니다.</p>
   `,
-  onUpdate({ editor }){ updateStatus(editor); },
+  onUpdate({ editor }){ updateStatus(editor); scheduleReflow(); },
   onSelectionUpdate({ editor }){ updateToolbar(editor); }
 });
 
@@ -983,6 +1079,148 @@ function updateStatus(ed){
   $('#status-counts').textContent = `단락 ${paras} · 문자 ${text.length}`;
 }
 updateStatus(editor);
+
+/* ============================================================
+   Pagination engine — spread layout + live editor + mirrors
+   ============================================================ */
+function parseLengthToPx(str){
+  if (!str) return 0;
+  str = String(str).trim();
+  if (str.endsWith('mm')) return parseFloat(str) * 3.7795275591;
+  if (str.endsWith('cm')) return parseFloat(str) * 37.795275591;
+  if (str.endsWith('in')) return parseFloat(str) * 96;
+  if (str.endsWith('pt')) return parseFloat(str) * 1.3333333333;
+  if (str.endsWith('px')) return parseFloat(str);
+  return parseFloat(str) || 0;
+}
+function getPageInnerHpx(){
+  const ref = document.querySelector('.page:not(.live) .page-clip');
+  if (ref){
+    const h = ref.getBoundingClientRect().height;
+    if (h > 0) return h;
+  }
+  const cs = getComputedStyle(document.documentElement);
+  const totalH = parseLengthToPx(cs.getPropertyValue('--page-h'));
+  const mt = parseLengthToPx(cs.getPropertyValue('--page-mt'));
+  const mb = parseLengthToPx(cs.getPropertyValue('--page-mb'));
+  return Math.max(1, totalH - mt - mb);
+}
+function getEditorContentHpx(){
+  const pm = document.querySelector('#editor .ProseMirror');
+  if (!pm) return 0;
+  return pm.scrollHeight;
+}
+
+let _reflowTimer = null;
+function scheduleReflow(){
+  if (_reflowTimer) cancelAnimationFrame(_reflowTimer);
+  _reflowTimer = requestAnimationFrame(()=>{
+    _reflowTimer = null;
+    reflow();
+  });
+}
+
+function reflow(){
+  const pageInnerH = getPageInnerHpx();
+  const fullH = getEditorContentHpx();
+  let pagesNeeded = Math.max(1, Math.ceil(fullH / pageInnerH));
+  if (pagesNeeded % 2 === 1) pagesNeeded += 1;  // always fill a full spread
+  const spreadsNeeded = Math.max(1, pagesNeeded / 2);
+  syncSpreads(spreadsNeeded);
+  updateMirrors();
+  applyHeaderFooter();
+}
+
+function syncSpreads(target){
+  const book = $('#book');
+  const spreads = () => book.querySelectorAll('.spread');
+  while (spreads().length < target){
+    const i = spreads().length;
+    book.appendChild(createExtraSpread(i));
+  }
+  while (spreads().length > target){
+    const last = book.querySelector('.spread:last-child');
+    if (!last) break;
+    if (last.dataset.spreadIdx === '0') break;   // never delete first spread
+    last.remove();
+  }
+}
+
+function createExtraSpread(spreadIdx){
+  const leftIdx  = spreadIdx * 2;
+  const rightIdx = spreadIdx * 2 + 1;
+  const sp = document.createElement('div');
+  sp.className = 'spread';
+  sp.dataset.spreadIdx = String(spreadIdx);
+  sp.innerHTML = `
+    <div class="page page-left" data-page-idx="${leftIdx}">
+      <div class="page-head center" data-head></div>
+      <div class="page-inner"><div class="page-clip">
+        <div class="mirror" data-page-idx="${leftIdx}" data-label="page ${leftIdx+1} preview"></div>
+      </div></div>
+      <div class="page-foot center" data-foot><span class="pagenum">${leftIdx+1}</span></div>
+    </div>
+    <div class="page page-right" data-page-idx="${rightIdx}">
+      <div class="page-head center" data-head></div>
+      <div class="page-inner"><div class="page-clip">
+        <div class="mirror" data-page-idx="${rightIdx}" data-label="page ${rightIdx+1} preview"></div>
+      </div></div>
+      <div class="page-foot center" data-foot><span class="pagenum">${rightIdx+1}</span></div>
+    </div>`;
+  return sp;
+}
+
+function updateMirrors(){
+  const pmSrc = document.querySelector('#editor .ProseMirror');
+  if (!pmSrc) return;
+  const pageInnerH = getPageInnerHpx();
+  const srcHTML = pmSrc.innerHTML;
+  const pmClassList = pmSrc.className;
+  const pmStyle = pmSrc.getAttribute('style') || '';
+  document.querySelectorAll('.mirror[data-page-idx]').forEach(m=>{
+    const idx = parseInt(m.dataset.pageIdx, 10);
+    if (idx === 0) return;
+    // Snapshot the live editor's rendered content into a read-only clone,
+    // translated so that this page shows the correct slice.
+    m.innerHTML = `<div class="${pmClassList}" style="${pmStyle};transform:translateY(${-idx * pageInnerH}px);width:100%;min-height:0;pointer-events:none">${srcHTML}</div>`;
+  });
+}
+
+/* ============================================================
+   Header / Footer / page numbers — adapt to spread DOM
+   ============================================================ */
+function getStartPage(){ return Math.max(1, parseInt($('#in-start-page').value || '1', 10) || 1); }
+
+function applyHeaderFooter(){
+  const title = $('#doc-title').value || '';
+  const headPos = $('#sel-head-pos').value;
+  const footPos = $('#sel-foot-pos').value;
+  const startPage = getStartPage();
+  $$('.page').forEach(page=>{
+    const idx = parseInt(page.dataset.pageIdx || '0', 10);
+    const isRight = page.classList.contains('page-right');
+    const logicalPos = pos => pos === 'outer' ? (isRight ? 'right' : 'left') : pos;
+    const head = page.querySelector('[data-head]');
+    const foot = page.querySelector('[data-foot]');
+    if (head){
+      if (headPos === 'none'){ head.style.display = 'none'; }
+      else {
+        head.style.display = 'flex';
+        head.className = `page-head ${logicalPos(headPos)}`;
+        head.textContent = title;
+      }
+    }
+    if (foot){
+      if (footPos === 'none'){ foot.style.display = 'none'; }
+      else {
+        foot.style.display = 'flex';
+        foot.className = `page-foot ${logicalPos(footPos)}`;
+        const num = startPage + idx;
+        foot.innerHTML = `<span class="pagenum">${num}</span>`;
+      }
+    }
+  });
+}
 
 /* ============================================================
    Toolbar bindings
@@ -1040,8 +1278,108 @@ function updateToolbar(ed){
 updateToolbar(editor);
 
 /* ============================================================
-   Image insertion
+   Image insertion + SlickWrap-style polygon shape-outside
    ============================================================ */
+
+/**
+ * jQSlickWrap-inspired polygon detection:
+ * scan sampled rows of an image's alpha / luminance channel, find the
+ * content edge on the side facing the body text, and emit a CSS
+ * shape-outside polygon so text wraps tightly against the subject.
+ * Works on data-URL / same-origin images. CORS-tainted images fall
+ * back to margin-box wrapping.
+ */
+function applyImageShape(img){
+  if (!img || img.tagName !== 'IMG') return;
+  const isLeft  = img.classList.contains('float-left');
+  const isRight = img.classList.contains('float-right');
+  if (!isLeft && !isRight){
+    img.style.shapeOutside = '';
+    img.style.shapeMargin = '';
+    img.removeAttribute('data-shape');
+    return;
+  }
+  if (!img.complete || img.naturalWidth === 0){
+    img.classList.add('shape-loading');
+    img.addEventListener('load', ()=>{ img.classList.remove('shape-loading'); applyImageShape(img); }, { once: true });
+    return;
+  }
+  img.classList.remove('shape-loading');
+  try {
+    const w = img.naturalWidth, h = img.naturalHeight;
+    const maxDim = 600;  // cap canvas size for performance
+    const scale = Math.min(1, maxDim / Math.max(w, h));
+    const cw = Math.max(1, Math.round(w * scale));
+    const ch = Math.max(1, Math.round(h * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = cw; canvas.height = ch;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, cw, ch);
+    let data;
+    try { data = ctx.getImageData(0, 0, cw, ch).data; }
+    catch(e){ throw new Error('CORS'); }
+    const SAMPLES = 40;
+    const step = Math.max(1, Math.floor(ch / SAMPLES));
+    const ALPHA_THR = 16;        // ignore fully-transparent
+    const LUM_THR   = 242;       // ignore near-white background
+    const points = [];
+    for (let y = 0; y < ch; y += step){
+      let edge = isLeft ? 0 : cw - 1;
+      if (isLeft){
+        for (let x = cw - 1; x >= 0; x--){
+          const i = (y * cw + x) * 4;
+          const a = data[i + 3];
+          if (a < ALPHA_THR) continue;
+          const lum = (data[i] + data[i+1] + data[i+2]) / 3;
+          if (lum < LUM_THR){ edge = x; break; }
+        }
+      } else {
+        for (let x = 0; x < cw; x++){
+          const i = (y * cw + x) * 4;
+          const a = data[i + 3];
+          if (a < ALPHA_THR) continue;
+          const lum = (data[i] + data[i+1] + data[i+2]) / 3;
+          if (lum < LUM_THR){ edge = x; break; }
+        }
+      }
+      points.push({ x: edge, y });
+    }
+    // Smooth the edge curve (simple 3-tap box filter) — reduces jaggy zig-zag
+    const smooth = points.map((p, i)=>{
+      const p0 = points[Math.max(0,i-1)], p1 = p, p2 = points[Math.min(points.length-1,i+1)];
+      return { x: Math.round((p0.x + p1.x + p2.x) / 3), y: p.y };
+    });
+    const xPct = px => (px / cw * 100).toFixed(2);
+    const yPct = py => (py / ch * 100).toFixed(2);
+    const parts = [];
+    if (isLeft){
+      parts.push('0% 0%');
+      smooth.forEach(p => parts.push(`${xPct(p.x)}% ${yPct(p.y)}%`));
+      parts.push('0% 100%');
+    } else {
+      parts.push('100% 0%');
+      smooth.forEach(p => parts.push(`${xPct(p.x)}% ${yPct(p.y)}%`));
+      parts.push('100% 100%');
+    }
+    img.style.shapeOutside = `polygon(${parts.join(', ')})`;
+    img.style.shapeMargin = '8px';
+    img.setAttribute('data-shape', 'polygon');
+  } catch(e){
+    // CORS-tainted or unsupported — fall back to margin-box
+    img.style.shapeOutside = 'margin-box';
+    img.style.shapeMargin = '6px';
+    img.setAttribute('data-shape', 'fallback');
+  }
+}
+
+function setImagePosition(img, pos){
+  if (!img) return;
+  img.classList.remove('float-left','float-right','center');
+  img.classList.add(pos);
+  applyImageShape(img);
+  scheduleReflow();
+}
+
 const imgModal = $('#img-modal');
 let pendingImageUrl = null;
 function triggerImageInsert(){
@@ -1076,12 +1414,12 @@ $('#img-ok').addEventListener('click', ()=>{
   setTimeout(()=>{
     $$('#editor img').forEach(img=>{
       if (img.src === pendingImageUrl && !img.dataset.placed){
-        img.classList.remove('float-left','float-right','center');
-        img.classList.add(pos);
+        setImagePosition(img, pos);
         img.dataset.placed = '1';
       }
     });
     updateStatus(editor);
+    scheduleReflow();
   }, 30);
   imgModal.classList.remove('show');
   pendingImageUrl = null;
@@ -1093,10 +1431,19 @@ $('#editor').addEventListener('click', e=>{
   const current = img.classList.contains('float-left') ? 'float-left'
                 : img.classList.contains('float-right') ? 'float-right' : 'center';
   const next = current === 'center' ? 'float-left' : current === 'float-left' ? 'float-right' : 'center';
-  img.classList.remove('float-left','float-right','center');
-  img.classList.add(next);
-  toast(`이미지 배치: ${next === 'center' ? '가운데' : next === 'float-left' ? '왼쪽' : '오른쪽'}`, 'info');
+  setImagePosition(img, next);
+  const label = next === 'center' ? '가운데' : next === 'float-left' ? '왼쪽 (SlickWrap 감싸기)' : '오른쪽 (SlickWrap 감싸기)';
+  toast(`이미지 배치: ${label}`, 'info');
 });
+
+/* Compute polygon for any images that arrive via paste / uploaded document */
+function rescanEditorImages(){
+  $$('#editor img').forEach(img=>{
+    if (img.classList.contains('float-left') || img.classList.contains('float-right')){
+      if (!img.getAttribute('data-shape')) applyImageShape(img);
+    }
+  });
+}
 
 /* ============================================================
    Sidebar bindings
@@ -1107,6 +1454,7 @@ function applyPaper(key){
   const p = PAPERS[key] || PAPERS.B5;
   root.style.setProperty('--page-w', `${p.w}mm`);
   root.style.setProperty('--page-h', `${p.h}mm`);
+  scheduleReflow();
 }
 $('#sel-paper').addEventListener('change', e=>applyPaper(e.target.value));
 
@@ -1115,6 +1463,7 @@ function applyMargins(){
   root.style.setProperty('--page-mr', `${$('#m-right').value}mm`);
   root.style.setProperty('--page-mb', `${$('#m-bot').value}mm`);
   root.style.setProperty('--page-ml', `${$('#m-left').value}mm`);
+  scheduleReflow();
 }
 ['#m-top','#m-right','#m-bot','#m-left'].forEach(sel=>{
   $(sel).addEventListener('input', applyMargins);
@@ -1125,38 +1474,29 @@ $('#seg-columns').addEventListener('click', e=>{
   $$('#seg-columns button').forEach(x=>x.classList.remove('active'));
   b.classList.add('active');
   root.style.setProperty('--columns', b.dataset.val);
+  scheduleReflow();
 });
 
 $('#sel-font').addEventListener('change', e=>{
   root.style.setProperty('--body-family', e.target.value);
+  scheduleReflow();
 });
 $('#in-size').addEventListener('input', e=>{
   root.style.setProperty('--body-size', `${e.target.value}pt`);
+  scheduleReflow();
 });
 $('#in-lead').addEventListener('input', e=>{
   root.style.setProperty('--body-leading', e.target.value);
+  scheduleReflow();
 });
 
-function applyHeaderFooter(){
-  const title = $('#doc-title').value || '';
-  const headPos = $('#sel-head-pos').value;
-  const footPos = $('#sel-foot-pos').value;
-  const head = $('#page-head');
-  const foot = $('#page-foot');
+/* Re-reflow on window resize (paper layout depends on rendered pixel heights) */
+let _resizeTimer = null;
+window.addEventListener('resize', ()=>{
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(()=>scheduleReflow(), 120);
+});
 
-  if (headPos === 'none'){ head.style.display = 'none'; }
-  else {
-    head.style.display = 'flex';
-    head.className = `page-head ${headPos}`;
-    head.textContent = title;
-  }
-  if (footPos === 'none'){ foot.style.display = 'none'; }
-  else {
-    foot.style.display = 'flex';
-    foot.className = `page-foot ${footPos}`;
-    foot.innerHTML = '<span class="pagenum"></span>';
-  }
-}
 ['#doc-title','#sel-head-pos','#sel-foot-pos','#in-start-page'].forEach(sel=>{
   $(sel).addEventListener('input', applyHeaderFooter);
   $(sel).addEventListener('change', applyHeaderFooter);
@@ -1206,6 +1546,7 @@ $('#btn-sample').addEventListener('click', async ()=>{
 $('#btn-new').addEventListener('click', ()=>{
   if (!confirm('새 문서를 시작하면 현재 내용이 사라집니다. 계속할까요?')) return;
   editor.commands.setContent('<h1>새 문서</h1><p>여기에 본문을 작성하거나 원고 파일을 업로드하세요.</p>', false);
+  setTimeout(()=>scheduleReflow(), 30);
   setStatus('새 문서', 'ok');
 });
 
@@ -1416,6 +1757,9 @@ window.addEventListener('keydown', e=>{
 
 applyPaper('B5');
 applyMargins();
+applyHeaderFooter();
+/* Give Tiptap a moment to mount, then paginate the initial content */
+setTimeout(()=>{ rescanEditorImages(); scheduleReflow(); }, 80);
 setStatus('에디터 준비 완료', 'ok');
 console.log('[HCG Pub] ready');
 </script>
