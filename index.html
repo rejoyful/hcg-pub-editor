@@ -512,11 +512,13 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
   user-select:text;pointer-events:none;
 }
 .page-content > *:first-child{margin-top:0}
-.page-content h1{font-size:22pt;font-weight:700;margin:0 0 12pt;line-height:1.3;letter-spacing:-.3px;break-after:avoid}
-.page-content h2{font-size:16pt;font-weight:700;margin:18pt 0 8pt;line-height:1.4;break-after:avoid}
-.page-content h3{font-size:13pt;font-weight:700;margin:14pt 0 6pt;line-height:1.4;break-after:avoid}
+/* 요구사항: 제목(h1/h2/h3) 상단 2행 / 하단 1행 띄움, 본문 문단은 명확히 구분 */
+.page-content h1{font-size:22pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.3;letter-spacing:-.3px;break-after:avoid}
+.page-content h1:first-child{margin-top:0}
+.page-content h2{font-size:16pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4;break-after:avoid}
+.page-content h3{font-size:13pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4;break-after:avoid}
 .page-content{letter-spacing:var(--body-tracking)}
-.page-content p{margin:0 0 var(--body-para-gap);text-align:justify;word-break:keep-all;overflow-wrap:break-word;text-indent:var(--body-indent);orphans:2;widows:2}
+.page-content p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:justify;word-break:keep-all;overflow-wrap:break-word;text-indent:var(--body-indent);orphans:2;widows:2}
 .page-content p + p{margin-top:0}
 .page-content h1+p,.page-content h2+p,.page-content h3+p{text-indent:0}
 .page-content ul,.page-content ol{margin:0 0 10pt;padding-left:18pt}
@@ -551,11 +553,16 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
 .ProseMirror{outline:none;min-height:calc(var(--page-h) * 0.5)}
 .ProseMirror:focus{outline:none}
 .ProseMirror > *:first-child{margin-top:0}
-.ProseMirror h1{font-size:22pt;font-weight:700;margin:0 0 12pt;line-height:1.3;letter-spacing:-.3px}
-.ProseMirror h2{font-size:16pt;font-weight:700;margin:18pt 0 8pt;line-height:1.4}
-.ProseMirror h3{font-size:13pt;font-weight:700;margin:14pt 0 6pt;line-height:1.4}
+/* 제목: 상단 2줄 / 하단 1줄 (본문 폰트 기준 em) */
+.ProseMirror h1{font-size:22pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.3;letter-spacing:-.3px}
+.ProseMirror h1:first-child{margin-top:0}
+.ProseMirror h2{font-size:16pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4}
+.ProseMirror h3{font-size:13pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4}
 .ProseMirror{letter-spacing:var(--body-tracking)}
-.ProseMirror p{margin:0 0 var(--body-para-gap);text-align:justify;word-break:keep-all;overflow-wrap:break-word;text-indent:var(--body-indent)}
+.ProseMirror p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:justify;word-break:keep-all;overflow-wrap:break-word;text-indent:var(--body-indent)}
+/* Tiptap Highlight & Color */
+.ProseMirror mark,.page-content mark{background:#FFF59D;padding:0 2px;border-radius:2px}
+.ProseMirror [style*="color"],.page-content [style*="color"]{/* inline */}
 .ProseMirror h1+p,.ProseMirror h2+p,.ProseMirror h3+p{text-indent:0}
 .ProseMirror ul,.ProseMirror ol{margin:0 0 10pt;padding-left:18pt}
 .ProseMirror li{margin-bottom:3pt}
@@ -615,6 +622,21 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
 .toolbar button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
 .toolbar button .ph,.toolbar button .ph-bold{font-size:17px;line-height:1;display:inline-block}
 .toolbar button span.tag{font-size:11px;font-weight:700;letter-spacing:.2px}
+/* 색상·음영 swatch (인풋 클릭하면 즉시 색 변경) */
+.toolbar .color-swatch{
+  position:relative;min-width:30px;height:28px;padding:0 6px;border:1px solid transparent;border-radius:4px;
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink);font-size:12px;
+}
+.toolbar .color-swatch:hover{background:var(--soft);border-color:var(--line)}
+.toolbar .color-swatch input[type=color]{
+  position:absolute;inset:0;opacity:0;cursor:pointer;border:0;padding:0;background:transparent;
+}
+.toolbar .auto-classify{
+  padding:0 10px;background:linear-gradient(180deg,#F5EFE4,#E8DDC4);
+  border-color:#D4C09A;color:#5A4A2A;font-weight:600;
+}
+.toolbar .auto-classify:hover{background:linear-gradient(180deg,#E8DDC4,#D4C09A);border-color:#8B6E3E}
+.toolbar .auto-classify .ph{margin-right:4px}
 
 .sub-top{
   position:sticky;top:0;z-index:30;
@@ -874,7 +896,7 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
             한글 → <i>다른 이름으로 저장</i> → <b>.hwpx</b>로 저장 후 업로드하세요.
           </div>
         </div>
-        <input type="file" id="file-input" accept=".hwpx,.hwp,.docx,.pptx,.html,.htm,.md,.markdown,.txt,.idml,.indd,.xml,.zip" style="display:none" multiple>
+        <input type="file" id="file-input" accept=".hwpx,.hwp,.docx,.pptx,.pdf,.html,.htm,.md,.markdown,.txt,.idml,.indd,.xml,.zip" style="display:none" multiple>
         <button class="btn" style="width:100%;margin-top:4px" id="btn-sample">샘플 원고 불러오기</button>
         <div class="pipeline" id="pipeline" style="display:none">
           <div class="step" data-step="unpack"><span class="ic">①</span><span>포맷 인식</span></div>
@@ -1002,10 +1024,27 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
             <button data-cmd="underline" title="밑줄 (⌘U)"><i class="ph ph-text-underline"></i></button>
             <button data-cmd="strike" title="취소선"><i class="ph ph-text-strikethrough"></i></button>
           </div>
+          <div class="grp color-grp">
+            <label class="color-swatch" title="글자 색">
+              <i class="ph ph-text-aa"></i>
+              <input type="color" data-cmd="color" value="#1A1A1A">
+            </label>
+            <label class="color-swatch" title="음영 (형광펜)">
+              <i class="ph ph-highlighter"></i>
+              <input type="color" data-cmd="highlight" value="#FFF59D">
+            </label>
+            <button data-cmd="color-clear" title="글자 색 해제">A×</button>
+            <button data-cmd="highlight-clear" title="음영 해제">🖍×</button>
+          </div>
           <div class="grp">
             <button data-cmd="bullet" title="글머리 기호"><i class="ph ph-list-bullets"></i></button>
             <button data-cmd="ordered" title="번호"><i class="ph ph-list-numbers"></i></button>
             <button data-cmd="quote" title="인용문"><i class="ph ph-quotes"></i></button>
+          </div>
+          <div class="grp">
+            <button data-cmd="auto-classify" class="auto-classify" title="키워드 규칙으로 제목/소제목/그림 자동 분류">
+              <i class="ph ph-magic-wand"></i> 자동 분류
+            </button>
           </div>
           <div class="grp">
             <button data-cmd="table" title="표 삽입"><i class="ph ph-table"></i></button>
@@ -1092,6 +1131,14 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
     <h4><i class="ph ph-sparkle"></i> Claude AI 자동 스타일</h4>
     <p class="ai-desc">본문을 분석해 제목·소제목·목차·저자소개 등 역할별로 페이지를 구성하고 스타일을 적용합니다.
       <b style="color:var(--warn)">본문 내용은 절대 수정되지 않습니다</b> — 태그와 페이지 구성만 변경됩니다.</p>
+    <div class="ai-quick" style="background:#F5EFE4;border:1px solid #D4C09A;border-radius:6px;padding:10px 12px;margin:8px 0 14px;display:flex;gap:10px;align-items:center">
+      <span style="font-size:22px">✨</span>
+      <div style="flex:1">
+        <div style="font-weight:700;color:#5A4A2A;margin-bottom:2px">키워드 기반 즉시 분류 (API 불필요)</div>
+        <div style="font-size:11px;color:#6B5A3A">'저자 소개/목차/참고문헌' → 제목1, 숫자·알파벳 시작 → 제목2, '그림 N' → 소제목. <b>상단 2행·하단 1행 자동 간격</b>.</div>
+      </div>
+      <button class="btn primary" id="btn-ai-quick" type="button">즉시 분류</button>
+    </div>
     <div class="ai-row">
       <label>API 키</label>
       <input type="password" id="ai-key" placeholder="sk-ant-api03-..." autocomplete="off">
@@ -1170,7 +1217,23 @@ import TableRow from 'https://esm.sh/@tiptap/extension-table-row@2.6.6';
 import TableCell from 'https://esm.sh/@tiptap/extension-table-cell@2.6.6';
 import TableHeader from 'https://esm.sh/@tiptap/extension-table-header@2.6.6';
 import TextAlign from 'https://esm.sh/@tiptap/extension-text-align@2.6.6';
+import TextStyle from 'https://esm.sh/@tiptap/extension-text-style@2.6.6';
+import { Color } from 'https://esm.sh/@tiptap/extension-color@2.6.6';
+import Highlight from 'https://esm.sh/@tiptap/extension-highlight@2.6.6';
 import JSZip from 'https://esm.sh/jszip@3.10.1';
+/* pdfjs-dist — lazy-loaded on first PDF upload (see importPdfFile) */
+let __pdfjsLoader = null;
+async function loadPdfJs(){
+  if (window.pdfjsLib) return window.pdfjsLib;
+  if (__pdfjsLoader) return __pdfjsLoader;
+  __pdfjsLoader = (async () => {
+    const mod = await import('https://esm.sh/pdfjs-dist@4.0.379/build/pdf.min.mjs');
+    mod.GlobalWorkerOptions.workerSrc = 'https://esm.sh/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
+    window.pdfjsLib = mod;
+    return mod;
+  })();
+  return __pdfjsLoader;
+}
 
 /* ============================================================
    Small util
@@ -1436,6 +1499,45 @@ function sanitizeHtml(html){
   return tmp.innerHTML;
 }
 
+/* ============================================================
+   PDF parser — pdfjs-dist로 페이지별 텍스트 줄 복원
+   각 줄의 y좌표로 묶어 단락 결합 → HTML
+   ============================================================ */
+async function parsePdfFile(file){
+  const pdfjs = await loadPdfJs();
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjs.getDocument({ data: buf }).promise;
+  const paragraphs = [];
+  for (let i = 1; i <= pdf.numPages; i++){
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    /* y좌표(같은 라인)끼리 묶기 */
+    const lines = new Map();
+    tc.items.forEach(it => {
+      if (!it.str) return;
+      const y = Math.round((it.transform?.[5] || 0) * 10) / 10;
+      if (!lines.has(y)) lines.set(y, []);
+      lines.get(y).push({ x: it.transform?.[4] || 0, s: it.str });
+    });
+    /* y 내림차순 = 페이지 위→아래 */
+    const ys = Array.from(lines.keys()).sort((a,b)=>b-a);
+    const rowTexts = ys.map(y => lines.get(y)
+      .sort((a,b)=>a.x-b.x)
+      .map(t=>t.s).join(''));
+    /* 빈 줄을 단락 경계로 */
+    let buf2 = [];
+    rowTexts.forEach(line => {
+      const t = (line || '').trim();
+      if (!t){ if (buf2.length){ paragraphs.push(buf2.join(' ')); buf2 = []; } }
+      else { buf2.push(t); }
+    });
+    if (buf2.length) paragraphs.push(buf2.join(' '));
+  }
+  /* 단락 → HTML, 헤딩 후보는 키워드 분류에 맡긴다 */
+  const html = paragraphs.filter(Boolean).map(p => `<p>${escapeHtml(p)}</p>`).join('\n');
+  try { return applyKeywordRulesToHtml(html); } catch(e){ return html; }
+}
+
 async function parseMarkdown(md){
   const marked = await loadMarked();
   if (typeof marked === 'function') return marked(md);
@@ -1494,6 +1596,8 @@ async function handleUploadedFile(file){
         html = parseTxt(await file.text()); break;
       case 'idml':
         html = await parseIdmlFile(file); break;
+      case 'pdf':
+        html = await parsePdfFile(file); break;
       case 'hwp':
         throw new Error('HWP(한글 바이너리)는 한컴에서 "다른 이름으로 저장 → .hwpx"로 변환 후 업로드해 주세요');
       case 'indd':
@@ -1588,9 +1692,17 @@ const editor = new Editor({
     Table.configure({ resizable: true }),
     TableRow, TableCell, TableHeader,
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
+    TextStyle,
+    Color.configure({ types: ['textStyle'] }),
+    Highlight.configure({ multicolor: true }),
   ],
   editorProps: {
-    transformPastedHTML(html){ return normalizePastedHtml(html); }
+    transformPastedHTML(html){
+      /* 붙여넣을 때 HTML을 한 번 정규화한 뒤, 블록별 자동 분류를 한번 더 적용 */
+      const normalized = normalizePastedHtml(html);
+      try { return applyKeywordRulesToHtml(normalized); }
+      catch(e){ return normalized; }
+    }
   },
   content: `
     <h1>학지사 조판 에디터 — HCG Pub</h1>
@@ -1988,9 +2100,35 @@ tb.addEventListener('click', e=>{
     case 'align-right': ch.setTextAlign('right').run(); break;
     case 'table': ch.insertTable({rows:3,cols:3,withHeaderRow:true}).run(); break;
     case 'image': triggerImageInsert(); break;
+    case 'color-clear': ch.unsetColor().run(); break;
+    case 'highlight-clear': ch.unsetHighlight().run(); break;
+    case 'auto-classify': runAutoClassifyFromToolbar(); break;
   }
   updateToolbar(editor);
 });
+/* 색상 · 음영: <input type="color"> 값이 바뀌면 즉시 선택 영역에 적용 */
+tb.addEventListener('input', e=>{
+  const inp = e.target.closest('input[type=color][data-cmd]');
+  if (!inp) return;
+  const ch = editor.chain().focus();
+  if (inp.dataset.cmd === 'color'){ ch.setColor(inp.value).run(); }
+  else if (inp.dataset.cmd === 'highlight'){ ch.toggleHighlight({ color: inp.value }).run(); }
+});
+
+/* 툴바의 "자동 분류" 버튼 — 키워드 규칙으로 즉시 태그 재지정 */
+function runAutoClassifyFromToolbar(){
+  try {
+    const before = editor.getText().trim();
+    if (before.length < 20){ toast('본문이 너무 짧습니다.', 'info'); return; }
+    const newDoc = applyKeywordRules(editor.getJSON());
+    editor.commands.setContent(newDoc, false);
+    setTimeout(()=>{ scheduleReflow && scheduleReflow(); rescanEditorImages && rescanEditorImages(); }, 40);
+    toast('키워드 규칙으로 자동 분류를 적용했습니다.', 'ok');
+  } catch(err){
+    console.error(err);
+    toast('자동 분류 실패: ' + (err.message || err), 'err');
+  }
+}
 
 function updateToolbar(ed){
   const map = {
@@ -2654,64 +2792,126 @@ function openFloatPopup(){
     return;
   }
 
-  /* Inject minimal styled shell */
+  /* Inject minimal styled shell — 메인 화면과 동일한 폰트/간격/툴바 */
   const currentHTML = editor ? editor.getHTML() : '';
   _floatWin.document.open();
   _floatWin.document.write(`<!doctype html><html lang="ko"><head>
 <meta charset="utf-8"><title>HCG 편집기 — 분리 창</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+  :root{
+    --ink:#1A1A1A;--panel:#FBFBF8;--bg:#F5F5F2;--soft:#F0EDE7;
+    --line:#E5E5DF;--accent:#8B6E3E;--accent-soft:#F5EFE4;--mute:#6B6B66;
+    --body-family:"Nanum Myeongjo","Noto Serif KR","Apple SD Gothic Neo","Malgun Gothic",serif;
+  }
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0;height:100%;background:#F5F5F2;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR","Malgun Gothic",sans-serif;color:#1A1A1A}
-  .fw-head{display:flex;align-items:center;gap:10px;padding:8px 14px;background:linear-gradient(180deg,#FBFBF8,#fff);border-bottom:1px solid #E5E5DF;position:sticky;top:0;z-index:10}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR","Malgun Gothic",sans-serif;color:var(--ink)}
+  .fw-head{display:flex;align-items:center;gap:10px;padding:8px 14px;background:linear-gradient(180deg,#FBFBF8,#fff);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
   .fw-head .fw-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
   .fw-head .fw-dot{width:8px;height:8px;border-radius:50%;background:#2E7D32;display:inline-block}
-  .fw-head .fw-hint{flex:1;font-size:11px;color:#6B6B66}
-  .fw-toolbar{display:flex;gap:4px;padding:6px 12px;background:#fff;border-bottom:1px solid #E5E5DF;flex-wrap:wrap}
-  .fw-toolbar button{padding:4px 10px;background:#fff;border:1px solid #E5E5DF;border-radius:4px;cursor:pointer;font-size:12px;color:#1A1A1A}
-  .fw-toolbar button:hover{background:#F5F5F2;border-color:#8B6E3E}
-  .fw-toolbar button.active{background:#1A1A1A;color:#fff;border-color:#1A1A1A}
-  .fw-toolbar .sep{width:1px;background:#E5E5DF;margin:0 4px}
-  .fw-body{padding:22px 32px;max-width:780px;margin:0 auto}
-  .fw-edit{background:#fff;border:1px solid #E5E5DF;border-radius:6px;min-height:calc(100vh - 180px);padding:28px 36px;outline:none;font-size:11pt;line-height:1.75;box-shadow:0 4px 14px rgba(0,0,0,.04)}
-  .fw-edit:focus{border-color:#8B6E3E}
-  .fw-edit h1{font-size:22pt;font-weight:700;margin:0 0 12pt;letter-spacing:-.3px}
-  .fw-edit h2{font-size:16pt;font-weight:700;margin:18pt 0 8pt}
-  .fw-edit h3{font-size:13pt;font-weight:700;margin:14pt 0 6pt}
-  .fw-edit p{margin:0 0 10pt;text-align:justify;word-break:keep-all}
-  .fw-edit img{max-width:100%;border-radius:2pt;vertical-align:middle}
-  .fw-edit blockquote{border-left:3px solid #E5E5DF;padding:2pt 12pt;margin:10pt 0;color:#6B6B66;font-style:italic}
-  .fw-edit.drop-active{outline:3px dashed #8B6E3E;outline-offset:-8px;background:#F5EFE4}
-  .fw-status{position:fixed;bottom:0;left:0;right:0;background:#1A1A1A;color:#E8E8E3;padding:4px 14px;font-size:11px;display:flex;align-items:center;gap:10px}
+  .fw-head .fw-hint{flex:1;font-size:11px;color:var(--mute)}
+  /* ─── 툴바 — 메인과 동일한 시각 언어 ─── */
+  .fw-toolbar{display:flex;gap:2px;padding:8px 10px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap;align-items:center;position:sticky;top:42px;z-index:9}
+  .fw-toolbar .grp{display:flex;gap:1px;padding-right:8px;margin-right:4px;border-right:1px solid var(--line)}
+  .fw-toolbar .grp:last-child{border-right:0}
+  .fw-toolbar button{min-width:30px;height:28px;padding:0 8px;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--ink);font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+  .fw-toolbar button:hover{background:var(--soft);border-color:var(--line)}
+  .fw-toolbar button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .fw-toolbar .swatch{position:relative;min-width:30px;height:28px;padding:0 6px;border:1px solid transparent;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink);font-size:12px}
+  .fw-toolbar .swatch:hover{background:var(--soft);border-color:var(--line)}
+  .fw-toolbar .swatch input[type=color]{position:absolute;inset:0;opacity:0;cursor:pointer;border:0;padding:0;background:transparent}
+  .fw-toolbar .auto-classify{padding:0 10px;background:linear-gradient(180deg,#F5EFE4,#E8DDC4);border-color:#D4C09A;color:#5A4A2A;font-weight:600}
+  .fw-toolbar .auto-classify:hover{background:linear-gradient(180deg,#E8DDC4,#D4C09A);border-color:#8B6E3E}
+  /* ─── 에디트 영역 — 메인과 동일한 본문 타이포 ─── */
+  .fw-body{padding:22px 32px;max-width:820px;margin:0 auto}
+  .fw-edit{background:#fff;border:1px solid var(--line);border-radius:6px;min-height:calc(100vh - 220px);padding:28px 36px;outline:none;font-family:var(--body-family);font-size:11pt;line-height:1.75;letter-spacing:0;box-shadow:0 4px 14px rgba(0,0,0,.04)}
+  .fw-edit:focus{border-color:var(--accent)}
+  /* 요구: h1/h2/h3 — 상단 2행 / 하단 1행 */
+  .fw-edit h1{font-size:22pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.3;letter-spacing:-.3px}
+  .fw-edit h1:first-child{margin-top:0}
+  .fw-edit h2{font-size:16pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4}
+  .fw-edit h3{font-size:13pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4}
+  .fw-edit p{margin:0 0 1em;text-align:justify;word-break:keep-all;text-indent:1em}
+  .fw-edit h1+p,.fw-edit h2+p,.fw-edit h3+p{text-indent:0}
+  .fw-edit mark{background:#FFF59D;padding:0 2px;border-radius:2px}
+  .fw-edit img{max-width:100%;border-radius:2pt;vertical-align:middle;cursor:pointer}
+  .fw-edit img.center{display:block;margin:10pt auto}
+  .fw-edit img.float-left{float:left;margin:0 12pt 6pt 0;max-width:50%}
+  .fw-edit img.float-right{float:right;margin:0 0 6pt 12pt;max-width:50%}
+  .fw-edit img.selected{outline:2px solid var(--accent)}
+  .fw-edit blockquote{border-left:3px solid var(--line);padding:2pt 12pt;margin:10pt 0;color:var(--mute);font-style:italic}
+  .fw-edit.drop-active{outline:3px dashed var(--accent);outline-offset:-8px;background:var(--accent-soft)}
+  /* ─── 이미지 편집 오버레이 (리사이즈 + 정렬) ─── */
+  .img-ovl{position:absolute;display:none;z-index:50;pointer-events:none}
+  .img-ovl.show{display:block}
+  .img-ovl .handle{position:absolute;width:12px;height:12px;background:var(--accent);border:2px solid #fff;border-radius:50%;pointer-events:auto;cursor:se-resize;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+  .img-ovl .handle.br{right:-8px;bottom:-8px;cursor:se-resize}
+  .img-ovl .handle.bl{left:-8px;bottom:-8px;cursor:sw-resize}
+  .img-ovl .bar{position:absolute;left:50%;top:-38px;transform:translateX(-50%);background:#fff;border:1px solid var(--line);border-radius:6px;padding:4px 6px;display:flex;gap:4px;pointer-events:auto;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+  .img-ovl .bar button{min-width:28px;height:24px;padding:0 6px;background:transparent;border:1px solid transparent;border-radius:4px;font-size:11px;cursor:pointer}
+  .img-ovl .bar button:hover{background:var(--soft);border-color:var(--line)}
+  .img-ovl .bar button.active{background:var(--ink);color:#fff}
+  .fw-status{position:fixed;bottom:0;left:0;right:0;background:var(--ink);color:#E8E8E3;padding:4px 14px;font-size:11px;display:flex;align-items:center;gap:10px}
   .fw-status .fw-gap{flex:1}
 </style></head><body>
 <div class="fw-head">
   <span class="fw-dot"></span>
   <span class="fw-title">HCG 편집기 (분리 창)</span>
-  <span class="fw-hint">자동으로 메인 화면과 동기화됩니다. 듀얼 모니터에서 좌측 화면으로 드래그해보세요.</span>
+  <span class="fw-hint">메인 화면과 동일한 폰트·툴바·간격으로 작업합니다. 변경은 자동으로 동기화됩니다.</span>
 </div>
 <div class="fw-toolbar" id="fw-tools">
-  <button data-cmd="bold" title="굵게"><b>B</b></button>
-  <button data-cmd="italic" title="기울임"><i>I</i></button>
-  <button data-cmd="underline" title="밑줄"><u>U</u></button>
-  <span class="sep"></span>
-  <button data-cmd="h1" title="제목1">H1</button>
-  <button data-cmd="h2" title="제목2">H2</button>
-  <button data-cmd="h3" title="제목3">H3</button>
-  <button data-cmd="p" title="본문">본문</button>
-  <span class="sep"></span>
-  <button data-cmd="ul" title="글머리">• 목록</button>
-  <button data-cmd="ol" title="번호">1. 목록</button>
-  <button data-cmd="blockquote" title="인용">"인용"</button>
-  <span class="sep"></span>
-  <button data-cmd="image" title="이미지 업로드 (여러 장 선택 가능)">🖼 이미지</button>
-  <span class="sep"></span>
-  <button data-cmd="undo">실행취소</button>
-  <button data-cmd="redo">다시실행</button>
+  <div class="grp">
+    <button data-cmd="undo" title="실행취소">↶</button>
+    <button data-cmd="redo" title="다시실행">↷</button>
+  </div>
+  <div class="grp">
+    <button data-cmd="h1" title="제목1">H1</button>
+    <button data-cmd="h2" title="제목2">H2</button>
+    <button data-cmd="h3" title="소제목">H3</button>
+    <button data-cmd="p" title="본문">본문</button>
+  </div>
+  <div class="grp">
+    <button data-cmd="bold" title="굵게"><b>B</b></button>
+    <button data-cmd="italic" title="기울임"><i>I</i></button>
+    <button data-cmd="underline" title="밑줄"><u>U</u></button>
+    <button data-cmd="strike" title="취소선"><s>S</s></button>
+  </div>
+  <div class="grp">
+    <label class="swatch" title="글자 색">Ａ<input type="color" data-cmd="color" value="#1A1A1A"></label>
+    <label class="swatch" title="음영 (형광펜)">🖍<input type="color" data-cmd="highlight" value="#FFF59D"></label>
+    <button data-cmd="color-clear" title="색 해제">Ａ×</button>
+    <button data-cmd="highlight-clear" title="음영 해제">🖍×</button>
+  </div>
+  <div class="grp">
+    <button data-cmd="ul" title="글머리 기호">•</button>
+    <button data-cmd="ol" title="번호">1.</button>
+    <button data-cmd="blockquote" title="인용">❝</button>
+  </div>
+  <div class="grp">
+    <button data-cmd="align-left" title="왼쪽 정렬">⬅</button>
+    <button data-cmd="align-center" title="가운데">⬌</button>
+    <button data-cmd="align-right" title="오른쪽">➡</button>
+  </div>
+  <div class="grp">
+    <button data-cmd="image" title="이미지 업로드">🖼 이미지</button>
+  </div>
+  <div class="grp">
+    <button data-cmd="auto-classify" class="auto-classify" title="키워드 규칙으로 자동 분류">✨ 자동 분류</button>
+  </div>
   <input type="file" id="fw-img-input" accept="image/*" multiple style="display:none">
 </div>
 <div class="fw-body">
   <div id="fw-edit" class="fw-edit" contenteditable="true" spellcheck="false"></div>
+  <div class="img-ovl" id="fw-img-ovl">
+    <div class="bar">
+      <button data-pos="float-left" title="왼쪽(글 오른쪽으로 흐름)">◨</button>
+      <button data-pos="center" title="가운데">▭</button>
+      <button data-pos="float-right" title="오른쪽(글 왼쪽으로 흐름)">◧</button>
+      <button data-pos="remove" title="삭제" style="color:#A33">✕</button>
+    </div>
+    <div class="handle bl"></div>
+    <div class="handle br"></div>
+  </div>
 </div>
 <div class="fw-status">
   <span>● 연결됨</span>
@@ -2752,13 +2952,23 @@ function openFloatPopup(){
     const b = e.target.closest('button'); if (!b) return;
     const cmd = b.dataset.cmd;
     edit.focus();
-    /* Image: open file picker */
-    if (cmd === 'image'){
-      fileInput.value = '';
-      fileInput.click();
+    if (cmd === 'image'){ fileInput.value = ''; fileInput.click(); return; }
+    if (cmd === 'auto-classify'){
+      /* 메인에게 자동 분류 요청 → 결과를 다시 받아 반영 */
+      try {
+        if (window.opener && !window.opener.closed && window.opener.__hcgAutoClassifyFromFloat){
+          window.opener.__hcgAutoClassifyFromFloat(edit.innerHTML);
+        } else {
+          alert('메인 창을 찾을 수 없습니다');
+        }
+      } catch(err){ console.error(err); }
       return;
     }
-    const m = { bold:'bold', italic:'italic', underline:'underline',
+    if (cmd === 'color-clear'){ document.execCommand('foreColor', false, '#1A1A1A'); sendUp(); return; }
+    if (cmd === 'highlight-clear'){ document.execCommand('hiliteColor', false, 'transparent'); sendUp(); return; }
+    const align = { 'align-left':'Left', 'align-center':'Center', 'align-right':'Right' }[cmd];
+    if (align){ document.execCommand('justify' + align, false, null); sendUp(); return; }
+    const m = { bold:'bold', italic:'italic', underline:'underline', strike:'strikeThrough',
                 undo:'undo', redo:'redo',
                 ul:['insertUnorderedList'], ol:['insertOrderedList'],
                 h1:['formatBlock','H1'], h2:['formatBlock','H2'],
@@ -2769,6 +2979,74 @@ function openFloatPopup(){
     else document.execCommand(m, false, null);
     sendUp();
   });
+  /* 색상 · 음영 input: 색 선택 즉시 적용 */
+  tools.addEventListener('input', e=>{
+    const inp = e.target.closest('input[type=color][data-cmd]');
+    if (!inp) return;
+    edit.focus();
+    if (inp.dataset.cmd === 'color') document.execCommand('foreColor', false, inp.value);
+    else if (inp.dataset.cmd === 'highlight') document.execCommand('hiliteColor', false, inp.value);
+    sendUp();
+  });
+
+  /* ─────── 이미지 오버레이 (리사이즈 · 정렬 · 삭제) ─────── */
+  const ovl = document.getElementById('fw-img-ovl');
+  let selImg = null;
+  function hideOvl(){
+    ovl.classList.remove('show');
+    if (selImg){ selImg.classList.remove('selected'); selImg = null; }
+  }
+  function positionOvl(){
+    if (!selImg) return;
+    const er = edit.getBoundingClientRect();
+    const r = selImg.getBoundingClientRect();
+    ovl.style.left = (r.left - er.left + edit.scrollLeft) + 'px';
+    ovl.style.top  = (r.top  - er.top  + edit.scrollTop)  + 'px';
+    ovl.style.width = r.width + 'px';
+    ovl.style.height = r.height + 'px';
+  }
+  function selectImg(img){
+    hideOvl();
+    selImg = img; img.classList.add('selected');
+    positionOvl();
+    ovl.classList.add('show');
+  }
+  edit.addEventListener('click', e=>{
+    const t = e.target;
+    if (t && t.tagName === 'IMG'){ selectImg(t); e.stopPropagation(); }
+    else { hideOvl(); }
+  });
+  document.addEventListener('click', e=>{ if (!e.target.closest('.img-ovl') && e.target.tagName !== 'IMG') hideOvl(); });
+  /* 정렬 / 삭제 바 */
+  ovl.querySelector('.bar').addEventListener('click', e=>{
+    const b = e.target.closest('button[data-pos]'); if (!b || !selImg) return;
+    const pos = b.dataset.pos;
+    if (pos === 'remove'){ selImg.parentElement && selImg.parentElement.removeChild(selImg); hideOvl(); sendUp(); return; }
+    selImg.classList.remove('center','float-left','float-right');
+    selImg.classList.add(pos);
+    positionOvl();
+    sendUp();
+  });
+  /* 리사이즈 (하단 좌/우 핸들 — 가로세로 비율 유지) */
+  let resizing = null;
+  ovl.querySelectorAll('.handle').forEach(h=>{
+    h.addEventListener('mousedown', e=>{
+      if (!selImg) return;
+      e.preventDefault();
+      const r = selImg.getBoundingClientRect();
+      resizing = { startX:e.clientX, startW:r.width, ratio: r.height / r.width, left: h.classList.contains('bl') };
+    });
+  });
+  window.addEventListener('mousemove', e=>{
+    if (!resizing || !selImg) return;
+    const dx = e.clientX - resizing.startX;
+    const nw = Math.max(40, resizing.left ? resizing.startW - dx : resizing.startW + dx);
+    selImg.style.width = nw + 'px';
+    selImg.style.height = 'auto';
+    positionOvl();
+  });
+  window.addEventListener('mouseup', ()=>{ if (resizing){ resizing = null; sendUp(); } });
+  edit.addEventListener('scroll', ()=>{ if (selImg) positionOvl(); });
 
   /* File picker — multiple 이미지 삽입 */
   fileInput.addEventListener('change', e => {
@@ -2831,6 +3109,19 @@ function openFloatPopup(){
       editor.commands.setContent(html, false);
       setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 40);
     } finally { _floatSyncing = false; }
+  };
+  /* 팝업에서 자동 분류 요청 → 메인에서 수행 후 팝업에도 다시 반영 */
+  window.__hcgAutoClassifyFromFloat = function(html){
+    try {
+      editor.commands.setContent(html, false);
+      const newDoc = applyKeywordRules(editor.getJSON());
+      editor.commands.setContent(newDoc, false);
+      setTimeout(()=>{ scheduleReflow && scheduleReflow(); rescanEditorImages && rescanEditorImages(); pushToFloatPopup(); }, 40);
+      toast('키워드 규칙으로 자동 분류 적용', 'ok');
+    } catch(err){
+      console.error(err);
+      toast('자동 분류 실패: ' + (err.message || err), 'err');
+    }
   };
   window.__hcgFloatClosed = function(){
     _floatWin = null;
@@ -3022,56 +3313,142 @@ editorEl.addEventListener('paste', e=>{
    `style="--img-dx:…px;--img-dy:…px;width:…px"` attribute that the
    pagination clone preserves.
    ============================================================ */
-(function installImageDrag(){
-  let sel = null, dragMode = null, start = null;
+/* ─── 이미지 편집 오버레이 — 클릭 선택 → 리사이즈 핸들 + 정렬 바 ─── */
+(function installImageOverlay(){
+  /* 오버레이 DOM 동적 생성 */
+  const ovl = document.createElement('div');
+  ovl.id = 'hcg-img-ovl';
+  ovl.innerHTML = `
+    <div class="bar">
+      <button data-pos="float-left" title="왼쪽(글 오른쪽으로 흐름)">◨</button>
+      <button data-pos="center" title="가운데">▭</button>
+      <button data-pos="float-right" title="오른쪽(글 왼쪽으로 흐름)">◧</button>
+      <span class="sep"></span>
+      <button data-pos="smaller" title="축소">−</button>
+      <button data-pos="larger" title="확대">+</button>
+      <button data-pos="reset" title="원본 크기">↺</button>
+      <span class="sep"></span>
+      <button data-pos="remove" title="삭제" style="color:#A33">✕</button>
+    </div>
+    <div class="handle bl"></div>
+    <div class="handle br"></div>
+  `;
+  document.body.appendChild(ovl);
 
-  function pickImg(t){ return t && t.tagName === 'IMG' ? t : null; }
+  /* 오버레이 전용 CSS */
+  const st = document.createElement('style');
+  st.textContent = `
+    #hcg-img-ovl{position:absolute;display:none;z-index:80;pointer-events:none}
+    #hcg-img-ovl.show{display:block}
+    #hcg-img-ovl .bar{position:absolute;left:50%;top:-40px;transform:translateX(-50%);
+      background:#fff;border:1px solid var(--line);border-radius:6px;padding:4px 6px;
+      display:flex;gap:4px;align-items:center;pointer-events:auto;
+      box-shadow:0 4px 14px rgba(0,0,0,.1)}
+    #hcg-img-ovl .bar button{min-width:30px;height:26px;padding:0 8px;background:transparent;
+      border:1px solid transparent;border-radius:4px;font-size:12px;cursor:pointer;color:var(--ink)}
+    #hcg-img-ovl .bar button:hover{background:var(--soft);border-color:var(--line)}
+    #hcg-img-ovl .bar .sep{width:1px;height:18px;background:var(--line)}
+    #hcg-img-ovl .handle{position:absolute;width:14px;height:14px;background:var(--accent);
+      border:2px solid #fff;border-radius:50%;pointer-events:auto;
+      box-shadow:0 1px 4px rgba(0,0,0,.25)}
+    #hcg-img-ovl .handle.br{right:-9px;bottom:-9px;cursor:se-resize}
+    #hcg-img-ovl .handle.bl{left:-9px;bottom:-9px;cursor:sw-resize}
+  `;
+  document.head.appendChild(st);
+
+  let selImg = null, resizing = null;
+
   function clearSel(){
-    document.querySelectorAll('.ProseMirror img.selected').forEach(n=>n.classList.remove('selected'));
-    sel = null;
+    document.querySelectorAll('.ProseMirror img.selected, .page-content img.selected').forEach(n=>n.classList.remove('selected'));
+    ovl.classList.remove('show');
+    selImg = null;
   }
-  document.addEventListener('mousedown', e=>{
-    const pm = editorEl.querySelector('.ProseMirror');
-    if (!pm || !pm.contains(e.target)) return;
-    const img = pickImg(e.target);
-    if (!img){ clearSel(); return; }
+  function positionOvl(){
+    if (!selImg) return;
+    const r = selImg.getBoundingClientRect();
+    ovl.style.left = (r.left + window.scrollX) + 'px';
+    ovl.style.top  = (r.top  + window.scrollY) + 'px';
+    ovl.style.width = r.width + 'px';
+    ovl.style.height = r.height + 'px';
+  }
+  function selectImg(img){
     clearSel();
-    sel = img; img.classList.add('selected');
-    /* Resize when clicking within the last 10px of the image (bottom-right corner) */
-    const r = img.getBoundingClientRect();
-    const nearCorner = (e.clientX >= r.right - 12) && (e.clientY >= r.bottom - 12);
-    dragMode = nearCorner ? 'resize' : 'move';
-    start = {
-      x: e.clientX, y: e.clientY,
-      w: r.width, h: r.height,
-      dx: parseFloat(img.dataset.dx || '0'),
-      dy: parseFloat(img.dataset.dy || '0'),
-    };
-    document.body.style.userSelect = 'none';
-    e.preventDefault();
-  });
-  document.addEventListener('mousemove', e=>{
-    if (!sel || !start) return;
-    if (dragMode === 'move'){
-      const nx = start.dx + (e.clientX - start.x);
-      const ny = start.dy + (e.clientY - start.y);
-      sel.dataset.dx = String(nx);
-      sel.dataset.dy = String(ny);
-      sel.style.transform = `translate(${nx}px, ${ny}px)`;
-      sel.style.position = sel.style.position || 'relative';
-    } else if (dragMode === 'resize'){
-      const nw = Math.max(40, start.w + (e.clientX - start.x));
-      sel.style.width = nw + 'px';
-      sel.style.height = 'auto';
+    selImg = img;
+    img.classList.add('selected');
+    positionOvl();
+    ovl.classList.add('show');
+  }
+
+  /* 이미지 클릭으로 선택 */
+  document.addEventListener('click', e=>{
+    const pm = editorEl.querySelector('.ProseMirror');
+    const t = e.target;
+    if (t.tagName === 'IMG' && pm && pm.contains(t)){
+      e.stopPropagation();
+      selectImg(t);
+      return;
     }
+    if (!e.target.closest('#hcg-img-ovl')) clearSel();
   });
-  document.addEventListener('mouseup', ()=>{
-    if (sel){
-      document.body.style.userSelect = '';
-      sel = null; dragMode = null; start = null;
+  /* 정렬 / 크기 / 삭제 */
+  ovl.querySelector('.bar').addEventListener('click', e=>{
+    const b = e.target.closest('button[data-pos]'); if (!b || !selImg) return;
+    const pos = b.dataset.pos;
+    const currW = selImg.getBoundingClientRect().width;
+    if (pos === 'remove'){
+      /* Tiptap 노드 삭제는 DOM에서 지우고 setContent로 반영 */
+      selImg.parentElement?.removeChild(selImg);
+      clearSel();
+      editor.commands.setContent(editorEl.querySelector('.ProseMirror')?.innerHTML || '', false);
+      setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 40);
+      return;
+    }
+    if (pos === 'reset'){
+      selImg.style.width = '';
+      selImg.style.height = '';
+      setTimeout(positionOvl, 0);
       scheduleReflow();
+      return;
     }
+    if (pos === 'smaller' || pos === 'larger'){
+      const factor = pos === 'smaller' ? 0.88 : 1.14;
+      const nw = Math.max(40, currW * factor);
+      selImg.style.width = nw + 'px';
+      selImg.style.height = 'auto';
+      setTimeout(positionOvl, 0);
+      scheduleReflow();
+      return;
+    }
+    /* 정렬 클래스 */
+    selImg.classList.remove('center','float-left','float-right');
+    selImg.classList.add(pos);
+    setTimeout(positionOvl, 0);
+    scheduleReflow();
   });
+  /* 리사이즈 핸들 드래그 */
+  ovl.querySelectorAll('.handle').forEach(h=>{
+    h.addEventListener('mousedown', e=>{
+      if (!selImg) return;
+      e.preventDefault();
+      const r = selImg.getBoundingClientRect();
+      resizing = { startX:e.clientX, startW:r.width, ratio: r.height / r.width, left: h.classList.contains('bl') };
+      document.body.style.userSelect = 'none';
+    });
+  });
+  window.addEventListener('mousemove', e=>{
+    if (!resizing || !selImg) return;
+    const dx = e.clientX - resizing.startX;
+    const nw = Math.max(40, resizing.left ? resizing.startW - dx : resizing.startW + dx);
+    selImg.style.width = nw + 'px';
+    selImg.style.height = 'auto';
+    positionOvl();
+  });
+  window.addEventListener('mouseup', ()=>{
+    if (resizing){ resizing = null; document.body.style.userSelect = ''; scheduleReflow(); }
+  });
+  /* 스크롤/리사이즈 시 오버레이 위치 재계산 */
+  window.addEventListener('scroll', ()=>{ if (selImg) positionOvl(); }, true);
+  window.addEventListener('resize', ()=>{ if (selImg) positionOvl(); });
 })();
 
 console.log('[HCG] dock modes, side collapse, image DnD + free-drag installed');
@@ -3227,6 +3604,21 @@ btnAi.addEventListener('click', async ()=>{
   aiShowDiffWarn('');
   aiModal.classList.add('show');
   await populateAiModels(savedKey);
+});
+/* 즉시 분류 — Claude 호출 없이 프런트엔드 규칙만으로 완료 */
+$('#btn-ai-quick')?.addEventListener('click', ()=>{
+  try {
+    const before = editor.getText().trim();
+    if (before.length < 20){ toast('본문이 너무 짧습니다.', 'info'); return; }
+    const newDoc = applyKeywordRules(editor.getJSON());
+    editor.commands.setContent(newDoc, false);
+    setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); pushToFloatPopup(); }, 40);
+    aiModal.classList.remove('show');
+    toast('키워드 규칙으로 자동 분류를 적용했습니다.', 'ok');
+  } catch(err){
+    console.error(err);
+    toast('자동 분류 실패: ' + (err.message || err), 'err');
+  }
 });
 aiReloadModels.addEventListener('click', ()=>populateAiModels(aiKeyInp.value.trim()));
 aiKeyInp.addEventListener('change', ()=>populateAiModels(aiKeyInp.value.trim()));
@@ -3390,6 +3782,100 @@ function extractPlainText(node){
     return node.content.map(extractPlainText).join('');
   }
   return '';
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   키워드 기반 자동 분류 엔진 — Claude 없이 즉시 실행
+   ───────────────────────────────────────────────────────────────
+   규칙
+    · H1 : '저자 소개', '목차', '참고문헌', '머리말', '서문',
+           '헌사', '추천사', '부록', '색인/찾아보기', '감사의 글' 등
+    · H2 : 숫자/알파벳/로마자로 시작(=번호 매겨진 장·절 제목)
+    · H3 : '그림 N', '표 N', '사진 N', '도 N' (도판 캡션)
+   요구: "상단 2행 / 하단 1행" — CSS에서 이미 처리됨
+   ═══════════════════════════════════════════════════════════════ */
+const H1_EXACT = new Set([
+  '저자 소개','저자소개','저자 약력','저자약력','역자 소개','역자소개',
+  '목차','차례',
+  '참고문헌','인용문헌','참고자료',
+  '머리말','머릿말','서문','들어가며','프롤로그',
+  '헌사',
+  '추천사','추천의 글','추천의글','인사말',
+  '부록',
+  '찾아보기','색인','인덱스',
+  '감사의 글','감사의글','감사말',
+  '맺음말','에필로그','나오며',
+]);
+const H1_PREFIX = ['저자 소개','저자소개','역자 소개','역자소개','감사의 글','감사의글','추천의 글','추천의글'];
+
+function classifyByKeyword(raw){
+  const t = (raw || '').replace(/\s+/g,' ').trim();
+  if (!t) return null;
+  if (t.length > 120) return null; // 긴 블록은 본문
+
+  /* H1: 주요 섹션 이름 (정확 일치 또는 그 단어로 시작) */
+  if (H1_EXACT.has(t)) return 'h1';
+  if (H1_PREFIX.some(w => t === w || t.startsWith(w + ' ') || t.startsWith(w + ':') || t.startsWith(w + '—') || t.startsWith(w + '-'))) return 'h1';
+
+  /* H3: 도판 캡션 "그림 1", "그림 2.5", "<그림 2>", "표 3-1", "Figure 2.5" */
+  if (t.length <= 80 && /^[<\[\(〈【]?\s*(그림|표|사진|도표|도|Figure|Fig\.?|Table|Photo)\s*[0-9IVXLCMⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/i.test(t)){
+    return 'h3';
+  }
+
+  /* H2: "제N장/편/절/부", "N. 제목", "1.1 제목", "A. 제목" 등 (헤딩 길이 제한) */
+  if (t.length <= 80){
+    if (/^제\s*\d+\s*(장|절|편|부|항)/.test(t)) return 'h2';
+    if (/^Chapter\s+\d+/i.test(t)) return 'h2';
+    if (/^Part\s+[IVX\d]+/i.test(t)) return 'h2';
+    if (/^\d+(\.\d+){0,3}\.?\s+\S/.test(t)) return 'h2';
+    if (/^[A-Z](\.\d+){0,3}\.?\s+\S/.test(t)) return 'h2';
+    if (/^[IVXLCM]+\.\s+\S/.test(t)) return 'h2';
+  }
+  return null;
+}
+
+/* JSON(docJson)에 키워드 규칙 적용 — 본문 한 글자도 바꾸지 않고 type/level만 교체 */
+function applyKeywordRules(docJson){
+  if (!docJson || !Array.isArray(docJson.content)) return docJson;
+  const newContent = docJson.content.map(node => {
+    if (!node || typeof node !== 'object') return node;
+    /* 이미 heading 상위 레벨로 선언됐으면 건드리지 않음 (수동 지정 존중) */
+    const type = node.type;
+    if (type !== 'paragraph' && type !== 'heading') return node;
+    /* 이미지만 포함된 블록은 패스 */
+    const hasImage = Array.isArray(node.content) && node.content.some(c => c && c.type === 'image');
+    if (hasImage) return node;
+    const text = extractPlainText(node);
+    const tag = classifyByKeyword(text);
+    if (!tag) return node;
+    const level = tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3;
+    const inline = Array.isArray(node.content) ? node.content : [];
+    return { type:'heading', attrs:{ level }, content: inline };
+  });
+  return { ...docJson, content: newContent };
+}
+
+/* HTML 조각에 동일 규칙 적용 — 붙여넣기 훅용 */
+function applyKeywordRulesToHtml(html){
+  if (!html) return html;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const topNodes = Array.from(tmp.children);
+  topNodes.forEach(node => {
+    /* paragraph 또는 일반 block만 대상 */
+    const tn = node.tagName;
+    if (!/^(P|DIV|SPAN)$/i.test(tn)) return;
+    /* 이미지 포함 블록은 패스 */
+    if (node.querySelector('img')) return;
+    const text = (node.textContent || '').trim();
+    const tag = classifyByKeyword(text);
+    if (!tag) return;
+    const h = document.createElement(tag);
+    /* inline 내용은 그대로 이동 */
+    while (node.firstChild) h.appendChild(node.firstChild);
+    node.replaceWith(h);
+  });
+  return tmp.innerHTML;
 }
 
 /* 최상위 블록을 AI에게 보낼 "번호 + 요약텍스트" 목록으로 */
