@@ -1,0 +1,2983 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HCG Pub — 학지사 조판 웹에디터 (Pipeline v2)</title>
+
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* =====================================================
+   Design tokens
+   ===================================================== */
+:root{
+  --ink:#1A1A1A;
+  --text:#333333;
+  --mute:#666666;
+  --meta:#999999;
+  --line:#E8E8E8;
+  --rule:#CCCCCC;
+  --surface:#EEEEEE;
+  --panel:#FFFFFF;
+  --sidebar:#F5F5F5;
+  --accent-soft:#F0F0F0;
+  --ok:#1F7A3E;
+  --warn:#8A6D1A;
+  --stop:#8B1E1E;
+  --sans:"Pretendard Variable","Pretendard",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --serif:"Noto Serif KR","Apple SD Gothic Neo",serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  /* Default body font = OS system stack (used when 사용자가 "시스템 폰트" 선택) */
+  --system:system-ui,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","맑은 고딕","Malgun Gothic","Helvetica Neue",Arial,sans-serif;
+
+  /* Page geometry (defaults to B5, overridden by JS) */
+  --page-w:182mm;
+  --page-h:257mm;
+  --page-mt:20mm;
+  --page-mr:22mm;
+  --page-mb:20mm;
+  --page-ml:22mm;
+  /* Running header/footer (도곽) bands inside top/bottom margin */
+  --page-header-h:10mm;
+  --page-footer-h:10mm;
+  /* Academic textbook defaults */
+  --page-line-height:1.8;
+  --page-columns:1;
+  --page-body-size:10pt;
+  --page-body-font:var(--system);
+
+  --header-h:56px;
+  --toolbar-h:44px;
+  --footer-h:28px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:var(--sans);color:var(--text);background:var(--surface);-webkit-font-smoothing:antialiased}
+button{font-family:inherit}
+
+/* =====================================================
+   App layout
+   ===================================================== */
+.app{display:grid;grid-template-rows:var(--header-h) var(--toolbar-h) 1fr var(--footer-h);height:100vh}
+
+header.topbar{
+  display:grid;grid-template-columns:220px 1fr auto;align-items:center;gap:12px;
+  padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);z-index:10;
+}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .mark{width:30px;height:30px;border-radius:6px;background:var(--ink);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px}
+.brand .name{font-weight:700;color:var(--ink);font-size:14px}
+.brand .sub{font-size:10.5px;color:var(--meta)}
+
+/* Pipeline indicator in topbar */
+.pipeline{display:flex;align-items:center;gap:0;flex-wrap:nowrap;justify-content:center}
+.pipeline .stage{
+  display:flex;align-items:center;gap:5px;
+  padding:4px 9px;border-radius:6px;border:1px solid var(--line);background:#fff;
+  font-size:11px;color:var(--mute);transition:all .25s ease;position:relative;
+}
+.pipeline .stage .dot{width:6px;height:6px;border-radius:999px;background:var(--rule)}
+.pipeline .stage.active{background:var(--ink);border-color:var(--ink);color:#fff}
+.pipeline .stage.active .dot{background:#fff}
+.pipeline .stage.done{background:#F3F7F4;border-color:#CFE4D5;color:var(--ok)}
+.pipeline .stage.done .dot{background:var(--ok)}
+.pipeline .stage.sim::after{
+  content:"sim";position:absolute;top:-5px;right:-5px;
+  background:#FFF5E1;border:1px solid #E8D18C;color:#8A6D1A;
+  font-size:8.5px;padding:0 4px;border-radius:999px;line-height:1.4;
+}
+.pipeline .arrow{width:10px;height:1px;background:var(--rule);margin:0 2px}
+
+.top-actions{display:flex;gap:8px}
+.top-actions button{
+  font-family:var(--sans);font-size:12px;color:var(--text);
+  border:1px solid var(--line);background:#fff;border-radius:6px;
+  height:32px;padding:0 12px;cursor:pointer;
+}
+.top-actions button:hover{border-color:var(--mute)}
+.top-actions button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* =====================================================
+   Toolbar
+   ===================================================== */
+.toolbar{
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);
+  height:var(--toolbar-h);
+}
+.toolbar .group{display:flex;gap:2px;padding-right:8px;border-right:1px solid var(--line);align-items:center}
+.toolbar .group:last-child{border-right:none}
+.toolbar button, .toolbar select{
+  height:28px;min-width:28px;padding:0 8px;
+  border:1px solid transparent;background:transparent;border-radius:4px;
+  font-family:var(--sans);font-size:12px;color:var(--text);cursor:pointer;
+}
+.toolbar button:hover,.toolbar select:hover{background:var(--accent-soft)}
+.toolbar button.is-active{background:var(--ink);color:#fff}
+.toolbar button b{font-weight:700}
+.toolbar button i{font-style:italic}
+.toolbar button u{text-decoration:underline}
+.toolbar label{font-size:11px;color:var(--mute);margin-right:4px}
+.toolbar select{
+  border:1px solid var(--line);background:#fff;
+  padding:0 8px;border-radius:6px;
+}
+
+/* =====================================================
+   Workspace
+   ===================================================== */
+main.workspace{display:grid;grid-template-columns:260px 1fr 1fr;min-height:0}
+
+/* --- Sidebar --- */
+aside.sidebar{
+  background:var(--sidebar);border-right:1px solid var(--line);
+  padding:16px;overflow-y:auto;font-size:12px;
+}
+aside.sidebar h3{font-size:11px;color:var(--mute);font-weight:500;letter-spacing:.04em;text-transform:uppercase;margin:0 0 8px}
+aside.sidebar .block{margin-bottom:20px}
+aside.sidebar .row{display:flex;justify-content:space-between;align-items:center;padding:6px 0}
+aside.sidebar .row label{color:var(--mute);font-size:11.5px}
+aside.sidebar .row select,aside.sidebar .row input{
+  font-family:var(--sans);font-size:12px;border:1px solid var(--line);background:#fff;
+  border-radius:6px;padding:4px 8px;height:28px;width:120px;
+}
+aside.sidebar button.side{
+  width:100%;height:32px;border:1px solid var(--line);background:#fff;
+  border-radius:6px;font-size:12px;color:var(--text);cursor:pointer;margin-top:6px;
+}
+aside.sidebar button.side:hover{border-color:var(--mute)}
+aside.sidebar button.side.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+.steps{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:4px}
+.steps li{
+  display:flex;flex-direction:column;padding:6px 8px;border-radius:6px;font-size:11.5px;color:var(--mute);
+  background:#fff;border:1px solid var(--line);
+}
+.steps li small{font-size:10px;color:var(--meta)}
+.steps li.active{background:var(--ink);border-color:var(--ink);color:#fff}
+.steps li.active small{color:rgba(255,255,255,.7)}
+.steps li.done{background:#F3F7F4;border-color:#CFE4D5;color:var(--ok)}
+.steps li.sim{background:#FFFBF0}
+
+.note{
+  margin-top:10px;padding:8px 10px;background:#FFFBF0;border:1px solid #F0E3B0;
+  border-radius:6px;font-size:10.5px;line-height:1.5;color:#6E5A1A;
+}
+
+/* --- Editor area --- */
+.editor-wrap{display:flex;flex-direction:column;min-width:0;background:var(--surface);overflow:hidden}
+.tabs{display:flex;border-bottom:1px solid var(--line);background:var(--panel)}
+.tabs .tab{
+  padding:8px 16px;font-size:12px;color:var(--mute);cursor:pointer;
+  border-bottom:2px solid transparent;transition:all .15s ease;
+}
+.tabs .tab:hover{color:var(--text)}
+.tabs .tab.active{color:var(--ink);border-bottom-color:var(--ink);font-weight:500}
+.tabs .tab .mark{font-size:9px;padding:1px 5px;border-radius:999px;margin-left:6px;background:#F0F0F0;color:var(--mute)}
+.tabs .tab .mark.sim{background:#FFF5E1;color:var(--warn)}
+.tabs .tab .mark.live{background:#EAF4EE;color:var(--ok)}
+
+.tab-panels{flex:1;overflow:auto;position:relative}
+.panel{display:none;height:100%;overflow:auto}
+.panel.active{display:block}
+
+/* --- Visual page editor (editor shows the actual printed page) --- */
+.page-stage{
+  display:flex;flex-direction:column;align-items:center;
+  padding:24px;gap:18px;background:var(--surface);min-height:100%;
+}
+.page-stage .ruler{
+  display:flex;justify-content:space-between;width:var(--page-w);
+  font-size:10px;color:var(--meta);
+}
+.page{
+  width:var(--page-w);
+  height:var(--page-h);
+  background:#fff;
+  box-shadow:0 2px 18px rgba(0,0,0,.10);
+  position:relative;
+  color:var(--ink);
+  font-family:var(--page-body-font);
+  font-size:var(--page-body-size);
+  line-height:var(--page-line-height);
+  word-break:keep-all;
+  line-break:strict;
+  overflow-wrap:break-word;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+/* 도곽 머리말 — 책 제목 (위쪽 여백 안쪽) */
+.page .page-header{
+  height:var(--page-header-h);
+  padding:0 var(--page-mr) 0 var(--page-ml);
+  margin-top:calc(var(--page-mt) - var(--page-header-h));
+  display:flex;align-items:flex-end;
+  font-family:var(--page-body-font);
+  font-size:8.5pt;color:#666;
+  border-bottom:0.25pt solid #DDD;
+  letter-spacing:.02em;
+  user-select:none;
+}
+.page .page-header .book-title{flex:1}
+.page .page-header .book-title.right{text-align:right}
+.page .page-header .book-title.center{text-align:center}
+/* 본문 영역 */
+.page .page-content{
+  flex:1;
+  padding:6pt var(--page-mr) 6pt var(--page-ml);
+  overflow:hidden;
+  column-count:var(--page-columns);
+  column-gap:8mm;
+  column-rule:1px solid transparent;
+}
+.page[data-cols="2"] .page-content{column-rule-color:#F0F0F0}
+/* 도곽 꼬리말 — 페이지 번호 (아래쪽 여백 안쪽) */
+.page .page-footer{
+  height:var(--page-footer-h);
+  padding:0 var(--page-mr) 0 var(--page-ml);
+  margin-bottom:calc(var(--page-mb) - var(--page-footer-h));
+  display:flex;align-items:flex-start;justify-content:center;
+  font-family:var(--page-body-font);
+  font-size:9pt;color:#555;
+  border-top:0.25pt solid #DDD;
+  padding-top:2mm;
+  user-select:none;
+}
+/* Margin guides (visible only in editor, hidden on print) */
+.page.with-guides::before{
+  content:"";position:absolute;inset:var(--page-mt) var(--page-mr) var(--page-mb) var(--page-ml);
+  border:1px dashed #E0E0E0;pointer-events:none;z-index:0;
+}
+/* 편집 페이지(단일 에디터지만 페이지 경계를 시각화) */
+.page.edit-single{height:auto;min-height:var(--page-h);display:block;position:relative;overflow:visible}
+.page.edit-single .page-content{
+  padding:var(--page-mt) var(--page-mr) var(--page-mb) var(--page-ml);
+  column-count:1;
+  position:relative;
+  min-height:calc(var(--page-h) - var(--page-mt) - var(--page-mb));
+  overflow:visible;
+}
+.page.edit-single .page-header,
+.page.edit-single .page-footer{display:none}
+/* 에디터 자체는 최소 높이 유지 — flex 못 쓰는 상황(block)에서도 빈 문서가 쪼그라들지 않도록 */
+.page.edit-single #editor{min-height:calc(var(--page-h) - var(--page-mt) - var(--page-mb) - 12pt)}
+.page.edit-single .ProseMirror{min-height:inherit}
+
+/* 에디터 쪽 분리선 오버레이: absolute 로 페이지 경계마다 가로선 + 쪽번호 라벨 */
+.edit-page-divider{
+  position:absolute;left:0;right:0;
+  pointer-events:none;z-index:1;
+  border-top:1px dashed #B8B8B8;
+}
+.edit-page-divider::before{
+  content:attr(data-label);
+  position:absolute;top:-9px;left:50%;transform:translateX(-50%);
+  background:var(--surface);
+  color:#888;font-size:9.5px;font-family:var(--sans);
+  padding:1px 8px;border-radius:999px;border:1px solid #D8D8D8;
+  letter-spacing:.04em;
+  white-space:nowrap;
+}
+.edit-page-divider.first::before{content:"1 쪽"}
+/* 에디터 상단 라벨 (첫 쪽 표시) */
+.edit-page-badge{
+  position:absolute;top:4px;left:var(--page-ml);
+  font-size:9.5px;color:#888;font-family:var(--sans);
+  background:var(--surface);padding:1px 8px;border-radius:999px;
+  border:1px solid #D8D8D8;
+  pointer-events:none;z-index:2;
+}
+
+/* In-page Tiptap content styles */
+.ProseMirror{outline:none;min-height:100%;line-height:var(--page-line-height)}
+.ProseMirror:focus{outline:none}
+.ProseMirror h1{font-family:inherit;font-size:17pt;font-weight:700;margin:0 0 14pt;letter-spacing:-.01em;color:var(--ink);line-height:1.35;break-after:avoid;column-span:all}
+.ProseMirror h2{font-family:inherit;font-size:13pt;font-weight:700;margin:18pt 0 8pt;color:var(--ink);line-height:1.4;break-after:avoid}
+.ProseMirror h3{font-family:inherit;font-size:11.5pt;font-weight:700;margin:14pt 0 6pt;color:var(--ink);line-height:1.45;break-after:avoid}
+.ProseMirror p{margin:0 0 6pt;text-indent:1em}
+.ProseMirror p:first-child,.ProseMirror h1+p,.ProseMirror h2+p,.ProseMirror h3+p{text-indent:0}
+.ProseMirror blockquote{margin:10pt 0;padding:4pt 10pt;border-left:2pt solid var(--rule);color:var(--mute);font-style:italic}
+.ProseMirror ul,.ProseMirror ol{margin:6pt 0;padding-left:1.4em}
+.ProseMirror li{margin-bottom:2pt}
+.ProseMirror li p{text-indent:0;margin:0}
+.ProseMirror hr{border:none;border-top:1px solid var(--rule);margin:12pt 0}
+.ProseMirror code{font-family:var(--mono);font-size:9.5pt;background:#F5F5F5;padding:1pt 4pt;border-radius:3px}
+.ProseMirror pre{font-family:var(--mono);font-size:9pt;background:#F7F7F7;padding:8pt 10pt;border-radius:6px;overflow-x:auto}
+.ProseMirror strong{font-weight:700}
+.ProseMirror em{font-style:italic}
+.ProseMirror u{text-decoration:underline}
+
+/* Table (positions preserved via <colgroup> widths) */
+.ProseMirror table{
+  border-collapse:collapse;margin:10pt 0;table-layout:fixed;width:100%;
+  overflow:hidden;
+}
+.ProseMirror table td, .ProseMirror table th{
+  border:0.5pt solid #555;padding:4pt 6pt;vertical-align:top;
+  min-width:1em;font-size:9.5pt;position:relative;
+}
+.ProseMirror table th{background:#F0F0EE;font-weight:600;text-align:left}
+.ProseMirror table p{text-indent:0;margin:0}
+.ProseMirror .selectedCell::after{
+  content:"";position:absolute;inset:0;background:rgba(90,90,90,.12);pointer-events:none;
+}
+.ProseMirror .column-resize-handle{
+  position:absolute;right:-2px;top:0;bottom:-2px;width:4px;background:#A8A8A8;cursor:col-resize;pointer-events:none;
+}
+.ProseMirror table.resize-cursor{cursor:col-resize;}
+.ProseMirror .tableWrapper{overflow-x:auto}
+
+/* Images (fixed width preserved via inline style) */
+.ProseMirror img{
+  max-width:100%;height:auto;display:block;margin:10pt auto;
+  cursor:grab;
+  /* 선택 시 드래그 가능 — ProseMirror draggable handle */
+}
+.ProseMirror img:active{cursor:grabbing}
+.ProseMirror img.ProseMirror-selectednode{outline:2px solid var(--ink);outline-offset:2px}
+/* -----------------------------------------------------------
+   Text wrap around images (float + shape-outside)
+   theosoti.com 기법: float + shape-outside:margin-box + shape-margin
+   ----------------------------------------------------------- */
+.ProseMirror img[data-align="left"]{
+  float:left;
+  margin:0 14pt 6pt 0;
+  display:inline;
+  shape-outside:margin-box;
+  shape-margin:6pt;
+}
+.ProseMirror img[data-align="right"]{
+  float:right;
+  margin:0 0 6pt 14pt;
+  display:inline;
+  shape-outside:margin-box;
+  shape-margin:6pt;
+}
+.ProseMirror img[data-align="center"]{
+  float:none;
+  display:block;
+  margin:10pt auto;
+}
+.ProseMirror img[data-align="none"]{
+  float:none;
+  display:block;
+  margin:10pt auto;
+}
+/* 원형 이미지 wrap (추가 옵션) */
+.ProseMirror img[data-shape="circle"]{
+  border-radius:50%;
+  shape-outside:circle(50%);
+  clip-path:circle(50%);
+}
+/* 이미지를 감싸는 문단 clear (새 헤딩 앞에서 float 해제) */
+.ProseMirror h1, .ProseMirror h2, .ProseMirror h3 { clear:both }
+
+/* --- JSON / HWPX / Typst panels --- */
+.source{
+  padding:16px;font-family:var(--mono);font-size:11.5px;white-space:pre;
+  background:#FAFAFA;height:100%;overflow:auto;line-height:1.55;color:#222;
+}
+.source-note{
+  padding:8px 16px;background:#FFFBF0;border-bottom:1px solid #F0E3B0;font-size:11px;color:#6E5A1A;
+}
+
+/* --- Preview area (right column: live Typst-style preview pages) --- */
+.preview-wrap{display:flex;flex-direction:column;min-width:0;background:var(--panel);border-left:1px solid var(--line)}
+.preview-head{
+  padding:10px 16px;border-bottom:1px solid var(--line);font-size:12px;color:var(--mute);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.preview-head .tag{
+  font-size:10px;padding:2px 8px;border-radius:999px;background:#EAF4EE;color:var(--ok);
+}
+.preview-scroll{flex:1;overflow:auto;background:var(--surface);padding:24px;display:flex;flex-direction:column;align-items:center;gap:18px}
+
+/* Footer */
+footer.statusbar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:0 16px;background:var(--panel);border-top:1px solid var(--line);
+  font-size:11px;color:var(--meta);
+}
+footer.statusbar .status-dot{
+  display:inline-block;width:7px;height:7px;border-radius:999px;background:var(--ok);margin-right:6px;
+}
+
+/* Paged.js rendered page (화면 표시용 CSS) */
+#paged-scroll .pagedjs_page{
+  background:#fff;box-shadow:0 2px 18px rgba(0,0,0,.10);
+  margin:0 auto 18px;
+  outline:0;
+}
+#paged-scroll .pagedjs_pages{display:flex;flex-direction:column;align-items:center}
+#paged-scroll .pagedjs_page_content > div{box-sizing:border-box}
+
+/* 드래그앤드롭 존 */
+.editor-wrap.drop-active::before{
+  content:"여기에 파일을 놓으면 자동으로 파싱됩니다 — HTML · DOCX · HWPX · MD · TXT · IDML · XML";
+  position:absolute;inset:12px;z-index:50;
+  display:grid;place-items:center;
+  background:rgba(26,26,26,.86);color:#fff;font-size:14px;font-weight:500;
+  border:2px dashed #fff;border-radius:10px;
+  pointer-events:none;backdrop-filter:blur(2px);
+  text-align:center;padding:0 24px;line-height:1.6;
+}
+.editor-wrap{position:relative}
+/* Toast 메시지 */
+.toast{
+  position:fixed;bottom:52px;left:50%;transform:translateX(-50%);
+  background:#1A1A1A;color:#fff;padding:10px 18px;border-radius:8px;
+  font-size:12.5px;z-index:200;
+  box-shadow:0 4px 16px rgba(0,0,0,.2);
+  opacity:0;transition:opacity .25s ease,transform .25s ease;
+  pointer-events:none;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+.toast.err{background:#8B1E1E}
+.toast.ok{background:#1F7A3E}
+
+/* Export 드롭다운 */
+.export-menu{
+  position:absolute;top:calc(100% + 4px);right:0;
+  background:#fff;border:1px solid var(--line);border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.12);
+  display:none;flex-direction:column;min-width:200px;
+  z-index:50;overflow:hidden;
+}
+.export-menu.show{display:flex}
+.export-menu button{
+  all:unset;padding:10px 14px;font-size:12px;color:var(--text);
+  cursor:pointer;font-family:var(--sans);border-bottom:1px solid #F5F5F5;
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+}
+.export-menu button:last-child{border-bottom:none}
+.export-menu button:hover{background:var(--accent-soft)}
+.export-menu button small{color:var(--meta);font-size:10.5px}
+.top-actions{position:relative}
+
+/* Loader */
+.loader-overlay{
+  position:fixed;inset:0;background:rgba(255,255,255,.85);backdrop-filter:blur(4px);
+  display:none;place-items:center;z-index:100;
+}
+.loader-overlay.show{display:grid}
+.loader-box{
+  background:#fff;border:1px solid var(--line);border-radius:10px;padding:22px 28px;
+  min-width:340px;box-shadow:0 10px 40px rgba(0,0,0,.1);
+}
+.loader-box h4{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--ink)}
+.loader-box .progress{height:4px;background:#F0F0F0;border-radius:999px;overflow:hidden}
+.loader-box .progress .bar{height:100%;background:var(--ink);width:0;transition:width .3s ease}
+.loader-box .log{margin-top:10px;font-family:var(--mono);font-size:10.5px;color:var(--mute);max-height:90px;overflow-y:auto;white-space:pre-line;line-height:1.5}
+
+/* =====================================================
+   Print / PDF export
+   =====================================================
+   Key points to get PDF fidelity right:
+   - @page size equals the physical paper size (mm)
+   - @page margin is 0, because .page already has mm padding = real margins
+   - @media print: hide EVERY non-printing chrome
+   - All typography uses pt / mm units
+   - No zoom/scale transforms
+*/
+@page{
+  size: var(--page-w) var(--page-h);
+  margin: 0;
+}
+@media print{
+  html,body{background:#fff;margin:0;padding:0}
+  .app{display:block;height:auto}
+  header.topbar,.toolbar,aside.sidebar,.tabs,.editor-wrap,
+  footer.statusbar,.loader-overlay,.preview-head,.toast,.export-menu{
+    display:none !important;
+  }
+  main.workspace{display:block}
+  .preview-wrap{display:block;background:#fff;border:none}
+  .preview-scroll{padding:0 !important;background:#fff !important;gap:0 !important;display:block !important}
+  #paged-scroll{padding:0 !important;background:#fff !important}
+  /* Paged.js 가 내부적으로 쓰는 래퍼들 */
+  #paged-scroll .pagedjs_pages,
+  #paged-scroll .pagedjs_page{margin:0 !important;box-shadow:none !important;page-break-after:always}
+  .page{
+    box-shadow:none !important;
+    margin:0 !important;
+    page-break-after:always;
+    break-after:page;
+    transform:none !important;
+  }
+  .page:last-child{page-break-after:auto;break-after:auto}
+  .page.with-guides::before{display:none}
+  .page-stage .ruler{display:none !important}
+  .ProseMirror{min-height:0 !important}
+  .edit-page-divider,.edit-page-badge{display:none !important}
+  /* 인쇄할 프리뷰만 보이게: 간이/Paged 중 활성화된 것만 display:block */
+  body.print-simple #paged-scroll{display:none !important}
+  body.print-paged #preview-scroll{display:none !important}
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ===================== TOP BAR ===================== -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark">학</div>
+      <div>
+        <div class="name">HCG Pub</div>
+        <div class="sub">Pipeline Editor · v2</div>
+      </div>
+    </div>
+
+    <div class="pipeline" id="pipeline">
+      <div class="stage sim" data-stage="hwp"><span class="dot"></span>HWP</div>
+      <div class="arrow"></div>
+      <div class="stage sim" data-stage="hwpx"><span class="dot"></span>HWPX</div>
+      <div class="arrow"></div>
+      <div class="stage" data-stage="json"><span class="dot"></span>JSON</div>
+      <div class="arrow"></div>
+      <div class="stage" data-stage="edit"><span class="dot"></span>Edit</div>
+      <div class="arrow"></div>
+      <div class="stage" data-stage="out"><span class="dot"></span>Output</div>
+    </div>
+
+    <div class="top-actions">
+      <button id="btn-sample">샘플 불러오기</button>
+      <button id="btn-export">내보내기 ▾</button>
+      <div class="export-menu" id="export-menu">
+        <button data-export="pdf"><span>📄 PDF 인쇄 / 저장</span><small>브라우저 인쇄</small></button>
+        <button data-export="html"><span>🌐 HTML</span><small>스타일 포함 단일 파일</small></button>
+        <button data-export="docx"><span>📝 Word (.docx)</span><small>편집 가능</small></button>
+        <button data-export="md"><span>📃 Markdown</span><small>.md 텍스트</small></button>
+        <button data-export="json"><span>{ } JSON</span><small>ProseMirror 문서모델</small></button>
+        <button data-export="typst"><span>🔤 Typst (.typ)</span><small>조판 소스</small></button>
+        <button data-export="hwpx"><span>한 HWPX XML</span><small>section XML</small></button>
+        <button data-export="txt"><span>📋 텍스트 (.txt)</span><small>순수 본문</small></button>
+      </div>
+      <button class="primary" id="btn-print">PDF 인쇄</button>
+    </div>
+  </header>
+
+  <!-- ===================== TOOLBAR ===================== -->
+  <div class="toolbar" id="toolbar">
+    <div class="group">
+      <button data-cmd="undo" title="실행 취소">↶</button>
+      <button data-cmd="redo" title="다시 실행">↷</button>
+    </div>
+    <div class="group">
+      <select id="sel-heading" title="문단 스타일">
+        <option value="p">본문</option>
+        <option value="h1">제목 1</option>
+        <option value="h2">제목 2</option>
+        <option value="h3">제목 3</option>
+      </select>
+    </div>
+    <div class="group">
+      <button data-cmd="bold" title="굵게"><b>B</b></button>
+      <button data-cmd="italic" title="기울임"><i>I</i></button>
+      <button data-cmd="underline" title="밑줄"><u>U</u></button>
+      <button data-cmd="strike" title="취소선"><s>S</s></button>
+    </div>
+    <div class="group">
+      <button data-cmd="bulletList" title="글머리표">• 목록</button>
+      <button data-cmd="orderedList" title="번호 매기기">1. 목록</button>
+      <button data-cmd="blockquote" title="인용">❝</button>
+      <button data-cmd="hr" title="구분선">—</button>
+    </div>
+    <div class="group">
+      <button id="btn-insert-table" title="표 삽입">⊞ 표</button>
+      <button id="btn-insert-image" title="이미지 삽입">🖼 이미지</button>
+      <button id="btn-table-add-col-after" title="열 추가">+열</button>
+      <button id="btn-table-add-row-after" title="행 추가">+행</button>
+      <button id="btn-table-delete" title="표 삭제">표 삭제</button>
+    </div>
+    <div class="group" id="img-align-group" style="display:none">
+      <label>이미지</label>
+      <button data-img-align="left" title="왼쪽 배치 — 텍스트가 오른쪽으로 자연 개행">⬅ Wrap</button>
+      <button data-img-align="right" title="오른쪽 배치 — 텍스트가 왼쪽으로 자연 개행">Wrap ➡</button>
+      <button data-img-align="center" title="가운데 배치 (블록)">≡</button>
+      <button data-img-align="none" title="인라인 / 기본">∅</button>
+      <button data-img-shape="circle" title="원형 Clip + 원형 Wrap">◯</button>
+      <button data-img-shape="none" title="원형 해제">□</button>
+    </div>
+    <div class="group" style="margin-left:auto">
+      <label>용지</label>
+      <select id="sel-paper">
+        <option value="A4">A4 (210×297)</option>
+        <option value="B5" selected>B5 (182×257)</option>
+        <option value="SINGUK">신국판 (152×225)</option>
+        <option value="A5">A5 (148×210)</option>
+        <option value="SAYUK">46판 (127×188)</option>
+      </select>
+      <label>여백</label>
+      <select id="sel-margin">
+        <option value="narrow">좁게 (15mm)</option>
+        <option value="medium" selected>보통 (20mm)</option>
+        <option value="wide">넓게 (25mm)</option>
+      </select>
+      <label>단</label>
+      <select id="sel-columns" title="다단 조판">
+        <option value="1" selected>1단</option>
+        <option value="2">2단</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ===================== WORKSPACE ===================== -->
+  <main class="workspace">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="block">
+        <h3>입력</h3>
+        <input type="file" id="file-input" accept=".hwpx,.hwp,.xml,.zip,.html,.htm,.docx,.md,.markdown,.txt,.idml,.indd" style="display:none">
+        <button class="side primary" id="btn-upload">원고 파일 업로드</button>
+        <button class="side" id="btn-upload-sample">샘플 HWPX 불러오기</button>
+        <div class="note">
+          <b>지원 확장자.</b><br>
+          ✓ <b>.hwpx</b> — ZIP 언팩, 스타일/이미지 완전 파싱<br>
+          ✓ <b>.docx</b> — Mammoth로 서식 보존 변환<br>
+          ✓ <b>.html/.htm</b> — DOM 파싱 후 정규화<br>
+          ✓ <b>.md</b> — Markdown → HTML → 정규화<br>
+          ✓ <b>.txt</b> — 구조 휴리스틱으로 제목/목록 자동 판별<br>
+          ✓ <b>.idml</b> — InDesign Markup XML, Story/Style 추출<br>
+          ✓ <b>.xml</b> — HWPX section XML 직접 파싱<br>
+          △ <b>.hwp</b> — 한컴 독점 바이너리, 브라우저 단독 불가 (.hwpx로 저장 필요)<br>
+          △ <b>.indd</b> — InDesign 바이너리, IDML로 내보내기 필요<br>
+          <br>
+          <b>또는</b> 에디터 영역에 파일을 <b>드래그앤드롭</b>, 한글에서 전체 복사 후 <b>Ctrl+V</b>.
+        </div>
+      </div>
+
+      <div class="block">
+        <h3>파이프라인</h3>
+        <ul class="steps" id="steps">
+          <li class="sim" data-step="hwp">1. HWP 감지<small>한글 자동화 (Windows)</small></li>
+          <li class="sim" data-step="hwpx">2. HWP → HWPX<small>서버 변환</small></li>
+          <li data-step="parse">3. HWPX 파싱<small>브라우저 DOMParser</small></li>
+          <li data-step="json">4. JSON 문서모델<small>ProseMirror doc</small></li>
+          <li data-step="edit">5. Tiptap 편집<small>WYSIWYG (이 화면)</small></li>
+          <li data-step="out">6. 출력<small>Typst/PDF/HWPX</small></li>
+        </ul>
+      </div>
+
+      <div class="block">
+        <h3>도서 정보</h3>
+        <div class="row" style="flex-direction:column;align-items:stretch;gap:4px">
+          <label style="margin-bottom:2px">책 제목 (도곽 머리말)</label>
+          <input type="text" id="inp-book-title" value="HCG Pub 조판 샘플" style="width:100%">
+        </div>
+        <div class="row">
+          <label>머리말 위치</label>
+          <select id="sel-header-align">
+            <option value="right" selected>오른쪽 (모든 쪽 동일)</option>
+            <option value="center">가운데 (모든 쪽 동일)</option>
+            <option value="left">왼쪽 (모든 쪽 동일)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label title="켜면 홀수쪽 우측, 짝수쪽 좌측으로 교차 배치 (출판 관습)">출판식 좌우 교차</label>
+          <input type="checkbox" id="chk-alt-header" style="width:auto;height:auto;margin:0">
+        </div>
+      </div>
+
+      <div class="block">
+        <h3>페이지 설정</h3>
+        <div class="row"><label>본문 폰트</label>
+          <select id="sel-font">
+            <option value="system" selected>시스템 기본</option>
+            <option value="pretendard">Pretendard</option>
+            <option value="noto-serif">Noto Serif KR (바탕)</option>
+            <option value="malgun">맑은 고딕</option>
+            <option value="batang">바탕</option>
+            <option value="dotum">돋움</option>
+            <option value="gungseo">궁서</option>
+            <option value="gulim">굴림</option>
+            <option value="apple-sd">Apple SD Gothic Neo</option>
+            <option value="nanum-gothic">나눔고딕</option>
+            <option value="nanum-myeongjo">나눔명조</option>
+            <option value="times">Times New Roman</option>
+            <option value="georgia">Georgia</option>
+            <option value="arial">Arial</option>
+          </select>
+        </div>
+        <div class="row"><label>본문 크기 (pt)</label>
+          <input type="number" id="inp-size" min="6" max="24" step="0.5" value="10" style="width:70px;text-align:right">
+        </div>
+        <div class="row"><label>행간 (line-height)</label>
+          <select id="sel-lineheight" title="기본 학술서적 1.8 / 전공서적 2.0">
+            <option value="1.4">1.4 (빽빽)</option>
+            <option value="1.6">1.6 (단행본)</option>
+            <option value="1.8" selected>1.8 (학술)</option>
+            <option value="2.0">2.0 (전공서적)</option>
+            <option value="2.2">2.2 (넉넉)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="block">
+        <h3>자동화</h3>
+        <button class="side" id="btn-run-pipeline">샘플 파이프라인 실행 ▶</button>
+      </div>
+    </aside>
+
+    <!-- Editor (center) -->
+    <section class="editor-wrap">
+      <div class="tabs" id="tabs">
+        <div class="tab active" data-tab="edit">편집 <span class="mark live">live</span></div>
+        <div class="tab" data-tab="json">JSON 모델 <span class="mark live">live</span></div>
+        <div class="tab" data-tab="hwpx">HWPX 원본 <span class="mark sim">sim</span></div>
+        <div class="tab" data-tab="typst">Typst <span class="mark live">live</span></div>
+      </div>
+
+      <div class="tab-panels" id="panels">
+        <!-- Edit -->
+        <div class="panel active" data-panel="edit">
+          <div class="page-stage" id="page-stage">
+            <div class="ruler"><span id="ruler-left">22mm</span><span id="ruler-size">B5 182×257mm</span><span id="ruler-right">22mm</span></div>
+            <div class="page edit-single with-guides" id="page-container">
+              <div class="page-content"><div id="editor"></div></div>
+            </div>
+          </div>
+        </div>
+        <!-- JSON -->
+        <div class="panel" data-panel="json">
+          <div class="source-note">ProseMirror/Tiptap 문서 모델(JSON). 편집기와 실시간으로 동기화되며, DB에 저장되는 단일 진실 소스입니다.</div>
+          <pre class="source" id="out-json"></pre>
+        </div>
+        <!-- HWPX -->
+        <div class="panel" data-panel="hwpx">
+          <div class="source-note">JSON → HWPX section XML 역생성 (간소화 버전). 실제 HWPX는 ZIP 패키지로, BinData/PrIMary XML 등 부속 자원까지 포함합니다.</div>
+          <pre class="source" id="out-hwpx"></pre>
+        </div>
+        <!-- Typst -->
+        <div class="panel" data-panel="typst">
+          <div class="source-note">JSON → Typst 소스 코드. 이 소스는 Typst 컴파일러(서버/CLI)에서 PDF로 빌드됩니다. 브라우저에서 바로 PDF를 뽑을 때는 상단의 "PDF 인쇄" 버튼을 쓰세요.</div>
+          <pre class="source" id="out-typst"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Preview (right) -->
+    <section class="preview-wrap">
+      <div class="preview-head">
+        <div>
+          조판 프리뷰
+          <span class="tag" id="preview-mode-tag">간이</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button id="btn-paged-toggle" title="Paged.js 로 @page·running headers·shape-outside 를 정확히 재현"
+                  style="height:24px;padding:0 10px;font-size:11px;border:1px solid var(--line);background:#fff;border-radius:999px;cursor:pointer">
+            Paged.js 정밀 모드 ▶
+          </button>
+          <span id="preview-info">B5 · 182×257mm · 총 1쪽</span>
+        </div>
+      </div>
+      <div class="preview-scroll" id="preview-scroll"></div>
+      <div class="preview-scroll" id="paged-scroll" style="display:none"></div>
+    </section>
+  </main>
+
+  <!-- ===================== STATUS BAR ===================== -->
+  <footer class="statusbar">
+    <div><span class="status-dot"></span><span id="status-msg">준비됨</span></div>
+    <div id="status-counts">단락 0 · 문자 0</div>
+  </footer>
+
+</div>
+
+<!-- Loader overlay -->
+<div class="loader-overlay" id="loader">
+  <div class="loader-box">
+    <h4 id="loader-title">파이프라인 실행 중…</h4>
+    <div class="progress"><div class="bar" id="loader-bar"></div></div>
+    <div class="log" id="loader-log"></div>
+  </div>
+</div>
+
+<!-- ===================== SCRIPTS ===================== -->
+<script type="module">
+import { Editor } from 'https://esm.sh/@tiptap/core@2.6.6'
+import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.6.6'
+import Underline from 'https://esm.sh/@tiptap/extension-underline@2.6.6'
+import Image from 'https://esm.sh/@tiptap/extension-image@2.6.6'
+import Table from 'https://esm.sh/@tiptap/extension-table@2.6.6'
+import TableRow from 'https://esm.sh/@tiptap/extension-table-row@2.6.6'
+import TableCell from 'https://esm.sh/@tiptap/extension-table-cell@2.6.6'
+import TableHeader from 'https://esm.sh/@tiptap/extension-table-header@2.6.6'
+import JSZip from 'https://esm.sh/jszip@3.10.1'
+
+/* Paged.js — CSS Paged Media polyfill. @page 규칙, running headers/footers,
+   counters, shape-outside 등을 실제 페이지로 제대로 구현한다.
+   (https://gitlab.coko.foundation/pagedjs/pagedjs)
+   ES 모듈 로드는 CDN 빌드에 따라 이름이 다를 수 있으므로 dynamic import 로 fallback. */
+let PagedPreviewer = null;
+try {
+  const mod = await import('https://esm.sh/pagedjs@0.4.3');
+  PagedPreviewer = mod.Previewer || mod.default?.Previewer || null;
+} catch(e){
+  console.warn('Paged.js ESM 로드 실패, unpkg fallback 시도', e);
+  try {
+    const mod = await import('https://unpkg.com/pagedjs@0.4.3/dist/paged.esm.js');
+    PagedPreviewer = mod.Previewer || mod.default?.Previewer || null;
+  } catch(e2){
+    console.warn('Paged.js fallback 도 실패 — 정밀 프리뷰는 간이 모드로 동작', e2);
+  }
+}
+
+/* Mammoth (DOCX → HTML) — 필요 시점에만 lazy-load */
+let mammothLib = null;
+async function loadMammoth(){
+  if (mammothLib) return mammothLib;
+  try {
+    const mod = await import('https://esm.sh/mammoth@1.7.2');
+    mammothLib = mod.default || mod;
+    return mammothLib;
+  } catch(e){
+    console.warn('Mammoth(DOCX) 로드 실패', e);
+    return null;
+  }
+}
+
+/* Marked (Markdown → HTML) */
+let markedLib = null;
+async function loadMarked(){
+  if (markedLib) return markedLib;
+  try {
+    const mod = await import('https://esm.sh/marked@12.0.2');
+    markedLib = mod.marked || mod.default?.marked || mod.default || mod;
+    return markedLib;
+  } catch(e){
+    console.warn('Marked 로드 실패', e);
+    return null;
+  }
+}
+
+/* docx 작성용 (DOCX export) */
+let docxLib = null;
+async function loadDocx(){
+  if (docxLib) return docxLib;
+  try {
+    const mod = await import('https://esm.sh/docx@8.5.0');
+    docxLib = mod;
+    return docxLib;
+  } catch(e){
+    console.warn('docx 로드 실패', e);
+    return null;
+  }
+}
+
+/* ======================================================
+   Paper size presets (in mm)
+   ====================================================== */
+const PAPER = {
+  A4:     { w:210, h:297, label:'A4 210×297mm' },
+  B5:     { w:182, h:257, label:'B5 182×257mm' },
+  SINGUK: { w:152, h:225, label:'신국판 152×225mm' },
+  A5:     { w:148, h:210, label:'A5 148×210mm' },
+  SAYUK:  { w:127, h:188, label:'46판 127×188mm' },
+};
+const MARGIN = { narrow:15, medium:20, wide:25 };
+
+/* 시스템 폰트 스택 맵 — 운영체제 기본 폰트 + 한글 웹폰트 조합 */
+const FONTS = {
+  'system':        'system-ui,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","맑은 고딕","Malgun Gothic","Helvetica Neue",Arial,sans-serif',
+  'pretendard':    '"Pretendard Variable","Pretendard",system-ui,-apple-system,sans-serif',
+  'noto-serif':    '"Noto Serif KR","바탕","Batang","Apple SD Gothic Neo",serif',
+  'malgun':        '"맑은 고딕","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif',
+  'batang':        '"바탕","Batang","Noto Serif KR",serif',
+  'dotum':         '"돋움","Dotum","Apple SD Gothic Neo",sans-serif',
+  'gungseo':       '"궁서","Gungsuh","Gungseo",serif',
+  'gulim':         '"굴림","Gulim","Apple SD Gothic Neo",sans-serif',
+  'apple-sd':      '"Apple SD Gothic Neo","맑은 고딕",system-ui,sans-serif',
+  'nanum-gothic':  '"나눔고딕","NanumGothic","Nanum Gothic","맑은 고딕",sans-serif',
+  'nanum-myeongjo':'"나눔명조","NanumMyeongjo","Nanum Myeongjo","바탕",serif',
+  'times':         '"Times New Roman",Times,"Noto Serif KR",serif',
+  'georgia':       'Georgia,"Noto Serif KR",serif',
+  'arial':         'Arial,Helvetica,"맑은 고딕",sans-serif',
+};
+function fontStack(key){ return FONTS[key] || FONTS.system; }
+
+function applyPaper(paperKey, marginKey, sizePt, fontKey, lineHeight, columns){
+  const p = PAPER[paperKey]; const m = MARGIN[marginKey];
+  const root = document.documentElement.style;
+  root.setProperty('--page-w', p.w+'mm');
+  root.setProperty('--page-h', p.h+'mm');
+  root.setProperty('--page-mt', m+'mm');
+  root.setProperty('--page-mb', m+'mm');
+  // side margin slightly wider for comfortable Korean justification
+  const side = Math.round(m + 2);
+  root.setProperty('--page-ml', side+'mm');
+  root.setProperty('--page-mr', side+'mm');
+  // Body style tokens — .page inherits from these
+  root.setProperty('--page-body-font', fontStack(fontKey));
+  root.setProperty('--page-body-size', sizePt+'pt');
+  root.setProperty('--page-line-height', String(lineHeight));
+  root.setProperty('--page-columns', String(columns || 1));
+
+  // Edit-single page (editor) never gets multi-column (편집 편의)
+  const pageEl = document.getElementById('page-container');
+  if (pageEl){
+    pageEl.dataset.cols = '1';
+  }
+  // Rulers + preview info
+  document.getElementById('ruler-left').textContent  = side+'mm';
+  document.getElementById('ruler-right').textContent = side+'mm';
+  document.getElementById('ruler-size').textContent  = p.label;
+  // Update @page CSS dynamically (so PDF prints at exact size)
+  let styleEl = document.getElementById('dynamic-page-style');
+  if (!styleEl){
+    styleEl = document.createElement('style');
+    styleEl.id = 'dynamic-page-style';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = `@page { size: ${p.w}mm ${p.h}mm; margin: 0; }`;
+}
+
+/* ======================================================
+   Sample HWPX (simplified section XML)
+   ====================================================== */
+const SAMPLE_HWPX = `<?xml version="1.0" encoding="UTF-8"?>
+<hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section"
+        xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
+  <hp:p styleIDRef="H1"><hp:run><hp:t>HCG Pub 파이프라인 에디터</hp:t></hp:run></hp:p>
+  <hp:p styleIDRef="BODY"><hp:run><hp:t>학지사/학지사메디컬의 InDesign 조판 작업을 웹 기반으로 자동화하기 위한 데모입니다. 입력된 HWP 원고가 HWPX로 변환되면, 브라우저가 이를 파싱해 내부 JSON 문서모델로 저장하고, Tiptap 에디터가 이를 WYSIWYG으로 편집합니다.</hp:t></hp:run></hp:p>
+  <hp:p styleIDRef="H2"><hp:run><hp:t>1. 작업 흐름</hp:t></hp:run></hp:p>
+  <hp:p styleIDRef="BODY"><hp:run><hp:t>원고 입력부터 PDF 출력까지의 단계는 다음과 같습니다. 각 단계는 파일 형식이 아니라 데이터 형식이 바뀌는 지점으로 정의됩니다.</hp:t></hp:run></hp:p>
+  <hp:p styleIDRef="QUOTE"><hp:run><hp:t>HWP → HWPX → JSON 문서모델 → Tiptap 편집 → Typst/PDF (선택적 HWPX 역변환)</hp:t></hp:run></hp:p>
+  <hp:p styleIDRef="H2"><hp:run><hp:t>2. 표 예시</hp:t></hp:run></hp:p>
+  <hp:p styleIDRef="BODY"><hp:run><hp:t>아래는 각 단계의 책임을 정리한 표입니다. 셀의 위치와 열 너비는 본 에디터와 PDF 출력에서 동일하게 유지됩니다.</hp:t></hp:run></hp:p>
+  <hp:tbl rowCnt="4" colCnt="3">
+    <hp:tr><hp:tc isHeader="1"><hp:subList><hp:p><hp:run><hp:t>단계</hp:t></hp:run></hp:p></hp:subList></hp:tc>
+           <hp:tc isHeader="1"><hp:subList><hp:p><hp:run><hp:t>입력</hp:t></hp:run></hp:p></hp:subList></hp:tc>
+           <hp:tc isHeader="1"><hp:subList><hp:p><hp:run><hp:t>출력</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr>
+    <hp:tr><hp:tc><hp:subList><hp:p><hp:run><hp:t>변환</hp:t></hp:run></hp:p></hp:subList></hp:tc>
+           <hp:tc><hp:subList><hp:p><hp:run><hp:t>HWP</hp:t></hp:run></hp:p></hp:subList></hp:tc>
+           <hp:tc><hp:subList><hp:p><hp:run><hp:t>HWPX</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr>
+    <hp:tr><hp:tc><hp:subList><hp:p><hp:run><hp:t>파싱</hp:t></hp:run></hp:p></hp:subList></hp:tc>
+           <hp:tc><hp:subList><hp:p><hp:run><hp:t>HWPX</hp:t></hp:run></hp:p></hp:subList></hp:tc>
+           <hp:tc><hp:subList><hp:p><hp:run><hp:t>JSON</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr>
+    <hp:tr><hp:tc><hp:subList><hp:p><hp:run><hp:t>조판</hp:t></hp:run></hp:p></hp:subList></hp:tc>
+           <hp:tc><hp:subList><hp:p><hp:run><hp:t>JSON</hp:t></hp:run></hp:p></hp:subList></hp:tc>
+           <hp:tc><hp:subList><hp:p><hp:run><hp:t>PDF</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr>
+  </hp:tbl>
+  <hp:p styleIDRef="H2"><hp:run><hp:t>3. 이미지 예시</hp:t></hp:run></hp:p>
+  <hp:p styleIDRef="BODY"><hp:run><hp:t>이미지는 width/height 속성이 보존되어, 편집기와 PDF에서 크기가 동일하게 유지됩니다.</hp:t></hp:run></hp:p>
+  <hp:p styleIDRef="IMG"><hp:run><hp:pic width="80mm" height="44mm" src="sample-diagram"/></hp:run></hp:p>
+  <hp:p styleIDRef="H2"><hp:run><hp:t>4. 인쇄 품질</hp:t></hp:run></hp:p>
+  <hp:p styleIDRef="BODY"><hp:run><hp:t>@page 규칙을 용지 크기(mm)로 정확히 지정하고, 본문은 pt 단위로 고정하여 브라우저 기본 스케일에 의존하지 않습니다. 한국어 조판 규칙(word-break: keep-all)도 적용되어 어절 단위로 줄바꿈이 일어납니다.</hp:t></hp:run></hp:p>
+</hs:sec>`;
+
+// Tiny 2-color SVG as an embeddable placeholder image
+const PLACEHOLDER_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+<rect width="400" height="220" fill="#F0F0EE"/>
+<rect x="30" y="30" width="160" height="160" fill="#1A1A1A"/>
+<rect x="210" y="30" width="160" height="160" fill="none" stroke="#1A1A1A" stroke-width="2"/>
+<text x="200" y="210" font-family="sans-serif" font-size="12" fill="#666" text-anchor="middle">sample figure</text>
+</svg>`);
+
+/* ======================================================
+   HWPX → ProseMirror JSON parser
+   (supports paragraphs with styleIDRef, tables, and pic runs)
+   ====================================================== */
+function parseHwpxToPmJSON(xmlText, options){
+  const styleMap = options?.styleMap;   // Map<string styleID, role>
+  const imageMap = options?.imageMap;   // Map<string binDataID, dataURL>
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  const sec = doc.documentElement;
+  const content = [];
+
+  // Style role resolution: supports both simplified names (H1/H2/QUOTE)
+  // and real HWPX numeric IDs via styleMap.
+  function resolveRole(styleId){
+    if (!styleId) return 'body';
+    if (styleId === 'H1') return 'heading1';
+    if (styleId === 'H2') return 'heading2';
+    if (styleId === 'H3') return 'heading3';
+    if (styleId === 'QUOTE') return 'quote';
+    if (styleId === 'LIST') return 'list';
+    if (styleId === 'BODY') return 'body';
+    if (styleMap && styleMap.has(styleId)) return styleMap.get(styleId);
+    return 'body';
+  }
+
+  function extractRunText(run){
+    const texts = run.getElementsByTagNameNS('*','t');
+    return Array.from(texts).map(t=>t.textContent).join('');
+  }
+
+  // Parse pic dimensions. Supports:
+  //  - attr width/height with "mm" suffix (simplified sample)
+  //  - numeric HWPUNIT (1 HWPUNIT = 1/7200 inch ≈ 0.003527mm) (real HWPX)
+  //  - nested <hc:orgSz width="N" height="N"/> (real HWPX)
+  function picDimsToPx(pic){
+    let wAttr = pic.getAttribute('width');
+    let hAttr = pic.getAttribute('height');
+    if (!wAttr || !hAttr){
+      const orgSz = pic.getElementsByTagNameNS('*','orgSz')[0];
+      if (orgSz){
+        wAttr = wAttr || orgSz.getAttribute('width');
+        hAttr = hAttr || orgSz.getAttribute('height');
+      }
+    }
+    function toPx(v, fallbackMm){
+      if (!v) return mmToPx(fallbackMm+'mm');
+      const s = String(v);
+      if (/mm$/i.test(s)) return mmToPx(s);
+      const n = parseFloat(s);
+      if (!isFinite(n)) return mmToPx(fallbackMm+'mm');
+      // Heuristic: if the number is huge (>1000), assume HWPUNIT
+      if (n > 1000) return mmToPx((n/7200*25.4)+'mm');
+      // else assume already px-ish
+      return Math.round(n);
+    }
+    return { wPx: toPx(wAttr, 80), hPx: toPx(hAttr, 44) };
+  }
+
+  function resolveImageSrc(pic){
+    const keys = [
+      pic.getAttribute('binaryItemIDRef'),
+      pic.getAttribute('binItemRef'),
+      pic.getAttribute('src'),
+    ].filter(Boolean);
+    if (imageMap){
+      for (const k of keys){
+        if (imageMap.has(k)) return { src: imageMap.get(k), key:k };
+        // real HWPX often uses "image1" as binID but file is "Contents/BinData/image1.png"
+        for (const [mapKey, val] of imageMap){
+          if (mapKey.includes(k) || k.includes(mapKey)) return { src:val, key:mapKey };
+        }
+      }
+    }
+    return { src: PLACEHOLDER_IMG, key: keys[0]||'image' };
+  }
+
+  function handleParagraph(p){
+    const role = resolveRole(p.getAttribute('styleIDRef'));
+    const runs = p.getElementsByTagNameNS('*','run');
+    // Image paragraph: contains <hp:pic>
+    const pics = p.getElementsByTagNameNS('*','pic');
+    if (pics.length > 0){
+      const pic = pics[0];
+      const { wPx, hPx } = picDimsToPx(pic);
+      const { src, key } = resolveImageSrc(pic);
+      content.push({ type:'image', attrs:{ src, alt:key, title:key, width:wPx, height:hPx }});
+      return;
+    }
+    const text = Array.from(runs).map(extractRunText).join('');
+    if (!text.trim()) return;
+    if (role === 'heading1') content.push({type:'heading',attrs:{level:1},content:[{type:'text',text}]});
+    else if (role === 'heading2') content.push({type:'heading',attrs:{level:2},content:[{type:'text',text}]});
+    else if (role === 'heading3') content.push({type:'heading',attrs:{level:3},content:[{type:'text',text}]});
+    else if (role === 'quote') content.push({type:'blockquote',content:[{type:'paragraph',content:[{type:'text',text}]}]});
+    else content.push({type:'paragraph',content:[{type:'text',text}]});
+  }
+
+  function handleTable(tbl){
+    const trs = Array.from(tbl.getElementsByTagNameNS('*','tr'));
+    const rowsJson = [];
+    for (const tr of trs){
+      // Only direct-child tc, not nested ones inside sub-tables
+      const tcs = Array.from(tr.children).filter(n=>n.localName==='tc');
+      const cells = [];
+      for (const tc of tcs){
+        const isHeader = tc.getAttribute('isHeader') === '1' || tc.getAttribute('header') === '1';
+        const cellParas = tc.getElementsByTagNameNS('*','p');
+        const cellText = Array.from(cellParas).map(cp=>{
+          const rs = cp.getElementsByTagNameNS('*','run');
+          return Array.from(rs).map(extractRunText).join('');
+        }).join('\n');
+        cells.push({
+          type: isHeader ? 'tableHeader' : 'tableCell',
+          attrs: { colspan:1, rowspan:1, colwidth:null },
+          content:[{type:'paragraph',content:cellText?[{type:'text',text:cellText}]:[]}]
+        });
+      }
+      if (cells.length) rowsJson.push({type:'tableRow', content: cells});
+    }
+    if (rowsJson.length) content.push({type:'table', content: rowsJson});
+  }
+
+  function walk(node){
+    for (const child of node.childNodes){
+      if (child.nodeType !== 1) continue;
+      const ln = child.localName;
+      if (ln === 'p') handleParagraph(child);
+      else if (ln === 'tbl') handleTable(child);
+      else walk(child);
+    }
+  }
+  walk(sec);
+
+  return { type:'doc', content: content.length ? content : [{type:'paragraph'}] };
+}
+
+/* Real HWPX: parse header.xml to build styleID → semantic role map */
+function parseHwpxStyles(xmlText){
+  try {
+    const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+    const styles = doc.getElementsByTagNameNS('*','style');
+    const map = new Map();
+    for (const s of styles){
+      const id = s.getAttribute('id');
+      if (id == null) continue;
+      const name = (s.getAttribute('name') || '').toLowerCase();
+      const eng  = (s.getAttribute('engName') || '').toLowerCase();
+      const combined = name + ' ' + eng;
+      let role = 'body';
+      if (/(개요\s*1|heading\s*1|제목\s*1|title|\bh1\b)/.test(combined)) role = 'heading1';
+      else if (/(개요\s*2|heading\s*2|제목\s*2|\bh2\b)/.test(combined)) role = 'heading2';
+      else if (/(개요\s*3|heading\s*3|제목\s*3|\bh3\b)/.test(combined)) role = 'heading3';
+      else if (/(인용|quote)/.test(combined)) role = 'quote';
+      else if (/(목록|list|bullet|불릿)/.test(combined)) role = 'list';
+      map.set(id, role);
+    }
+    return map;
+  } catch(e){
+    return new Map();
+  }
+}
+
+/* Unpack a real .hwpx ZIP, extract styles + section XMLs + images, and produce a merged ProseMirror JSON */
+async function parseHwpxZipFile(file, onLog){
+  const log = onLog || (()=>{});
+  const zip = await JSZip.loadAsync(file);
+  const names = Object.keys(zip.files);
+  log(`[1] ZIP 내 파일: ${names.length}개`);
+
+  // Find section XMLs. Real HWPX puts them under Contents/section0.xml, section1.xml, ...
+  const secRe = /(^|\/)section\d+\.xml$/i;
+  const sectionPaths = names.filter(n=>secRe.test(n) && !zip.files[n].dir).sort();
+  if (!sectionPaths.length) throw new Error('section XML 없음');
+  log(`[2] section: ${sectionPaths.length}개 발견`);
+
+  // Header / styles (optional)
+  let styleMap = new Map();
+  const headerPath = names.find(n=>/(^|\/)header\.xml$/i.test(n));
+  if (headerPath){
+    const headerXml = await zip.files[headerPath].async('text');
+    styleMap = parseHwpxStyles(headerXml);
+    log(`[3] 스타일 맵: ${styleMap.size}개`);
+  } else {
+    log(`[3] header.xml 없음 — 모든 문단을 본문으로 처리`);
+  }
+
+  // Images from BinData/
+  const imageMap = new Map();
+  const binRe = /(^|\/)BinData\/([^\/]+)\.(png|jpe?g|gif|bmp|svg|webp)$/i;
+  const binEntries = names.filter(n=>binRe.test(n) && !zip.files[n].dir);
+  for (const n of binEntries){
+    const match = n.match(binRe);
+    const baseId = match[2];
+    const ext = match[3].toLowerCase();
+    const mime = 'image/' + (ext === 'jpg' ? 'jpeg' : ext);
+    try {
+      const blob = await zip.files[n].async('blob');
+      const typed = new Blob([blob], {type: mime});
+      const dataUrl = await new Promise((res, rej)=>{
+        const r = new FileReader();
+        r.onload = ()=>res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(typed);
+      });
+      imageMap.set(baseId, dataUrl);
+      imageMap.set(baseId + '.' + ext, dataUrl);
+    } catch(e){ /* skip this image */ }
+  }
+  log(`[4] 이미지: ${binEntries.length}개 로드 (맵 ${imageMap.size}개)`);
+
+  // Parse each section, concatenate
+  const allContent = [];
+  for (const path of sectionPaths){
+    const xml = await zip.files[path].async('text');
+    const json = parseHwpxToPmJSON(xml, { styleMap, imageMap });
+    for (const block of (json.content||[])) allContent.push(block);
+  }
+  log(`[5] ProseMirror 블록: ${allContent.length}개`);
+  return { doc: { type:'doc', content: allContent.length ? allContent : [{type:'paragraph'}] }, styleMap, imageMap, sectionCount: sectionPaths.length };
+}
+
+function mmToPx(mmStr){
+  const n = parseFloat(String(mmStr).replace('mm',''));
+  return Math.round(n * 3.7795275591);
+}
+function pxToMm(px){
+  return +(px / 3.7795275591).toFixed(1);
+}
+
+/* ======================================================
+   Clipboard-paste auto-parser
+   (HWP 문서에서 텍스트 또는 HTML을 붙여넣었을 때
+    문서 구조를 자동 판별하여 ProseMirror 노드로 변환)
+   ====================================================== */
+
+// Strip Office/HWP-specific junk from HTML clipboard payload
+function normalizeHwpHtml(html){
+  if (!html) return '';
+  // Remove Office conditional comments and MS-only blocks
+  html = html.replace(/<!--\[if[\s\S]*?<!\[endif\]-->/g, '');
+  html = html.replace(/<!--StartFragment-->|<!--EndFragment-->/g, '');
+  html = html.replace(/<!--[\s\S]*?-->/g, '');
+  html = html.replace(/<xml>[\s\S]*?<\/xml>/gi, '');
+  html = html.replace(/<\?xml[\s\S]*?\?>/g, '');
+  html = html.replace(/<meta[^>]*>/gi, '');
+  html = html.replace(/<link[^>]*>/gi, '');
+  html = html.replace(/<style[\s\S]*?<\/style>/gi, '');
+  html = html.replace(/<o:[^>]*>[\s\S]*?<\/o:[^>]*>/gi, '');
+  html = html.replace(/<\/?o:[^>]*>/gi, '');
+
+  // Parse and walk DOM
+  let doc;
+  try { doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html'); }
+  catch(e){ return html; }
+  const root = doc.body.firstElementChild || doc.body;
+
+  // Promote paragraphs that look like headings (large font or bold + short)
+  root.querySelectorAll('p, div').forEach(p=>{
+    const text = (p.textContent||'').trim();
+    if (!text) return;
+    // Skip if already a heading inside
+    if (p.querySelector('h1,h2,h3,h4,h5,h6')) return;
+    const style = p.getAttribute('style') || '';
+    const fontSize = (style.match(/font-size\s*:\s*(\d+(?:\.\d+)?)/i) || [])[1];
+    const size = fontSize ? parseFloat(fontSize) : 0;
+    const hasBold = p.querySelector('b, strong') !== null
+                    || /font-weight\s*:\s*(bold|[6-9]00)/i.test(style);
+    const textLen = text.length;
+    const noTerminalPunct = !/[.?!。]\s*$/.test(text);
+
+    let level = 0;
+    if (size >= 18) level = 1;
+    else if (size >= 14) level = 2;
+    else if (size >= 12 && hasBold && textLen <= 40 && noTerminalPunct) level = 3;
+    else if (hasBold && textLen <= 30 && noTerminalPunct) level = 3;
+
+    // Korean chapter markers override
+    if (/^제\s*\d+\s*[장편부]/.test(text)) level = 1;
+    else if (/^제\s*\d+\s*[절항조]/.test(text)) level = 2;
+
+    if (level){
+      const h = doc.createElement('h'+level);
+      h.textContent = text;
+      p.replaceWith(h);
+    }
+  });
+
+  // Strip noisy attributes Tiptap will ignore
+  root.querySelectorAll('*').forEach(el=>{
+    el.removeAttribute('class');
+    el.removeAttribute('style');
+    el.removeAttribute('lang');
+    el.removeAttribute('dir');
+    // Leave width/height on img
+    if (el.tagName !== 'IMG'){
+      el.removeAttribute('width');
+      el.removeAttribute('height');
+    }
+  });
+
+  // Flatten nested spans that add nothing
+  root.querySelectorAll('span').forEach(span=>{
+    if (span.attributes.length === 0){
+      const parent = span.parentNode;
+      while (span.firstChild) parent.insertBefore(span.firstChild, span);
+      parent.removeChild(span);
+    }
+  });
+
+  return root.innerHTML;
+}
+
+// Convert plain text (typical when copying from HWP) to ProseMirror blocks
+// 감지 대상:
+//   - 제N장/편/부 → H1
+//   - 제N절/항/조, N.N[.N], I./Ⅰ./1) → H2
+//   - 1./가./①/(1) → orderedList
+//   - •/·/◦/○/□/■/▶/◆/▣/‣/-/* → bulletList
+//   - > / 『』 / 「」 / "..." → blockquote
+//   - 콜론(:)으로 끝나고 짧은 줄 → H3
+function plainTextToPmBlocks(text){
+  if (!text) return [];
+  const t = text.replace(/\r\n|\r/g,'\n').replace(/\u00A0/g,' ');   // NBSP→SP
+  const blocks = t.split(/\n\s*\n/);               // blank-line separated
+  const content = [];
+
+  // marker patterns
+  const bulletRe   = /^[\u2022\u00B7\u25E6\u25CB\u25A1\u25A0\u25B6\u25A2\u25C7\u25C6\u25B2\u25B3\u25B6\u2023\u2043\-\*]\s+/;
+  const ordNumRe   = /^\d+\.\s+/;
+  const ordNumParRe= /^\d+\)\s+/;
+  const ordKorRe   = /^[가-힣]\.\s+/;
+  const ordKorParRe= /^[가-힣]\)\s+/;
+  const ordCircleRe= /^[\u2460-\u2473]\s*/;        // ①②③…⑳
+  const ordParenRe = /^\(\d+\)\s+/;
+  const ordRomanRe = /^[\u2160-\u217F]\.\s+/;      // Ⅰ.Ⅱ.Ⅲ. 로마숫자
+  const ordLatRoRe = /^[IVXivx]{1,4}\.\s+/;
+  const multiNumRe = /^\d+(?:\.\d+){1,3}(?:\s+|\.\s)/;  // 1.1 / 1.2.3 등 (멀티레벨 번호)
+
+  // chapter / section patterns
+  const chapRe  = /^제\s*\d+\s*[장편부]/;
+  const sectRe  = /^제\s*\d+\s*[절항조관]/;
+
+  function mkText(text){ return [{type:'text', text}]; }
+  function mkHeading(level, text){
+    return {type:'heading', attrs:{level}, content:mkText(text)};
+  }
+  function mkPara(text){ return {type:'paragraph', content:mkText(text)}; }
+
+  for (const rawBlock of blocks){
+    const block = rawBlock.replace(/^\n+|\n+$/g,'');
+    if (!block.trim()) continue;
+    // tab indent (탭 들여쓰기) 도 목록 표시로 간주
+    const rawLines = block.split('\n').map(l=>l.replace(/\s+$/,''));
+    const lines    = rawLines.filter(l=>l.trim());
+    if (!lines.length) continue;
+
+    const firstLine = lines[0].trim();
+
+    // --- 단일 줄 블록 → 제목 / 콜론 헤딩을 먼저 검사 (목록 1항목보다 우선) ---
+    if (lines.length === 1){
+      const line = firstLine;
+      // 제N장/편/부 → H1
+      if (chapRe.test(line)){
+        content.push(mkHeading(1, line)); continue;
+      }
+      // 제N절/항/조/관 → H2
+      if (sectRe.test(line)){
+        content.push(mkHeading(2, line)); continue;
+      }
+      // 로마숫자 대제목 → H1
+      if (ordRomanRe.test(line) && line.length <= 60){
+        content.push(mkHeading(1, line)); continue;
+      }
+      // 1.1 / 1.2.3 … 멀티레벨 번호 → 깊이별 H2/H3
+      const mlm = line.match(/^(\d+(?:\.\d+){1,3})[\.\s]/);
+      if (mlm && line.length <= 80){
+        const depth = mlm[1].split('.').length;
+        content.push(mkHeading(Math.min(depth, 3), line));
+        continue;
+      }
+      // "1. 제목" 짧은 단독 줄 → H2
+      if (/^\d+\.\s+\S.{0,46}$/.test(line) && !/[.?!。]\s*$/.test(line)){
+        content.push(mkHeading(2, line)); continue;
+      }
+      // 콜론으로 끝나는 짧은 줄 → H3
+      if (/^.{1,30}[:：]$/.test(line)){
+        content.push(mkHeading(3, line.replace(/[:：]$/,''))); continue;
+      }
+      // 짧고 문장부호 없음 → H3 후보
+      if (line.length <= 30 && !/[.?!。:;,]\s*$/.test(line)
+          && line.split(/\s/).length <= 10
+          && !/^\S+[은는이가을를에의로와과]\s/.test(line)){
+        content.push(mkHeading(3, line)); continue;
+      }
+    }
+
+    // --- 블록 수준 목록 판정 (모든 줄이 같은 마커로 시작할 때) ---
+    const allBullet  = lines.every(l=>bulletRe.test(l.trimStart()));
+    const allNum     = lines.every(l=>ordNumRe.test(l.trimStart()));
+    const allNumPar  = lines.every(l=>ordNumParRe.test(l.trimStart()));
+    const allKor     = lines.every(l=>ordKorRe.test(l.trimStart()));
+    const allKorPar  = lines.every(l=>ordKorParRe.test(l.trimStart()));
+    const allCircle  = lines.every(l=>ordCircleRe.test(l.trimStart()));
+    const allParen   = lines.every(l=>ordParenRe.test(l.trimStart()));
+    const allRoman   = lines.every(l=>ordRomanRe.test(l.trimStart()));
+
+    if (allBullet){
+      const items = lines.map(l=>l.trimStart().replace(bulletRe,''));
+      content.push({type:'bulletList', content: items.map(t=>({
+        type:'listItem', content:[mkPara(t)]
+      }))});
+      continue;
+    }
+    if (allNum||allNumPar||allKor||allKorPar||allCircle||allParen||allRoman){
+      const stripRe = allNum?ordNumRe
+                    : allNumPar?ordNumParRe
+                    : allKor?ordKorRe
+                    : allKorPar?ordKorParRe
+                    : allCircle?ordCircleRe
+                    : allParen?ordParenRe
+                    : ordRomanRe;
+      const items = lines.map(l=>l.trimStart().replace(stripRe,''));
+      content.push({type:'orderedList', content: items.map(t=>({
+        type:'listItem', content:[mkPara(t)]
+      }))});
+      continue;
+    }
+
+    // --- 인용 블록 ---
+    if (/^[>『「"“]/.test(firstLine)){
+      const joined = lines.join(' ').replace(/^[>『「"“]\s*/, '').replace(/[』」"”]\s*$/,'');
+      content.push({
+        type:'blockquote',
+        content:[mkPara(joined)]
+      });
+      continue;
+    }
+
+    // --- 혼합 블록 (여러 줄 중 일부만 목록 마커를 가진 경우)
+    // 예: 문단 한 줄 + 불릿 3개가 blank line 없이 이어진 덩어리
+    const markerMask = lines.map(l=>{
+      const s = l.trimStart();
+      if (bulletRe.test(s)) return 'b';
+      if (ordNumRe.test(s) || ordNumParRe.test(s) || ordParenRe.test(s)
+          || ordKorRe.test(s) || ordKorParRe.test(s) || ordCircleRe.test(s)) return 'o';
+      return 'p';
+    });
+    if (markerMask.some(m=>m!=='p') && markerMask.some(m=>m==='p')){
+      // 마커 없는 줄들은 paragraph으로, 마커 있는 연속 구간은 list로 묶기
+      let i = 0;
+      while (i < lines.length){
+        const m = markerMask[i];
+        if (m === 'p'){
+          // 연속된 문단 줄은 한 단락으로 머지 (자연스러운 줄바꿈 처리)
+          const pLines = [];
+          while (i < lines.length && markerMask[i] === 'p'){ pLines.push(lines[i]); i++; }
+          const joined = pLines.join(' ').replace(/\s{2,}/g,' ').trim();
+          if (joined) content.push(mkPara(joined));
+        } else {
+          const listKind = m==='b' ? 'bulletList' : 'orderedList';
+          const items = [];
+          while (i < lines.length && markerMask[i] === m){
+            const s = lines[i].trimStart();
+            const stripped = s.replace(bulletRe,'').replace(ordNumRe,'')
+                              .replace(ordNumParRe,'').replace(ordKorRe,'')
+                              .replace(ordKorParRe,'').replace(ordParenRe,'')
+                              .replace(ordCircleRe,'');
+            items.push(stripped);
+            i++;
+          }
+          content.push({type:listKind, content: items.map(t=>({
+            type:'listItem', content:[mkPara(t)]
+          }))});
+        }
+      }
+      continue;
+    }
+
+    // --- 기본: 한 단락 (여러 줄은 공백으로 이어 붙임) ---
+    const joined = lines.join(' ').replace(/\s{2,}/g,' ').trim();
+    if (joined) content.push(mkPara(joined));
+  }
+  return content;
+}
+
+/* ======================================================
+   ProseMirror JSON → Typst source
+   ====================================================== */
+function jsonToTypst(json, opts){
+  const paper = opts.paper; const m = opts.margin;
+  const fontFamily = opts.font==='sans' ? 'Pretendard' : 'Noto Serif KR';
+  const head = `// Auto-generated by HCG Pub
+#set document(title: "HCG Pub")
+#set page(width: ${paper.w}mm, height: ${paper.h}mm, margin: (top: ${m}mm, bottom: ${m}mm, left: ${m+2}mm, right: ${m+2}mm))
+#set text(font: "${fontFamily}", lang: "ko", size: ${opts.size}pt)
+#set par(justify: true, leading: 0.8em, first-line-indent: 1em)
+#show heading.where(level: 1): it => { set text(size: 17pt, weight: "bold"); v(6pt); it; v(4pt) }
+#show heading.where(level: 2): it => { set text(size: 13pt, weight: "bold"); v(12pt); it; v(3pt) }
+#show heading.where(level: 3): it => { set text(size: 11.5pt, weight: "bold"); v(8pt); it; v(2pt) }
+
+`;
+  function inline(nodes){
+    if (!nodes) return '';
+    return nodes.map(n=>{
+      if (n.type !== 'text') return '';
+      let t = escapeTypst(n.text || '');
+      if (n.marks){
+        for (const mk of n.marks){
+          if (mk.type==='bold') t = `*${t}*`;
+          else if (mk.type==='italic') t = `_${t}_`;
+          else if (mk.type==='code') t = `\`${t}\``;
+          else if (mk.type==='strike') t = `#strike[${t}]`;
+          else if (mk.type==='underline') t = `#underline[${t}]`;
+        }
+      }
+      return t;
+    }).join('');
+  }
+  function block(node){
+    if (node.type==='paragraph') return inline(node.content)+'\n\n';
+    if (node.type==='heading') return '='.repeat(node.attrs?.level||1)+' '+inline(node.content)+'\n\n';
+    if (node.type==='blockquote') {
+      const inner = (node.content||[]).map(block).join('');
+      return '#quote[\n'+inner+']\n\n';
+    }
+    if (node.type==='bulletList') {
+      return (node.content||[]).map(li=>'- '+(li.content||[]).map(block).join('').trim()+'\n').join('')+'\n';
+    }
+    if (node.type==='orderedList') {
+      return (node.content||[]).map((li,i)=>`${i+1}. `+(li.content||[]).map(block).join('').trim()+'\n').join('')+'\n';
+    }
+    if (node.type==='codeBlock') {
+      const raw = (node.content||[]).map(c=>c.text||'').join('');
+      return '```\n'+raw+'\n```\n\n';
+    }
+    if (node.type==='horizontalRule') return '#line(length: 100%)\n\n';
+    if (node.type==='image') {
+      const w = node.attrs?.width ? pxToMm(node.attrs.width)+'mm' : 'auto';
+      return `#figure(image("${node.attrs?.src||''}", width: ${w}))\n\n`;
+    }
+    if (node.type==='table') {
+      const rows = node.content || [];
+      const cols = rows[0]?.content?.length || 1;
+      const cells = [];
+      for (const row of rows){
+        for (const cell of (row.content||[])){
+          const cellText = (cell.content||[]).map(block).join('').trim();
+          cells.push(`[${cellText}]`);
+        }
+      }
+      return `#table(\n  columns: ${cols},\n  ${cells.join(', ')}\n)\n\n`;
+    }
+    return '';
+  }
+  function escapeTypst(t){
+    return t
+      .replace(/\\/g,'\\\\')
+      .replace(/#/g,'\\#')
+      .replace(/\$/g,'\\$')
+      .replace(/\*/g,'\\*')
+      .replace(/_/g,'\\_');
+  }
+  const body = (json.content||[]).map(block).join('');
+  return head + body;
+}
+
+/* ======================================================
+   ProseMirror JSON → HWPX section XML (simplified)
+   ====================================================== */
+function jsonToHwpx(json){
+  const lines = [`<?xml version="1.0" encoding="UTF-8"?>`,
+    `<hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section"`,
+    `        xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">`];
+  function escXml(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function inline(node){
+    return (node.content||[]).filter(n=>n.type==='text').map(n=>escXml(n.text||'')).join('');
+  }
+  function emit(node){
+    if (node.type==='heading'){
+      const lv = node.attrs?.level||1;
+      lines.push(`  <hp:p styleIDRef="H${lv}"><hp:run><hp:t>${inline(node)}</hp:t></hp:run></hp:p>`);
+    } else if (node.type==='paragraph'){
+      lines.push(`  <hp:p styleIDRef="BODY"><hp:run><hp:t>${inline(node)}</hp:t></hp:run></hp:p>`);
+    } else if (node.type==='blockquote'){
+      for (const c of (node.content||[])){
+        lines.push(`  <hp:p styleIDRef="QUOTE"><hp:run><hp:t>${inline(c)}</hp:t></hp:run></hp:p>`);
+      }
+    } else if (node.type==='bulletList' || node.type==='orderedList'){
+      const style = node.type==='bulletList' ? 'LIST' : 'NUMBER';
+      for (const li of (node.content||[])){
+        for (const p of (li.content||[])){
+          lines.push(`  <hp:p styleIDRef="${style}"><hp:run><hp:t>${inline(p)}</hp:t></hp:run></hp:p>`);
+        }
+      }
+    } else if (node.type==='image'){
+      const wMm = node.attrs?.width ? pxToMm(node.attrs.width)+'mm' : '80mm';
+      const hMm = node.attrs?.height ? pxToMm(node.attrs.height)+'mm' : '44mm';
+      lines.push(`  <hp:p styleIDRef="IMG"><hp:run><hp:pic width="${wMm}" height="${hMm}" src="image"/></hp:run></hp:p>`);
+    } else if (node.type==='horizontalRule'){
+      lines.push(`  <hp:p styleIDRef="HR"><hp:run><hp:t>────</hp:t></hp:run></hp:p>`);
+    } else if (node.type==='table'){
+      const rows = node.content||[];
+      const rCnt = rows.length; const cCnt = rows[0]?.content?.length || 1;
+      lines.push(`  <hp:tbl rowCnt="${rCnt}" colCnt="${cCnt}">`);
+      for (const r of rows){
+        lines.push(`    <hp:tr>`);
+        for (const c of (r.content||[])){
+          const isH = c.type==='tableHeader' ? ' isHeader="1"' : '';
+          const txt = (c.content||[]).map(p=>inline(p)).join('');
+          lines.push(`      <hp:tc${isH}><hp:subList><hp:p><hp:run><hp:t>${txt}</hp:t></hp:run></hp:p></hp:subList></hp:tc>`);
+        }
+        lines.push(`    </hp:tr>`);
+      }
+      lines.push(`  </hp:tbl>`);
+    }
+  }
+  (json.content||[]).forEach(emit);
+  lines.push(`</hs:sec>`);
+  return lines.join('\n');
+}
+
+/* ======================================================
+   Tiptap editor
+   ====================================================== */
+const CustomImage = Image.extend({
+  // Tiptap 기본 Image 도 draggable:true 이지만 명시적으로 지정
+  draggable: true,
+  addAttributes(){
+    return {
+      ...this.parent?.(),
+      width: {
+        default: null,
+        parseHTML: el => {
+          const w = el.getAttribute('width') || el.style.width;
+          if (!w) return null;
+          return parseInt(String(w).replace('px','').replace('mm','')) || null;
+        },
+        renderHTML: attrs => {
+          if (!attrs.width) return {};
+          const wpx = attrs.width;
+          return { width: wpx, style:`width:${wpx}px;height:auto;` };
+        },
+      },
+      height: {
+        default: null,
+        parseHTML: el => {
+          const h = el.getAttribute('height') || el.style.height;
+          if (!h) return null;
+          return parseInt(String(h).replace('px','').replace('mm','')) || null;
+        },
+        renderHTML: attrs => attrs.height ? { height: attrs.height } : {},
+      },
+      /* 이미지 배치: 'left' | 'right' | 'center' | 'none'
+         - left/right 은 CSS float + shape-outside 로 텍스트가 자연스럽게 감싸짐
+         - center/none 은 블록 중앙 */
+      align: {
+        default: 'none',
+        parseHTML: el => el.getAttribute('data-align') || 'none',
+        renderHTML: attrs => ({ 'data-align': attrs.align || 'none' }),
+      },
+      /* 원형 클리핑 — 선택 시 텍스트가 원을 따라 흐름 */
+      shape: {
+        default: null,
+        parseHTML: el => el.getAttribute('data-shape') || null,
+        renderHTML: attrs => attrs.shape ? { 'data-shape': attrs.shape } : {},
+      }
+    };
+  }
+});
+
+const editor = new Editor({
+  element: document.getElementById('editor'),
+  extensions: [
+    StarterKit.configure({ heading:{ levels:[1,2,3] } }),
+    Underline,
+    CustomImage.configure({ inline:false, allowBase64:true }),
+    Table.configure({ resizable:true, HTMLAttributes:{ class:'hcg-table' } }),
+    TableRow,
+    TableHeader,
+    TableCell,
+  ],
+  content: { type:'doc', content:[
+    {type:'heading',attrs:{level:1},content:[{type:'text',text:'HCG Pub — 빈 문서'}]},
+    {type:'paragraph',content:[{type:'text',text:'좌측에서 HWP/HWPX를 업로드하거나, 한글에서 원고를 전체 복사(Ctrl+A → Ctrl+C)해 이 영역에 붙여넣으세요(Ctrl+V). 문단·제목·목록·인용문 구조를 자동으로 판별해 정돈합니다.'}]},
+    {type:'paragraph',content:[{type:'text',text:'기본 용지는 B5(182×257mm), 기본 본문 크기는 10pt, 기본 행간은 1.8로 설정되어 있습니다. 학술서적 조판 관례를 기준으로 잡았고, 좌측 사이드바에서 언제든 조정할 수 있습니다. 책 제목을 입력하면 도곽 머리말에 자동으로 반영되고, 페이지 번호는 꼬리말에 자동으로 매겨집니다. 오른쪽 프리뷰는 편집 내용을 실제 페이지로 쪼개어 보여주며, PDF 인쇄 시에도 동일한 레이아웃으로 출력됩니다.'}]},
+    {type:'heading',attrs:{level:2},content:[{type:'text',text:'1. 파이프라인 개요'}]},
+    {type:'paragraph',content:[{type:'text',text:'HWP 원고를 HWPX로 변환한 뒤 브라우저가 이를 파싱해 내부 JSON 문서모델로 저장하고, Tiptap 에디터가 이를 WYSIWYG으로 편집합니다. PDF 출력은 CSS Paged Media 규격으로 브라우저 인쇄 엔진을 직접 사용합니다.'}]},
+  ]},
+  editorProps: {
+    // HWP HTML clipboard → 정규화 후 Tiptap 기본 파서로 전달
+    transformPastedHTML(html){
+      try { return normalizeHwpHtml(html); } catch(e){ return html; }
+    },
+    // plain text paste → 휴리스틱으로 구조 판별 후 삽입
+    handlePaste(view, event){
+      const ct = event.clipboardData;
+      if (!ct) return false;
+      const html = ct.getData('text/html');
+      const text = ct.getData('text/plain');
+
+      // HTML이 있으면 transformPastedHTML + Tiptap 기본 파서에 맡긴다
+      if (html && html.trim().length > 10) return false;
+
+      // 순수 텍스트가 충분한 길이이고 줄바꿈을 포함할 때만 구조 파서 가동
+      if (text && text.length >= 10 && /\n/.test(text)){
+        const blocks = plainTextToPmBlocks(text);
+        if (blocks.length){
+          // editor는 closure 참조 — paste 시점엔 이미 정의됨
+          Promise.resolve().then(()=>{
+            editor.chain().focus().insertContent(blocks).run();
+            setStatus(`붙여넣기 파싱 완료: ${blocks.length}개 블록`);
+          });
+          event.preventDefault();
+          return true;
+        }
+      }
+      // 짧거나 구조가 없는 텍스트는 기본 동작
+      return false;
+    }
+  },
+  onUpdate: ({editor})=>{
+    refreshPreviewAndSources(editor);
+    const text = editor.getText();
+    const paras = (editor.getJSON().content||[]).length;
+    document.getElementById('status-counts').textContent = `단락 ${paras} · 문자 ${text.length}`;
+  },
+  onSelectionUpdate: ({editor})=>{ updateToolbarActive(editor); }
+});
+
+/* ======================================================
+   Tabs
+   ====================================================== */
+document.querySelectorAll('#tabs .tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('#tabs .tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelector(`.panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
+  });
+});
+
+/* ======================================================
+   Toolbar
+   ====================================================== */
+const tb = document.getElementById('toolbar');
+tb.addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-cmd]');
+  if (!btn) return;
+  const c = btn.dataset.cmd;
+  const chain = editor.chain().focus();
+  switch(c){
+    case 'undo': chain.undo().run(); break;
+    case 'redo': chain.redo().run(); break;
+    case 'bold': chain.toggleBold().run(); break;
+    case 'italic': chain.toggleItalic().run(); break;
+    case 'underline': chain.toggleUnderline().run(); break;
+    case 'strike': chain.toggleStrike().run(); break;
+    case 'bulletList': chain.toggleBulletList().run(); break;
+    case 'orderedList': chain.toggleOrderedList().run(); break;
+    case 'blockquote': chain.toggleBlockquote().run(); break;
+    case 'hr': chain.setHorizontalRule().run(); break;
+  }
+  updateToolbarActive(editor);
+});
+
+document.getElementById('sel-heading').addEventListener('change', e=>{
+  const v = e.target.value;
+  const chain = editor.chain().focus();
+  if (v==='p') chain.setParagraph().run();
+  else chain.setHeading({level: parseInt(v.slice(1))}).run();
+});
+
+document.getElementById('btn-insert-table').addEventListener('click', ()=>{
+  editor.chain().focus().insertTable({ rows:3, cols:3, withHeaderRow:true }).run();
+});
+document.getElementById('btn-insert-image').addEventListener('click', async ()=>{
+  const input = document.createElement('input');
+  input.type='file'; input.accept='image/*';
+  input.addEventListener('change', async ()=>{
+    const f = input.files?.[0]; if (!f) return;
+    const dataUrl = await new Promise(res=>{
+      const r = new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(f);
+    });
+    // 기본 가로 80mm (≈302px), align=none (블록)
+    editor.chain().focus().setImage({ src: dataUrl, width: 302, height: null, align:'none' }).run();
+  });
+  input.click();
+});
+/* 이미지 정렬 버튼 — 선택된 이미지의 align/shape 속성을 토글 */
+document.getElementById('img-align-group').addEventListener('click', (e)=>{
+  const b = e.target.closest('button'); if (!b) return;
+  const align = b.dataset.imgAlign;
+  const shape = b.dataset.imgShape;
+  // 현재 선택이 image 노드인지 확인
+  const {state} = editor;
+  const {selection} = state;
+  const node = selection?.node;
+  if (!node || node.type.name !== 'image'){
+    setStatus('이미지를 먼저 선택해 주세요');
+    return;
+  }
+  const newAttrs = { ...node.attrs };
+  if (align){
+    newAttrs.align = align;
+  }
+  if (shape){
+    newAttrs.shape = shape === 'none' ? null : shape;
+  }
+  editor.chain().focus().updateAttributes('image', newAttrs).run();
+});
+document.getElementById('btn-table-add-col-after').addEventListener('click', ()=>editor.chain().focus().addColumnAfter().run());
+document.getElementById('btn-table-add-row-after').addEventListener('click', ()=>editor.chain().focus().addRowAfter().run());
+document.getElementById('btn-table-delete').addEventListener('click', ()=>editor.chain().focus().deleteTable().run());
+
+function updateToolbarActive(ed){
+  document.querySelectorAll('#toolbar button[data-cmd]').forEach(b=>{
+    const c = b.dataset.cmd;
+    let active = false;
+    try {
+      if (c==='bold') active = ed.isActive('bold');
+      else if (c==='italic') active = ed.isActive('italic');
+      else if (c==='underline') active = ed.isActive('underline');
+      else if (c==='strike') active = ed.isActive('strike');
+      else if (c==='bulletList') active = ed.isActive('bulletList');
+      else if (c==='orderedList') active = ed.isActive('orderedList');
+      else if (c==='blockquote') active = ed.isActive('blockquote');
+    } catch(e){}
+    b.classList.toggle('is-active', !!active);
+  });
+  // 이미지 선택 시에만 이미지 정렬 버튼 그룹 노출
+  const imgGroup = document.getElementById('img-align-group');
+  if (imgGroup){
+    const isImg = (ed.state?.selection?.node?.type?.name === 'image');
+    imgGroup.style.display = isImg ? 'flex' : 'none';
+    if (isImg){
+      const curAlign = ed.state.selection.node.attrs.align || 'none';
+      imgGroup.querySelectorAll('button[data-img-align]').forEach(b=>{
+        b.classList.toggle('is-active', b.dataset.imgAlign === curAlign);
+      });
+    }
+  }
+}
+
+/* ======================================================
+   Paper + font + layout selectors
+   ====================================================== */
+function currentOpts(){
+  const sizeVal = parseFloat(document.getElementById('inp-size').value);
+  const lh = parseFloat(document.getElementById('sel-lineheight').value);
+  const cols = parseInt(document.getElementById('sel-columns').value, 10) || 1;
+  return {
+    paperKey: document.getElementById('sel-paper').value,
+    marginKey: document.getElementById('sel-margin').value,
+    font: document.getElementById('sel-font').value,
+    size: isFinite(sizeVal) && sizeVal >= 6 && sizeVal <= 30 ? sizeVal : 10,
+    lineHeight: isFinite(lh) ? lh : 1.8,
+    columns: cols,
+    bookTitle: (document.getElementById('inp-book-title').value || '').trim(),
+    headerAlign: document.getElementById('sel-header-align').value,
+    altHeader: document.getElementById('chk-alt-header').checked,
+  };
+}
+function applyFromUI(){
+  const o = currentOpts();
+  applyPaper(o.paperKey, o.marginKey, o.size, o.font, o.lineHeight, o.columns);
+  refreshPreviewAndSources(editor);
+}
+['sel-paper','sel-margin','sel-font','inp-size','sel-lineheight','sel-columns',
+ 'inp-book-title','sel-header-align','chk-alt-header'].forEach(id=>{
+  const el = document.getElementById(id);
+  if (!el) return;
+  const ev = (el.tagName === 'INPUT' && el.type !== 'number' && el.type !== 'checkbox') ? 'input' : 'change';
+  el.addEventListener(ev, applyFromUI);
+  // 숫자 입력은 input 이벤트로도 즉시 갱신
+  if (el.type === 'number') el.addEventListener('input', applyFromUI);
+});
+applyFromUI();
+
+/* ======================================================
+   Preview + sources  (실제 페이지 분리 = clone-measure-split)
+   ------------------------------------------------------
+   흐름:
+   1) 편집기 HTML을 ProseMirror 블록 단위로 복제
+   2) "측정용" 페이지 하나 만들기 → content 영역의 clientHeight 측정
+   3) 블록을 순서대로 넣다가 넘치면 페이지 끊고 다음 페이지로
+   4) 각 페이지마다 page-header(책 제목) + page-footer(쪽 번호) 붙이기
+   ====================================================== */
+function refreshPreviewAndSources(ed){
+  const json = ed.getJSON();
+  const o = currentOpts();
+  const paper = PAPER[o.paperKey];
+  const margin = MARGIN[o.marginKey];
+
+  document.getElementById('out-json').textContent = JSON.stringify(json, null, 2);
+  document.getElementById('out-hwpx').textContent = jsonToHwpx(json);
+  document.getElementById('out-typst').textContent = jsonToTypst(json, { paper, margin, font:o.font, size:o.size });
+
+  const previewEl = document.getElementById('preview-scroll');
+  previewEl.innerHTML = '';
+
+  // 원본 노드 배열 (최상위 블록들)
+  const sourceRoot = document.createElement('div');
+  sourceRoot.innerHTML = ed.getHTML();
+  const topBlocks = Array.from(sourceRoot.children);
+  if (topBlocks.length === 0){
+    // 빈 문서도 빈 페이지 한 장은 그려줌
+    const empty = buildPageElement(o, 1, 1, '');
+    previewEl.appendChild(empty);
+    document.getElementById('preview-info').textContent = `${paper.label} · 총 1쪽`;
+    return;
+  }
+
+  // 페이지 분리를 위해 일단 한 페이지 만들기
+  const pages = [];       // 각 원소는 HTMLElement[]  (해당 페이지의 블록들)
+  let current = [];
+  pages.push(current);
+
+  // 측정용 히든 페이지
+  const measure = buildPageElement(o, 1, 1, '');
+  measure.style.position = 'absolute';
+  measure.style.visibility = 'hidden';
+  measure.style.left = '-10000px';
+  measure.style.top = '0';
+  previewEl.appendChild(measure);
+  const measureContent = measure.querySelector('.page-content');
+  const maxH = measureContent.clientHeight;
+
+  // 블록 하나씩 페이지에 채워넣기
+  for (const blk of topBlocks){
+    const clone = blk.cloneNode(true);
+    measureContent.appendChild(clone);
+    if (measureContent.scrollHeight > maxH && current.length > 0){
+      // 넘친다 → 현재 블록은 다음 페이지로
+      measureContent.removeChild(clone);
+      current = [];
+      pages.push(current);
+      measureContent.innerHTML = '';
+      measureContent.appendChild(clone);
+    }
+    current.push(blk.cloneNode(true));
+  }
+  previewEl.removeChild(measure);
+
+  // 실제 페이지 생성
+  const total = pages.length;
+  pages.forEach((blocks, i) => {
+    const pageEl = buildPageElement(o, i+1, total, blocks);
+    previewEl.appendChild(pageEl);
+  });
+
+  document.getElementById('preview-info').textContent =
+    `${paper.label} · ${o.columns}단 · 총 ${total}쪽`;
+  const counts = document.getElementById('status-counts');
+  if (counts){
+    const text = ed.getText();
+    const paras = (json.content||[]).length;
+    counts.textContent = `단락 ${paras} · 문자 ${text.length} · 쪽수 ${total}`;
+  }
+
+  // 에디터 영역에도 페이지 경계 가이드를 그려준다
+  try { paintEditorPageDividers(o); } catch(e){ console.warn('page divider:', e); }
+
+  // Paged.js 모드면 정밀 프리뷰도 새로 그림 (debounce)
+  schedulePagedPreview(ed, o);
+}
+
+/* ================================================================
+   Paged.js 정밀 프리뷰
+   ----------------------------------------------------------------
+   - @page 규칙으로 용지 크기·여백 지정
+   - @top-center / @top-right / @bottom-center 로 running header/footer
+   - counter(page) / counter(pages) 로 쪽번호
+   - shape-outside + float 으로 이미지 wrap 이 실제로 페이지 단위로 반영됨
+   ================================================================ */
+let pagedMode = false;
+let pagedDebounceTimer = null;
+let pagedPreviewer = null;   // Previewer instance 재사용 (인스턴스 재생성 비용 절감)
+
+function makePagedStylesheet(o){
+  const p = PAPER[o.paperKey]; const m = MARGIN[o.marginKey];
+  const side = Math.round(m + 2);
+  const bookTitle = (o.bookTitle || '').replace(/"/g,'\\"');
+  // Paged.js supports margin boxes: @top-left, @top-center, @top-right, etc.
+  // 사용자의 머리말 위치 선택을 실제 margin box에 매핑
+  const headerBox = (o.headerAlign === 'left')   ? '@top-left'
+                  : (o.headerAlign === 'center') ? '@top-center'
+                  : '@top-right';
+  // 출판식 교차 (altHeader) 가 켜져 있으면 :left(짝수) / :right(홀수) 별도 룰
+  const altBlock = o.altHeader ? `
+    @page :right { @top-right  { content: "${bookTitle}"; font-size: 8.5pt; color:#666; border-bottom: 0.25pt solid #DDD; padding-bottom: 2mm; } @top-left{content:""} @top-center{content:""} }
+    @page :left  { @top-left   { content: "${bookTitle}"; font-size: 8.5pt; color:#666; border-bottom: 0.25pt solid #DDD; padding-bottom: 2mm; } @top-right{content:""} @top-center{content:""} }
+  ` : '';
+
+  return `
+    @page {
+      size: ${p.w}mm ${p.h}mm;
+      margin: ${m}mm ${side}mm;
+      ${!o.altHeader ? `${headerBox} {
+        content: "${bookTitle}";
+        font-size: 8.5pt; color:#666;
+        border-bottom: 0.25pt solid #DDD;
+        padding-bottom: 2mm;
+      }` : ''}
+      @bottom-center {
+        content: counter(page) " / " counter(pages);
+        font-size: 9pt; color:#555;
+        border-top: 0.25pt solid #DDD;
+        padding-top: 2mm;
+      }
+    }
+    ${altBlock}
+    html, body { margin:0; padding:0; }
+    body {
+      font-family: ${fontStack(o.font)};
+      font-size: ${o.size}pt;
+      line-height: ${o.lineHeight};
+      color: #1A1A1A;
+      word-break: keep-all;
+      line-break: strict;
+      overflow-wrap: break-word;
+    }
+    .content { column-count: ${o.columns || 1}; column-gap: 8mm; }
+    h1 { font-size: 17pt; font-weight: 700; margin: 0 0 14pt; line-height:1.35; column-span: all; break-after: avoid; }
+    h2 { font-size: 13pt; font-weight: 700; margin: 18pt 0 8pt; line-height:1.4; break-after: avoid; }
+    h3 { font-size: 11.5pt; font-weight: 700; margin: 14pt 0 6pt; line-height:1.45; break-after: avoid; }
+    p { margin: 0 0 6pt; text-indent: 1em; }
+    h1 + p, h2 + p, h3 + p, p:first-child { text-indent: 0; }
+    blockquote { margin: 10pt 0; padding: 4pt 10pt; border-left: 2pt solid #CCC; color:#666; font-style: italic; }
+    ul, ol { margin: 6pt 0; padding-left: 1.4em; }
+    li { margin-bottom: 2pt; }
+    table { border-collapse: collapse; margin: 10pt 0; table-layout: fixed; width: 100%; }
+    th, td { border: 0.5pt solid #555; padding: 4pt 6pt; vertical-align: top; font-size: 9.5pt; }
+    th { background: #F0F0EE; font-weight: 600; text-align: left; }
+    img { max-width: 100%; height: auto; }
+    img[data-align="left"]  { float: left;  margin: 0 14pt 6pt 0; shape-outside: margin-box; shape-margin: 6pt; }
+    img[data-align="right"] { float: right; margin: 0 0 6pt 14pt; shape-outside: margin-box; shape-margin: 6pt; }
+    img[data-align="center"], img[data-align="none"] { display: block; margin: 10pt auto; float: none; }
+    img[data-shape="circle"] { border-radius: 50%; shape-outside: circle(50%); clip-path: circle(50%); }
+    h1, h2, h3 { clear: both; }
+  `;
+}
+
+function schedulePagedPreview(ed, o){
+  if (!pagedMode) return;
+  if (!PagedPreviewer){
+    const target = document.getElementById('paged-scroll');
+    target.innerHTML = '<div style="padding:40px;text-align:center;color:#888;font-size:13px">Paged.js 라이브러리 로드 실패 — 네트워크 차단으로 CDN 접근 불가일 수 있습니다.<br>간이 프리뷰는 정상 동작합니다.</div>';
+    return;
+  }
+  clearTimeout(pagedDebounceTimer);
+  pagedDebounceTimer = setTimeout(()=>renderPagedPreview(ed, o), 450);
+}
+
+async function renderPagedPreview(ed, o){
+  const target = document.getElementById('paged-scroll');
+  if (!target) return;
+  target.innerHTML = '<div style="padding:24px;text-align:center;color:#888;font-size:12px">Paged.js 정밀 렌더링 중…</div>';
+  try {
+    // CSS 를 inline <style> 로 HTML 안에 직접 삽입 — Paged.js 가 가장 안정적으로 받는 형태
+    const css = makePagedStylesheet(o);
+    const html = `<style>${css}</style><div class="content">${ed.getHTML()}</div>`;
+    const prev = new PagedPreviewer();
+    target.innerHTML = '';
+    const result = await prev.preview(html, [], target);
+    const tag = document.getElementById('preview-mode-tag');
+    if (tag) tag.textContent = `Paged.js · ${result.total}쪽`;
+  } catch(err){
+    console.error('Paged.js render error:', err);
+    target.innerHTML = `<div style="padding:24px;text-align:center;color:#a55;font-size:12px">Paged.js 렌더 실패: ${(err.message||err).toString().slice(0,200)}<br><small>간이 프리뷰로 전환해서 작업을 계속하세요.</small></div>`;
+  }
+}
+
+/* ================================================================
+   에디터 영역 페이지 분리 시각화
+   ----------------------------------------------------------------
+   Tiptap 편집기는 하나의 editable 영역이라 진짜로 페이지를 쪼개면
+   커서·선택이 깨지므로, 대신 편집 내용과 **동일 높이/폭**의 측정용
+   히든 페이지를 만들어 실제 조판에서 쪽이 넘어갈 지점을 찾고,
+   그 위치에 "— 2 쪽 —" 라벨이 붙은 가로 점선 오버레이를 그려 넣는다.
+   편집기 높이가 변할 때마다 refreshPreviewAndSources 에서 호출된다.
+   ================================================================ */
+function paintEditorPageDividers(o){
+  const host = document.getElementById('page-container');
+  const content = host?.querySelector('.page-content');
+  if (!host || !content) return;
+
+  // 기존 오버레이 제거
+  host.querySelectorAll('.edit-page-divider,.edit-page-badge').forEach(el=>el.remove());
+
+  // 첫 쪽 뱃지
+  const badge = document.createElement('div');
+  badge.className = 'edit-page-badge';
+  badge.textContent = `1 쪽`;
+  host.appendChild(badge);
+
+  // 측정용 복제 페이지 (실제 프리뷰 페이지와 동일 폭·여백·폰트)
+  const measure = buildPageElement(o, 1, 1, '');
+  measure.style.position = 'absolute';
+  measure.style.visibility = 'hidden';
+  measure.style.left = '-20000px';
+  measure.style.top = '0';
+  document.body.appendChild(measure);
+  const measureContent = measure.querySelector('.page-content');
+  const maxH = measureContent.clientHeight;
+
+  // 편집기 원본 블록들을 순차 복제해 넣다가 넘치면 경계 위치를 기록
+  const srcRoot = document.createElement('div');
+  srcRoot.innerHTML = editor.getHTML();
+  const srcBlocks = Array.from(srcRoot.children);
+
+  // 편집기 실제 본문 영역 좌표 계산용
+  const hostRect = host.getBoundingClientRect();
+  const editorRoot = host.querySelector('#editor .ProseMirror') || host.querySelector('#editor');
+  const editorBlocks = editorRoot ? Array.from(editorRoot.children) : [];
+
+  let pageIdx = 1;
+  let currentInPage = 0;
+  const breakAfterIndex = [];  // srcBlocks의 몇 번째 뒤에서 페이지 분리가 일어나는지
+
+  for (let i = 0; i < srcBlocks.length; i++){
+    const clone = srcBlocks[i].cloneNode(true);
+    measureContent.appendChild(clone);
+    if (measureContent.scrollHeight > maxH && currentInPage > 0){
+      // 이 블록은 넘침 → 이전 블록 뒤에서 쪽이 넘어감
+      measureContent.removeChild(clone);
+      breakAfterIndex.push(i - 1);
+      pageIdx++;
+      measureContent.innerHTML = '';
+      measureContent.appendChild(clone);
+      currentInPage = 1;
+    } else {
+      currentInPage++;
+    }
+  }
+  document.body.removeChild(measure);
+
+  if (!breakAfterIndex.length) return;
+
+  // 실제 편집기 DOM의 해당 블록 뒤 y좌표에 divider 를 오버레이
+  for (let k = 0; k < breakAfterIndex.length; k++){
+    const idx = breakAfterIndex[k];
+    const elInEditor = editorBlocks[idx];
+    if (!elInEditor) continue;
+    const r = elInEditor.getBoundingClientRect();
+    const y = r.bottom - hostRect.top + 4;
+    const divider = document.createElement('div');
+    divider.className = 'edit-page-divider';
+    divider.style.top = y + 'px';
+    divider.dataset.label = `${k + 2} 쪽`;
+    host.appendChild(divider);
+  }
+}
+
+/* 단일 페이지 DOM 조립 (도곽 머리말 + 본문 + 도곽 꼬리말) */
+function buildPageElement(o, pageIdx, totalPages, blocksOrHtml){
+  const page = document.createElement('div');
+  page.className = 'page';
+  page.dataset.cols = String(o.columns || 1);
+  page.dataset.pageIdx = String(pageIdx);
+  // 상단 머리말 (책 제목) — 기본은 사용자 선택값을 모든 쪽 동일 적용
+  // 옵션 "출판식 좌우 교차"가 켜져 있을 때만 홀수(우) / 짝수(좌) 교차
+  const header = document.createElement('div');
+  header.className = 'page-header';
+  const title = document.createElement('div');
+  title.className = 'book-title';
+  title.textContent = o.bookTitle || '';
+  let align = o.headerAlign || 'right';
+  if (o.altHeader && align !== 'center'){
+    align = (pageIdx % 2 === 1) ? 'right' : 'left';
+  }
+  title.classList.add(align);
+  header.appendChild(title);
+  page.appendChild(header);
+
+  // 본문
+  const content = document.createElement('div');
+  content.className = 'page-content';
+  if (Array.isArray(blocksOrHtml)){
+    for (const b of blocksOrHtml) content.appendChild(b);
+  } else if (typeof blocksOrHtml === 'string'){
+    content.innerHTML = blocksOrHtml;
+  }
+  page.appendChild(content);
+
+  // 하단 꼬리말 (쪽 번호)
+  const footer = document.createElement('div');
+  footer.className = 'page-footer';
+  footer.textContent = `${pageIdx} / ${totalPages}`;
+  page.appendChild(footer);
+
+  return page;
+}
+
+/* ======================================================
+   File upload + sample pipeline animation
+   ====================================================== */
+function setStage(key, state){
+  document.querySelectorAll(`#pipeline .stage[data-stage="${key}"]`).forEach(el=>{
+    el.classList.remove('active','done');
+    if (state) el.classList.add(state);
+  });
+}
+function setStep(key, state){
+  document.querySelectorAll(`#steps li[data-step="${key}"]`).forEach(el=>{
+    el.classList.remove('active','done');
+    if (state) el.classList.add(state);
+  });
+}
+function setStatus(msg){ document.getElementById('status-msg').textContent = msg; }
+
+async function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function showLoader(title){
+  document.getElementById('loader-title').textContent = title;
+  document.getElementById('loader-log').textContent = '';
+  document.getElementById('loader-bar').style.width = '0%';
+  document.getElementById('loader').classList.add('show');
+}
+function hideLoader(){ document.getElementById('loader').classList.remove('show'); }
+function loaderLog(txt, pct){
+  document.getElementById('loader-log').textContent += txt + '\n';
+  if (pct != null) document.getElementById('loader-bar').style.width = pct+'%';
+}
+
+async function runPipelineForHwpxText(xmlText, sourceLabel){
+  showLoader(`${sourceLabel} 파이프라인 실행 중…`);
+
+  // 1. HWP 감지 (sim)
+  setStage('hwp','active'); setStep('hwp','active');
+  loaderLog('[1] HWP 감지 — 한글 자동화 요구 (시뮬레이션)', 16);
+  await sleep(500);
+  setStage('hwp','done'); setStep('hwp','done');
+
+  // 2. HWP → HWPX (sim)
+  setStage('hwpx','active'); setStep('hwpx','active');
+  loaderLog('[2] HWP → HWPX 변환 (서버 백엔드 시뮬레이션)', 33);
+  await sleep(500);
+  setStage('hwpx','done'); setStep('hwpx','done');
+
+  // 3. parse HWPX
+  setStep('parse','active');
+  loaderLog('[3] HWPX 파싱 (브라우저 DOMParser)', 50);
+  await sleep(300);
+  const pmJson = parseHwpxToPmJSON(xmlText);
+  setStep('parse','done');
+
+  // 4. JSON
+  setStage('json','active'); setStep('json','active');
+  loaderLog(`[4] JSON 문서모델 생성 (${(pmJson.content||[]).length}개 블록)`, 66);
+  await sleep(300);
+  setStage('json','done'); setStep('json','done');
+
+  // 5. Tiptap load
+  setStage('edit','active'); setStep('edit','active');
+  loaderLog('[5] Tiptap 에디터에 로드', 83);
+  await sleep(300);
+  editor.commands.setContent(pmJson);
+  setStage('edit','done'); setStep('edit','done');
+
+  // 6. Out
+  setStage('out','done'); setStep('out','done');
+  loaderLog('[6] 조판 프리뷰 + Typst/HWPX 소스 갱신 완료', 100);
+  await sleep(350);
+
+  setStatus(`불러옴: ${sourceLabel}`);
+  hideLoader();
+}
+
+/* ======================================================
+   IDML (InDesign Markup Language) 파서 — ZIP + XML
+   ------------------------------------------------------
+   IDML은 ZIP 구조. 주요 부분:
+     - designmap.xml (루트)
+     - Stories/Story_*.xml (원고 본문)
+     - Resources/Styles.xml (ParagraphStyle / CharacterStyle)
+     - Spreads/Spread_*.xml (페이지 배치) — 우리는 본문 텍스트만 추출
+   ====================================================== */
+async function parseIdmlFile(file, onLog){
+  const log = onLog || (()=>{});
+  const zip = await JSZip.loadAsync(file);
+  const names = Object.keys(zip.files);
+  log(`[1] IDML ZIP: ${names.length}개 항목`);
+
+  // 스타일맵: ParagraphStyle Name → semantic role
+  const styleMap = new Map();
+  const stylesPath = names.find(n=>/Resources\/Styles\.xml$/i.test(n));
+  if (stylesPath){
+    const xml = await zip.files[stylesPath].async('text');
+    try {
+      const doc = new DOMParser().parseFromString(xml, 'application/xml');
+      const pStyles = doc.getElementsByTagName('ParagraphStyle');
+      for (const s of pStyles){
+        const self = s.getAttribute('Self') || '';
+        const name = (s.getAttribute('Name') || '').toLowerCase();
+        let role = 'body';
+        if (/(제목\s*1|heading\s*1|title|chapter|\bh1\b|header\s*1)/.test(name)) role = 'heading1';
+        else if (/(제목\s*2|heading\s*2|section|\bh2\b)/.test(name)) role = 'heading2';
+        else if (/(제목\s*3|heading\s*3|\bh3\b)/.test(name)) role = 'heading3';
+        else if (/(인용|quote|blockquote)/.test(name)) role = 'quote';
+        else if (/(목록|list|bullet)/.test(name)) role = 'list';
+        styleMap.set(self, role);
+        styleMap.set(name, role);
+      }
+      log(`[2] ParagraphStyle: ${styleMap.size}개`);
+    } catch(e){ log(`[2] 스타일 파싱 실패 — 본문으로만 처리`); }
+  }
+
+  // Story 파일들에서 원고 추출
+  const storyPaths = names.filter(n=>/Stories\/Story_?.+\.xml$/i.test(n) && !zip.files[n].dir).sort();
+  log(`[3] Story: ${storyPaths.length}개`);
+  const content = [];
+
+  for (const path of storyPaths){
+    const xml = await zip.files[path].async('text');
+    try {
+      const doc = new DOMParser().parseFromString(xml, 'application/xml');
+      const paraStyleRanges = doc.getElementsByTagName('ParagraphStyleRange');
+      for (const psr of paraStyleRanges){
+        const styleRef = psr.getAttribute('AppliedParagraphStyle') || '';
+        const styleName = styleRef.split('/').pop().toLowerCase();
+        const role = styleMap.get(styleRef) || styleMap.get(styleName) || 'body';
+
+        // 이 단락의 문자열 모으기 (CharacterStyleRange → Content)
+        const contents = psr.getElementsByTagName('Content');
+        let text = '';
+        for (const c of contents) text += (c.textContent || '');
+        // 줄바꿈 문자 정리
+        text = text.replace(/\u2028/g,'\n').replace(/\u2029/g,'\n\n').trim();
+        if (!text) continue;
+
+        if (role === 'heading1') content.push({type:'heading',attrs:{level:1},content:[{type:'text',text}]});
+        else if (role === 'heading2') content.push({type:'heading',attrs:{level:2},content:[{type:'text',text}]});
+        else if (role === 'heading3') content.push({type:'heading',attrs:{level:3},content:[{type:'text',text}]});
+        else if (role === 'quote') content.push({type:'blockquote',content:[{type:'paragraph',content:[{type:'text',text}]}]});
+        else content.push({type:'paragraph',content:[{type:'text',text}]});
+      }
+    } catch(e){
+      log(`    [!] ${path} 파싱 실패`);
+    }
+  }
+  log(`[4] ProseMirror 블록: ${content.length}개`);
+  return { doc: { type:'doc', content: content.length ? content : [{type:'paragraph'}] }, styleCount: styleMap.size, storyCount: storyPaths.length };
+}
+
+/* ======================================================
+   HTML / DOCX / MD / TXT → ProseMirror 통합 로더
+   ====================================================== */
+async function loadHtmlIntoEditor(html, label){
+  const cleaned = normalizeHwpHtml(html);
+  // Tiptap 의 setContent 는 HTML 도 직접 받아서 기본 파서로 처리
+  editor.commands.setContent(cleaned || '<p></p>');
+  setStatus(`불러옴: ${label}`);
+}
+async function loadTextIntoEditor(text, label){
+  const blocks = plainTextToPmBlocks(text);
+  editor.commands.setContent({ type:'doc', content: blocks.length ? blocks : [{type:'paragraph', content:[{type:'text', text}]}] });
+  setStatus(`불러옴: ${label} (${blocks.length}개 블록)`);
+}
+async function loadMarkdownIntoEditor(md, label, onLog){
+  const log = onLog || (()=>{});
+  const marked = await loadMarked();
+  if (marked){
+    const html = marked.parse ? marked.parse(md) : marked(md);
+    log(`Markdown → HTML (${html.length}자)`);
+    await loadHtmlIntoEditor(html, label);
+  } else {
+    log(`Marked 로드 실패 — 텍스트 휴리스틱으로 처리`);
+    await loadTextIntoEditor(md, label);
+  }
+}
+async function loadDocxIntoEditor(file, label, onLog){
+  const log = onLog || (()=>{});
+  const mammoth = await loadMammoth();
+  if (!mammoth){
+    throw new Error('Mammoth(DOCX 파서) 로드 실패 — 네트워크 확인');
+  }
+  const ab = await file.arrayBuffer();
+  log(`DOCX ArrayBuffer (${(ab.byteLength/1024).toFixed(1)}KB)`);
+  const result = await mammoth.convertToHtml({ arrayBuffer: ab }, {
+    styleMap: [
+      "p[style-name='Heading 1'] => h1:fresh",
+      "p[style-name='Heading 2'] => h2:fresh",
+      "p[style-name='Heading 3'] => h3:fresh",
+      "p[style-name='제목 1'] => h1:fresh",
+      "p[style-name='제목 2'] => h2:fresh",
+      "p[style-name='제목 3'] => h3:fresh",
+      "p[style-name='Quote'] => blockquote > p:fresh",
+      "p[style-name='인용'] => blockquote > p:fresh",
+    ],
+  });
+  log(`DOCX → HTML (${(result.value||'').length}자)${result.messages?.length ? ', 경고 '+result.messages.length+'개' : ''}`);
+  await loadHtmlIntoEditor(result.value, label);
+}
+
+/* ======================================================
+   통합 파일 처리 진입점 (드래그앤드롭/업로드 공용)
+   ====================================================== */
+async function handleUploadedFile(f){
+  if (!f) return;
+  const nameLower = f.name.toLowerCase();
+  const ext = nameLower.split('.').pop();
+
+  // HWP 바이너리
+  if (ext === 'hwp'){
+    showLoader(`.hwp 파일은 브라우저에서 열 수 없습니다`);
+    loaderLog(`[!] ${f.name} 은 .hwp(OLE 바이너리)입니다. 한컴 독점 포맷이라 브라우저 단독 파싱 불가.`, 20);
+    loaderLog(`    해결책: 한글에서 "다른 이름으로 저장" → .hwpx 로 저장 후 다시 업로드`, 50);
+    loaderLog(`    운영 환경에선 Windows 서버 + 한글 자동화(COM) 백엔드로 자동 변환 가능`, 75);
+    loaderLog(`    지금은 샘플 HWPX 로 대체 진행합니다.`, 90);
+    await sleep(1500);
+    hideLoader();
+    await runPipelineForHwpxText(SAMPLE_HWPX, f.name+' (.hwp — 샘플 대체)');
+    return;
+  }
+
+  // InDesign 바이너리
+  if (ext === 'indd'){
+    showLoader(`.indd 파일은 브라우저에서 열 수 없습니다`);
+    loaderLog(`[!] ${f.name} 은 Adobe InDesign 바이너리 포맷입니다.`, 20);
+    loaderLog(`    해결책: InDesign에서 "파일 > 내보내기 > IDML" 로 저장 후 .idml 업로드`, 55);
+    loaderLog(`    IDML 은 공개 XML 기반이라 브라우저에서 직접 파싱 가능합니다.`, 80);
+    await sleep(1500);
+    hideLoader();
+    toast('IDML(.idml) 로 내보낸 뒤 업로드해 주세요', 'err');
+    return;
+  }
+
+  // IDML (InDesign Markup)
+  if (ext === 'idml'){
+    showLoader(`${f.name} (IDML) 파싱 중…`);
+    setStage('hwp','done'); setStage('hwpx','done'); setStep('parse','active');
+    try {
+      const res = await parseIdmlFile(f, loaderLog);
+      setStep('parse','done'); setStage('json','done'); setStep('json','done');
+      loaderLog(`[5] Tiptap 로드`, 95);
+      editor.commands.setContent(res.doc);
+      setStage('edit','done'); setStep('edit','done');
+      setStage('out','done'); setStep('out','done');
+      loaderLog(`[6] 완료 — Story ${res.storyCount}개 · 스타일 ${res.styleCount}개`, 100);
+      await sleep(500);
+      setStatus(`불러옴: ${f.name} (IDML · Story ${res.storyCount})`);
+      hideLoader();
+      toast(`IDML 로드 완료 (Story ${res.storyCount}개)`, 'ok');
+      return;
+    } catch(err){
+      loaderLog(`[!] IDML 파싱 실패: ${err.message||err}`, 60);
+      await sleep(1500); hideLoader();
+      toast('IDML 파싱 실패 — 손상되었거나 비표준 구조', 'err');
+      return;
+    }
+  }
+
+  // DOCX
+  if (ext === 'docx'){
+    showLoader(`${f.name} (DOCX) 파싱 중…`);
+    setStage('hwp','done'); setStage('hwpx','done'); setStep('parse','active');
+    loaderLog(`[1] Mammoth 라이브러리 로드…`, 15);
+    try {
+      await loadDocxIntoEditor(f, f.name, loaderLog);
+      setStep('parse','done'); setStage('json','done'); setStep('json','done');
+      setStage('edit','done'); setStep('edit','done');
+      setStage('out','done'); setStep('out','done');
+      loaderLog(`[완료] DOCX → HTML → Tiptap 에디터 로드`, 100);
+      await sleep(400); hideLoader();
+      toast(`DOCX 로드 완료`, 'ok');
+      return;
+    } catch(err){
+      loaderLog(`[!] DOCX 파싱 실패: ${err.message||err}`, 60);
+      await sleep(1500); hideLoader();
+      toast('DOCX 파싱 실패: '+(err.message||err), 'err');
+      return;
+    }
+  }
+
+  // HTML
+  if (ext === 'html' || ext === 'htm'){
+    showLoader(`${f.name} (HTML) 로드 중…`);
+    setStage('hwp','done'); setStage('hwpx','done'); setStep('parse','active');
+    try {
+      const text = await f.text();
+      // <body> 안쪽만 추출 (전체 문서인 경우)
+      const bodyMatch = text.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+      const html = bodyMatch ? bodyMatch[1] : text;
+      loaderLog(`[1] HTML 정규화 중 (${html.length}자)`, 50);
+      await loadHtmlIntoEditor(html, f.name);
+      setStep('parse','done'); setStage('json','done'); setStep('json','done');
+      setStage('edit','done'); setStep('edit','done');
+      setStage('out','done'); setStep('out','done');
+      loaderLog(`[완료] HTML 로드`, 100);
+      await sleep(400); hideLoader();
+      toast('HTML 로드 완료', 'ok');
+      return;
+    } catch(err){
+      await sleep(500); hideLoader();
+      toast('HTML 파일 읽기 실패: '+(err.message||err), 'err'); return;
+    }
+  }
+
+  // Markdown
+  if (ext === 'md' || ext === 'markdown'){
+    showLoader(`${f.name} (Markdown) 로드 중…`);
+    setStage('hwp','done'); setStage('hwpx','done'); setStep('parse','active');
+    try {
+      const md = await f.text();
+      loaderLog(`[1] Marked 로드 + 파싱…`, 40);
+      await loadMarkdownIntoEditor(md, f.name, loaderLog);
+      setStep('parse','done'); setStage('json','done'); setStep('json','done');
+      setStage('edit','done'); setStep('edit','done');
+      setStage('out','done'); setStep('out','done');
+      loaderLog(`[완료] Markdown 로드`, 100);
+      await sleep(400); hideLoader();
+      toast('Markdown 로드 완료', 'ok');
+      return;
+    } catch(err){
+      await sleep(500); hideLoader();
+      toast('Markdown 파일 읽기 실패: '+(err.message||err), 'err'); return;
+    }
+  }
+
+  // Plain text
+  if (ext === 'txt'){
+    showLoader(`${f.name} (TXT) 로드 중…`);
+    setStage('hwp','done'); setStage('hwpx','done'); setStep('parse','active');
+    try {
+      const text = await f.text();
+      loaderLog(`[1] 텍스트 구조 자동 판별 중…`, 50);
+      await loadTextIntoEditor(text, f.name);
+      setStep('parse','done'); setStage('json','done'); setStep('json','done');
+      setStage('edit','done'); setStep('edit','done');
+      setStage('out','done'); setStep('out','done');
+      loaderLog(`[완료] 텍스트 로드`, 100);
+      await sleep(400); hideLoader();
+      toast('TXT 로드 완료', 'ok');
+      return;
+    } catch(err){
+      await sleep(500); hideLoader();
+      toast('TXT 파일 읽기 실패: '+(err.message||err), 'err'); return;
+    }
+  }
+
+  // HWPX / ZIP (ZIP 은 HWPX 또는 IDML 둘 다 가능)
+  if (ext === 'hwpx' || ext === 'zip'){
+    showLoader(`${f.name} 파싱 중…`);
+    setStage('hwp','done'); setStep('hwp','done');
+    setStage('hwpx','done'); setStep('hwpx','done');
+    setStep('parse','active');
+
+    // ZIP 내부를 먼저 열어서 HWPX인지 IDML인지 판정
+    try {
+      const zip = await JSZip.loadAsync(f);
+      const names = Object.keys(zip.files);
+      const isHwpx = names.some(n=>/section\d+\.xml$/i.test(n));
+      const isIdml = names.some(n=>/mimetype$/i.test(n)) && names.some(n=>/Stories\//i.test(n));
+
+      if (isIdml){
+        loaderLog('[!] IDML 구조 감지 — IDML 파서로 전환', 30);
+        hideLoader();
+        // 위에서 처리한 idml 분기를 재사용하기 위해 직접 호출
+        return await (async ()=>{
+          showLoader(`${f.name} (IDML) 파싱 중…`);
+          const res = await parseIdmlFile(f, loaderLog);
+          setStep('parse','done'); setStage('json','done'); setStep('json','done');
+          editor.commands.setContent(res.doc);
+          setStage('edit','done'); setStep('edit','done');
+          setStage('out','done'); setStep('out','done');
+          await sleep(400); hideLoader();
+          toast(`IDML 로드 완료 (Story ${res.storyCount}개)`, 'ok');
+        })();
+      }
+
+      if (!isHwpx){
+        loaderLog('[!] HWPX 의 section XML 을 찾을 수 없습니다.', 40);
+        loaderLog('    XML 원본으로 재시도…', 55);
+        try {
+          const text = await f.text();
+          if (text.includes('<hs:sec') || text.includes('hwpml')){
+            hideLoader();
+            await runPipelineForHwpxText(text, f.name);
+            return;
+          }
+        } catch(e){}
+        loaderLog('[!] HWPX/IDML 어느 것도 아닙니다 — 샘플로 대체', 80);
+        await sleep(1000); hideLoader();
+        await runPipelineForHwpxText(SAMPLE_HWPX, f.name+' (샘플 대체)');
+        return;
+      }
+
+      // HWPX 처리
+      const result = await parseHwpxZipFile(f, (msg)=>loaderLog(msg));
+      setStep('parse','done');
+      setStage('json','done'); setStep('json','done');
+      loaderLog(`[6] Tiptap 에디터 로드`, 95);
+      editor.commands.setContent(result.doc);
+      setStage('edit','done'); setStep('edit','done');
+      setStage('out','done'); setStep('out','done');
+      loaderLog(`[7] 완료 — section ${result.sectionCount}개 · 이미지 ${Math.floor(result.imageMap.size/2)}개 · 스타일 ${result.styleMap.size}개`, 100);
+      await sleep(500);
+      setStatus(`불러옴: ${f.name} (HWPX · section ${result.sectionCount})`);
+      hideLoader();
+      toast(`HWPX 로드 완료 (section ${result.sectionCount})`, 'ok');
+      return;
+    } catch(err){
+      loaderLog(`[!] ZIP 파싱 실패: ${err.message || err}`, 60);
+      await sleep(1200); hideLoader();
+      toast('ZIP 파일 파싱 실패 — 손상 가능성', 'err');
+      return;
+    }
+  }
+
+  // Plain XML
+  if (ext === 'xml'){
+    const text = await f.text();
+    await runPipelineForHwpxText(text, f.name);
+    return;
+  }
+
+  toast(`지원하지 않는 확장자: .${ext}`, 'err');
+}
+
+// Upload handlers
+const fileInput = document.getElementById('file-input');
+document.getElementById('btn-upload').addEventListener('click', ()=>fileInput.click());
+fileInput.addEventListener('change', async ()=>{
+  const f = fileInput.files?.[0];
+  if (f) await handleUploadedFile(f);
+  fileInput.value = '';  // 같은 파일 재선택 가능하게
+});
+
+/* 드래그앤드롭 존 — editor-wrap 전체에 적용 */
+const dropZone = document.querySelector('.editor-wrap');
+if (dropZone){
+  let dragDepth = 0;
+  dropZone.addEventListener('dragenter', e=>{
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    e.preventDefault();
+    dragDepth++;
+    dropZone.classList.add('drop-active');
+  });
+  dropZone.addEventListener('dragover', e=>{
+    if (!e.dataTransfer?.types?.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+  dropZone.addEventListener('dragleave', e=>{
+    dragDepth--;
+    if (dragDepth <= 0){
+      dragDepth = 0;
+      dropZone.classList.remove('drop-active');
+    }
+  });
+  dropZone.addEventListener('drop', async e=>{
+    e.preventDefault();
+    dragDepth = 0;
+    dropZone.classList.remove('drop-active');
+    const f = e.dataTransfer?.files?.[0];
+    if (f) await handleUploadedFile(f);
+  });
+}
+
+document.getElementById('btn-upload-sample').addEventListener('click', ()=>runPipelineForHwpxText(SAMPLE_HWPX,'샘플 HWPX'));
+document.getElementById('btn-sample').addEventListener('click', ()=>runPipelineForHwpxText(SAMPLE_HWPX,'샘플 HWPX'));
+document.getElementById('btn-run-pipeline').addEventListener('click', ()=>runPipelineForHwpxText(SAMPLE_HWPX,'샘플 HWPX'));
+
+/* ======================================================
+   Toast 알림
+   ====================================================== */
+let toastTimer = null;
+function toast(msg, kind){
+  let el = document.getElementById('toast-el');
+  if (!el){
+    el = document.createElement('div');
+    el.id = 'toast-el';
+    el.className = 'toast';
+    document.body.appendChild(el);
+  }
+  el.className = 'toast ' + (kind || '');
+  el.textContent = msg;
+  requestAnimationFrame(()=>el.classList.add('show'));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), 2800);
+}
+
+/* ======================================================
+   다운로드 유틸 (3단계 fallback)
+   1) <a download> 클릭  — 가장 일반적
+   2) msSaveBlob       — 구형 Edge/IE 호환
+   3) 새 탭에서 열기     — 어떤 방법도 안 먹으면 사용자가 직접 저장하도록
+   ====================================================== */
+function download(filename, data, mime){
+  try {
+    const blob = data instanceof Blob ? data : new Blob([data], {type: mime||'text/plain;charset=utf-8'});
+    // 1. msSaveBlob (legacy)
+    if (navigator.msSaveBlob){
+      navigator.msSaveBlob(blob, filename);
+      toast(`내려받기: ${filename}`, 'ok');
+      return true;
+    }
+    // 2. <a download>
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ try { URL.revokeObjectURL(url); } catch(e){} a.remove(); }, 2000);
+    toast(`내려받기: ${filename}`, 'ok');
+    return true;
+  } catch(err){
+    console.error('download failed, fallback to window.open', err);
+    try {
+      const blob = data instanceof Blob ? data : new Blob([data], {type: mime||'text/plain;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener');
+      toast(`새 창에 열었습니다 — 직접 저장해 주세요`, 'ok');
+      return true;
+    } catch(e2){
+      toast('다운로드 실패: '+(err.message||err), 'err');
+      return false;
+    }
+  }
+}
+
+/* ======================================================
+   ProseMirror JSON → 간단 Markdown
+   ====================================================== */
+function jsonToMarkdown(json){
+  const lines = [];
+  function inline(nodes){
+    if (!nodes) return '';
+    return nodes.map(n=>{
+      if (n.type !== 'text') return '';
+      let t = n.text || '';
+      if (n.marks){
+        for (const mk of n.marks){
+          if (mk.type==='bold') t = `**${t}**`;
+          else if (mk.type==='italic') t = `*${t}*`;
+          else if (mk.type==='code') t = '`'+t+'`';
+          else if (mk.type==='strike') t = `~~${t}~~`;
+        }
+      }
+      return t;
+    }).join('');
+  }
+  function block(node, depth=0){
+    if (!node) return;
+    if (node.type==='paragraph'){ lines.push(inline(node.content)); lines.push(''); return; }
+    if (node.type==='heading'){ lines.push('#'.repeat(node.attrs?.level||1)+' '+inline(node.content)); lines.push(''); return; }
+    if (node.type==='blockquote'){
+      (node.content||[]).forEach(c=>{
+        const t = (c.type==='paragraph') ? inline(c.content) : '';
+        if (t) lines.push('> '+t);
+      });
+      lines.push('');
+      return;
+    }
+    if (node.type==='bulletList'){
+      (node.content||[]).forEach(li=>{
+        const t = ((li.content||[])[0]?.content ? inline(li.content[0].content) : '');
+        lines.push('  '.repeat(depth)+'- '+t);
+      });
+      lines.push(''); return;
+    }
+    if (node.type==='orderedList'){
+      (node.content||[]).forEach((li,i)=>{
+        const t = ((li.content||[])[0]?.content ? inline(li.content[0].content) : '');
+        lines.push('  '.repeat(depth)+(i+1)+'. '+t);
+      });
+      lines.push(''); return;
+    }
+    if (node.type==='horizontalRule'){ lines.push('---'); lines.push(''); return; }
+    if (node.type==='codeBlock'){
+      const raw = (node.content||[]).map(c=>c.text||'').join('');
+      lines.push('```'); lines.push(raw); lines.push('```'); lines.push(''); return;
+    }
+    if (node.type==='image'){
+      lines.push(`![${node.attrs?.alt||''}](${node.attrs?.src||''})`);
+      lines.push(''); return;
+    }
+    if (node.type==='table'){
+      const rows = node.content||[];
+      if (!rows.length) return;
+      const toTxt = (cell)=>(cell.content||[]).map(p=>inline(p.content)).join(' ').trim();
+      const header = (rows[0].content||[]).map(toTxt);
+      lines.push('| '+header.join(' | ')+' |');
+      lines.push('| '+header.map(()=>'---').join(' | ')+' |');
+      for (let r=1; r<rows.length; r++){
+        const row = (rows[r].content||[]).map(toTxt);
+        lines.push('| '+row.join(' | ')+' |');
+      }
+      lines.push(''); return;
+    }
+  }
+  (json.content||[]).forEach(n=>block(n,0));
+  return lines.join('\n').replace(/\n{3,}/g,'\n\n').trim()+'\n';
+}
+
+/* ======================================================
+   JSON → standalone HTML (인쇄/공유용)
+   ====================================================== */
+function buildStandaloneHtml(ed, o){
+  const p = PAPER[o.paperKey]; const m = MARGIN[o.marginKey]; const side = Math.round(m+2);
+  const bookTitle = (o.bookTitle||'').replace(/</g,'&lt;');
+  const contentHtml = ed.getHTML();
+  const css = `
+    @page { size: ${p.w}mm ${p.h}mm; margin: ${m}mm ${side}mm; }
+    body { margin:0; font-family:${fontStack(o.font).replace(/"/g,"'")}; font-size:${o.size}pt; line-height:${o.lineHeight}; color:#1A1A1A; word-break:keep-all; overflow-wrap:break-word; }
+    .content { column-count:${o.columns||1}; column-gap:8mm; max-width:${p.w-2*side}mm; margin:${m}mm auto; }
+    h1 { font-size:17pt; font-weight:700; margin:0 0 14pt; column-span:all; break-after:avoid; }
+    h2 { font-size:13pt; font-weight:700; margin:18pt 0 8pt; break-after:avoid; }
+    h3 { font-size:11.5pt; font-weight:700; margin:14pt 0 6pt; break-after:avoid; }
+    p { margin:0 0 6pt; text-indent:1em; }
+    h1 + p, h2 + p, h3 + p, p:first-child { text-indent:0; }
+    blockquote { margin:10pt 0; padding:4pt 10pt; border-left:2pt solid #CCC; color:#666; font-style:italic; }
+    ul, ol { margin:6pt 0; padding-left:1.4em; } li { margin-bottom:2pt; }
+    table { border-collapse:collapse; margin:10pt 0; table-layout:fixed; width:100%; }
+    th, td { border:0.5pt solid #555; padding:4pt 6pt; vertical-align:top; font-size:9.5pt; }
+    th { background:#F0F0EE; font-weight:600; text-align:left; }
+    img { max-width:100%; height:auto; }
+    img[data-align=left] { float:left; margin:0 14pt 6pt 0; shape-outside:margin-box; }
+    img[data-align=right] { float:right; margin:0 0 6pt 14pt; shape-outside:margin-box; }
+    img[data-shape=circle] { border-radius:50%; clip-path:circle(50%); shape-outside:circle(50%); }
+    h1,h2,h3 { clear:both; }
+    header.book { font-size:8.5pt; color:#666; border-bottom:.25pt solid #DDD; padding:6pt ${side}mm; text-align:${o.headerAlign||'right'}; }
+  `;
+  return `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>${bookTitle||'HCG Pub Document'}</title><style>${css}</style></head><body>${bookTitle?`<header class="book">${bookTitle}</header>`:''}<div class="content">${contentHtml}</div></body></html>`;
+}
+
+/* ======================================================
+   JSON → DOCX (docx.js 동적 로드)
+   ====================================================== */
+async function exportDocx(ed){
+  const docx = await loadDocx();
+  if (!docx){
+    toast('docx 라이브러리 로드 실패 — HTML로 대체 내보내기', 'err');
+    return exportHtml(ed);
+  }
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = docx;
+  const json = ed.getJSON();
+  function inlineRuns(nodes){
+    const runs = [];
+    (nodes||[]).forEach(n=>{
+      if (n.type!=='text') return;
+      const opts = { text: n.text || '' };
+      if (n.marks){
+        n.marks.forEach(mk=>{
+          if (mk.type==='bold') opts.bold = true;
+          else if (mk.type==='italic') opts.italics = true;
+          else if (mk.type==='underline') opts.underline = {};
+          else if (mk.type==='strike') opts.strike = true;
+        });
+      }
+      runs.push(new TextRun(opts));
+    });
+    if (!runs.length) runs.push(new TextRun({ text:'' }));
+    return runs;
+  }
+  const children = [];
+  (json.content||[]).forEach(node=>{
+    if (node.type==='heading'){
+      const lv = node.attrs?.level || 1;
+      const map = { 1:HeadingLevel.HEADING_1, 2:HeadingLevel.HEADING_2, 3:HeadingLevel.HEADING_3 };
+      children.push(new Paragraph({ heading: map[lv], children: inlineRuns(node.content) }));
+    } else if (node.type==='paragraph'){
+      children.push(new Paragraph({ children: inlineRuns(node.content) }));
+    } else if (node.type==='blockquote'){
+      (node.content||[]).forEach(c=>{
+        children.push(new Paragraph({ indent:{ left: 720 }, children: inlineRuns(c.content) }));
+      });
+    } else if (node.type==='bulletList'){
+      (node.content||[]).forEach(li=>{
+        const p = (li.content||[])[0];
+        if (p) children.push(new Paragraph({ bullet:{ level:0 }, children: inlineRuns(p.content) }));
+      });
+    } else if (node.type==='orderedList'){
+      (node.content||[]).forEach((li, i)=>{
+        const p = (li.content||[])[0];
+        if (p) children.push(new Paragraph({ numbering:{ reference:'num-default', level:0 }, children: inlineRuns(p.content) }));
+      });
+    } else if (node.type==='horizontalRule'){
+      children.push(new Paragraph({ text:'────────' }));
+    } else if (node.type==='image'){
+      children.push(new Paragraph({ children:[ new TextRun({ text:'[이미지]' }) ] }));
+    } else if (node.type==='table'){
+      // 간이: 테이블을 행별로 파이프 구분 텍스트로
+      (node.content||[]).forEach(row=>{
+        const cellTxts = (row.content||[]).map(c=>((c.content||[])[0]?.content||[]).map(n=>n.text||'').join('')).join(' | ');
+        children.push(new Paragraph({ text: cellTxts }));
+      });
+    }
+  });
+  const doc = new Document({ sections: [{ children }] });
+  const blob = await Packer.toBlob(doc);
+  download('hcg-doc.docx', blob, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+}
+
+function exportHtml(ed){
+  const o = currentOpts();
+  const html = buildStandaloneHtml(ed, o);
+  download('hcg-doc.html', html, 'text/html;charset=utf-8');
+}
+
+/* ======================================================
+   Export 라우팅
+   ====================================================== */
+async function runExport(kind){
+  try {
+    switch(kind){
+      case 'pdf': {
+        // PDF: Paged.js 모드면 해당 프리뷰 준비 후 인쇄, 아니면 간이 프리뷰
+        refreshPreviewAndSources(editor);
+        // 어느 쪽 프리뷰를 인쇄할지 body class 로 표시
+        document.body.classList.remove('print-simple','print-paged');
+        document.body.classList.add(pagedMode ? 'print-paged' : 'print-simple');
+        // 인쇄 후 정리
+        const cleanup = ()=>{
+          document.body.classList.remove('print-simple','print-paged');
+          window.removeEventListener('afterprint', cleanup);
+        };
+        window.addEventListener('afterprint', cleanup);
+        setTimeout(()=>{
+          try { window.print(); } catch(e){ toast('인쇄 대화상자 열기 실패: '+e.message, 'err'); cleanup(); }
+        }, pagedMode ? 700 : 200);
+        toast('인쇄 대화상자를 엽니다 — "PDF로 저장" 선택', 'ok');
+        break;
+      }
+      case 'html':
+        exportHtml(editor); break;
+      case 'docx':
+        toast('DOCX 생성 중…');
+        await exportDocx(editor); break;
+      case 'md':
+        download('hcg-doc.md', jsonToMarkdown(editor.getJSON()), 'text/markdown;charset=utf-8'); break;
+      case 'json':
+        download('hcg-doc.json', JSON.stringify(editor.getJSON(), null, 2), 'application/json'); break;
+      case 'typst': {
+        const o = currentOpts();
+        download('hcg-doc.typ', jsonToTypst(editor.getJSON(),{paper:PAPER[o.paperKey], margin:MARGIN[o.marginKey], font:o.font, size:o.size}), 'text/plain'); break;
+      }
+      case 'hwpx':
+        download('hcg-doc.hwpx.xml', jsonToHwpx(editor.getJSON()), 'application/xml'); break;
+      case 'txt':
+        download('hcg-doc.txt', editor.getText(), 'text/plain;charset=utf-8'); break;
+      default: toast('알 수 없는 형식: '+kind, 'err');
+    }
+  } catch(err){
+    console.error('export error', kind, err);
+    toast(`${kind} 내보내기 실패: ${(err.message||err).toString().slice(0,120)}`, 'err');
+  }
+}
+
+/* 내보내기 드롭다운 토글 */
+const exportBtn = document.getElementById('btn-export');
+const exportMenu = document.getElementById('export-menu');
+exportBtn.addEventListener('click', (e)=>{
+  e.stopPropagation();
+  exportMenu.classList.toggle('show');
+});
+document.addEventListener('click', (e)=>{
+  if (!exportMenu.contains(e.target) && e.target !== exportBtn){
+    exportMenu.classList.remove('show');
+  }
+});
+exportMenu.addEventListener('click', (e)=>{
+  const b = e.target.closest('button[data-export]');
+  if (!b) return;
+  exportMenu.classList.remove('show');
+  runExport(b.dataset.export);
+});
+
+document.getElementById('btn-print').addEventListener('click', ()=>runExport('pdf'));
+
+/* Paged.js 정밀 모드 토글 */
+document.getElementById('btn-paged-toggle').addEventListener('click', ()=>{
+  pagedMode = !pagedMode;
+  const btn = document.getElementById('btn-paged-toggle');
+  const simpleEl = document.getElementById('preview-scroll');
+  const pagedEl = document.getElementById('paged-scroll');
+  const tag = document.getElementById('preview-mode-tag');
+  if (pagedMode){
+    btn.textContent = '간이 모드 ◀';
+    btn.style.background = '#1A1A1A'; btn.style.color = '#fff'; btn.style.borderColor = '#1A1A1A';
+    simpleEl.style.display = 'none';
+    pagedEl.style.display = '';
+    if (tag){ tag.textContent = 'Paged.js'; tag.style.background='#EAF4EE'; tag.style.color='var(--ok)'; }
+    renderPagedPreview(editor, currentOpts());
+  } else {
+    btn.textContent = 'Paged.js 정밀 모드 ▶';
+    btn.style.background = '#fff'; btn.style.color = 'var(--text)'; btn.style.borderColor = 'var(--line)';
+    simpleEl.style.display = '';
+    pagedEl.style.display = 'none';
+    if (tag){ tag.textContent = '간이'; tag.style.background='#F0F0F0'; tag.style.color='var(--mute)'; }
+  }
+});
+
+/* initial render */
+refreshPreviewAndSources(editor);
+updateToolbarActive(editor);
+setStatus('에디터 준비 완료');
+</script>
+</body>
+</html>

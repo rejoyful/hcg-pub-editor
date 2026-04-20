@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HCG Pub — 학지사 웹 조판 에디터 (Demo)</title>
+
+<!-- Pretendard (CJK-safe sans) -->
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<!-- Korean serif (for book body theme) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;700&family=Nanum+Myeongjo:wght@400;700&display=swap" rel="stylesheet">
+
+<!-- Markdown parser & sanitizer -->
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.9/dist/purify.min.js"></script>
+
+<style>
+/* =====================================================
+   Design tokens — 학지사 실행 가이드 톤 기반
+   ===================================================== */
+:root{
+  --ink:#1A1A1A;
+  --text:#333333;
+  --mute:#666666;
+  --meta:#999999;
+  --line:#E8E8E8;
+  --rule:#CCCCCC;
+  --surface:#FAFAFA;
+  --panel:#FFFFFF;
+  --sidebar:#F5F5F5;
+  --accent:#1A1A1A;
+  --accent-soft:#F0F0F0;
+  --ok:#1F7A3E;
+  --warn:#8A6D1A;
+  --stop:#8B1E1E;
+  --sans:"Pretendard Variable","Pretendard",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --serif:"Noto Serif KR","Nanum Myeongjo","Apple SD Gothic Neo",serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --header-h:56px;
+  --footer-h:32px;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:var(--sans);color:var(--text);background:var(--surface);-webkit-font-smoothing:antialiased}
+
+/* =====================================================
+   App chrome
+   ===================================================== */
+.app{display:grid;grid-template-rows:var(--header-h) 1fr var(--footer-h);height:100vh}
+
+header.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;background:var(--panel);border-bottom:1px solid var(--line);
+  position:relative;z-index:10;
+}
+.brand{display:flex;align-items:center;gap:12px}
+.brand .mark{
+  width:28px;height:28px;border-radius:6px;background:var(--ink);color:#fff;
+  display:grid;place-items:center;font-weight:700;font-size:13px;letter-spacing:-.02em;
+}
+.brand .name{font-weight:700;color:var(--ink);letter-spacing:-.01em}
+.brand .tag{font-size:11px;color:var(--meta);padding:2px 8px;border:1px solid var(--line);border-radius:999px;margin-left:4px}
+
+.toolbar{display:flex;align-items:center;gap:8px}
+.toolbar .group{display:flex;align-items:center;gap:6px;padding:0 8px;border-right:1px solid var(--line);height:32px}
+.toolbar .group:last-child{border-right:none}
+.toolbar label{font-size:11px;color:var(--mute);margin-right:2px}
+.toolbar select,.toolbar button{
+  font-family:var(--sans);font-size:12px;color:var(--text);
+  border:1px solid var(--line);background:#fff;border-radius:6px;
+  height:30px;padding:0 10px;cursor:pointer;outline:none;
+}
+.toolbar select:hover,.toolbar button:hover{border-color:var(--mute)}
+.toolbar button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.toolbar button.primary:hover{background:#000}
+.toolbar .icon{font-size:14px;line-height:1;display:inline-block;transform:translateY(-1px)}
+
+main.workspace{display:grid;grid-template-columns:220px 1fr 1fr;min-height:0}
+
+/* =====================================================
+   Sidebar — file tree mock
+   ===================================================== */
+aside.tree{
+  background:var(--sidebar);border-right:1px solid var(--line);
+  padding:16px 12px;overflow:auto;font-size:13px;
+}
+.tree h4{font-size:11px;color:var(--meta);margin:4px 8px 8px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+.tree .item{
+  display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;color:var(--text);
+  cursor:pointer;user-select:none;
+}
+.tree .item:hover{background:#EBEBEB}
+.tree .item.active{background:var(--ink);color:#fff}
+.tree .item .ic{width:14px;text-align:center;color:var(--meta);font-size:11px}
+.tree .item.active .ic{color:#fff}
+.tree .group-title{font-size:11px;color:var(--meta);padding:12px 8px 4px;letter-spacing:.04em}
+.tree .hint{font-size:11px;color:var(--meta);padding:12px 8px;line-height:1.6;background:#fff;border:1px solid var(--line);border-radius:6px;margin-top:16px}
+
+/* =====================================================
+   Editor pane
+   ===================================================== */
+section.editor{
+  display:flex;flex-direction:column;background:#FFFFFF;border-right:1px solid var(--line);min-width:0;
+}
+.editor .pane-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 14px;border-bottom:1px solid var(--line);
+  font-size:11px;color:var(--meta);letter-spacing:.04em;
+}
+.editor .pane-head .dot{width:6px;height:6px;border-radius:999px;background:var(--ok);display:inline-block;margin-right:6px}
+.editor textarea{
+  flex:1;width:100%;border:none;outline:none;resize:none;padding:20px 24px;
+  font-family:var(--mono);font-size:13px;line-height:1.7;color:#222;tab-size:2;
+  background:#FFFFFF;
+}
+
+/* =====================================================
+   Preview pane — 책 프레임
+   ===================================================== */
+section.preview{
+  background:var(--surface);overflow:auto;position:relative;min-width:0;
+}
+.preview .pane-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 14px;border-bottom:1px solid var(--line);background:#fff;
+  font-size:11px;color:var(--meta);letter-spacing:.04em;position:sticky;top:0;z-index:5;
+}
+.preview .zoom{display:flex;align-items:center;gap:6px}
+.preview .zoom button{
+  border:1px solid var(--line);background:#fff;width:24px;height:24px;border-radius:4px;cursor:pointer;
+  font-family:var(--sans);font-size:12px;color:var(--text);
+}
+.book-stage{padding:28px;display:flex;flex-direction:column;align-items:center;gap:20px}
+.book-page{
+  background:#fff;border:1px solid var(--line);box-shadow:0 2px 8px rgba(0,0,0,.04);
+  width:var(--page-w,150mm);min-height:var(--page-h,225mm);
+  padding:var(--page-pad,22mm 20mm 22mm 20mm);
+  position:relative;transform-origin:top center;
+  transform:scale(var(--zoom,1));
+  margin-bottom:calc((var(--zoom,1) - 1) * -100px);
+}
+.book-page .rh{
+  position:absolute;top:12mm;left:20mm;right:20mm;
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-family:var(--sans);font-size:9pt;color:var(--meta);
+  border-bottom:1px solid var(--line);padding-bottom:4mm;
+}
+.book-page .rf{
+  position:absolute;bottom:12mm;left:20mm;right:20mm;text-align:center;
+  font-family:var(--sans);font-size:9pt;color:var(--meta);
+  border-top:1px solid var(--line);padding-top:3mm;
+}
+
+/* =====================================================
+   Content typography — 기본 테마 공통
+   ===================================================== */
+.book-content{word-break:keep-all;line-break:strict;overflow-wrap:break-word}
+.book-content h1,.book-content h2,.book-content h3,.book-content h4{
+  color:var(--ink);letter-spacing:-.01em;line-height:1.3;
+}
+.book-content h1{font-size:20pt;margin:0 0 14pt;padding-bottom:8pt;border-bottom:2px solid var(--ink)}
+.book-content h2{font-size:15pt;margin:20pt 0 10pt}
+.book-content h3{font-size:12pt;margin:14pt 0 8pt;color:var(--text)}
+.book-content p{margin:0 0 8pt;line-height:1.75;font-size:10.5pt;text-indent:0}
+.book-content ul,.book-content ol{padding-left:18pt;margin:0 0 10pt;line-height:1.7}
+.book-content li{font-size:10.5pt;margin-bottom:3pt}
+.book-content blockquote{
+  margin:12pt 0;padding:8pt 14pt;border-left:3px solid var(--ink);
+  background:var(--accent-soft);font-size:10pt;color:var(--text);
+}
+.book-content code{
+  font-family:var(--mono);font-size:9.5pt;background:#F3F3F3;padding:1px 5px;border-radius:3px;
+}
+.book-content pre{
+  font-family:var(--mono);font-size:9pt;background:#F7F7F7;border:1px solid var(--line);
+  border-radius:4px;padding:10pt 12pt;overflow:auto;line-height:1.55;
+}
+.book-content pre code{background:transparent;padding:0}
+.book-content table{
+  border-collapse:collapse;width:100%;margin:10pt 0;font-size:9.5pt;
+}
+.book-content th,.book-content td{
+  border:1px solid var(--rule);padding:6pt 8pt;text-align:left;vertical-align:top;
+}
+.book-content th{background:#F0F0F0;color:var(--ink);font-weight:600}
+.book-content hr{border:none;border-top:1px solid var(--line);margin:16pt 0}
+.book-content a{color:var(--ink);text-decoration:underline;text-underline-offset:2px}
+.book-content img{max-width:100%;height:auto;display:block;margin:10pt auto}
+.book-content strong{color:var(--ink)}
+
+/* 각주·캡션 */
+.book-content .caption{
+  display:block;text-align:center;font-size:9pt;color:var(--mute);margin-top:4pt;font-style:italic;
+}
+.book-content .note,.book-content .callout{
+  background:#F5F5F5;border-left:3px solid var(--ink);padding:10pt 14pt;margin:12pt 0;font-size:10pt;
+}
+
+/* =====================================================
+   Theme: Hakjisa Trade Book (단행본, 명조)
+   ===================================================== */
+.theme-trade .book-content{font-family:var(--serif)}
+.theme-trade .book-content h1{font-size:22pt;border-bottom:1px solid var(--ink);padding-bottom:10pt}
+.theme-trade .book-content h2{font-size:15pt}
+.theme-trade .book-content p{line-height:1.85;font-size:10.5pt;text-indent:1em}
+.theme-trade .book-content p:first-of-type,
+.theme-trade .book-content h1+p,.theme-trade .book-content h2+p,.theme-trade .book-content h3+p{text-indent:0}
+.theme-trade .book-content blockquote{font-family:var(--serif);border-left-color:var(--mute);background:#FAFAFA}
+
+/* =====================================================
+   Theme: Medical / Academic
+   ===================================================== */
+.theme-medical .book-content{font-family:var(--sans);font-feature-settings:"ss01","tnum"}
+.theme-medical .book-content h1{
+  font-size:18pt;border-bottom:none;color:var(--ink);
+  background:var(--ink);color:#fff;padding:8pt 12pt;border-radius:2px;margin-bottom:14pt;
+}
+.theme-medical .book-content h2{
+  font-size:13pt;padding-left:10pt;border-left:4px solid var(--ink);
+}
+.theme-medical .book-content p{font-size:10pt;line-height:1.7}
+.theme-medical .book-content table{font-size:9pt}
+.theme-medical .book-content table th{background:var(--ink);color:#fff}
+
+/* =====================================================
+   Theme: Textbook / 강의교재
+   ===================================================== */
+.theme-textbook .book-content{font-family:var(--sans)}
+.theme-textbook .book-content h1{
+  font-size:24pt;border-bottom:3px double var(--ink);padding-bottom:10pt;
+}
+.theme-textbook .book-content h2{
+  font-size:14pt;background:var(--accent-soft);padding:6pt 10pt;border-radius:3px;
+}
+.theme-textbook .book-content p{font-size:11pt;line-height:1.9}
+.theme-textbook .book-content .note{border-radius:6px;background:#FFF8E6;border-left-color:#8A6D1A}
+
+/* =====================================================
+   Footer
+   ===================================================== */
+footer.statusbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;background:#fff;border-top:1px solid var(--line);
+  font-size:11px;color:var(--meta);
+}
+.statusbar .group{display:flex;align-items:center;gap:14px}
+.statusbar .k{color:var(--text);font-weight:500;margin-right:4px}
+.status-dot{width:6px;height:6px;border-radius:999px;background:var(--ok);display:inline-block;margin-right:6px}
+
+/* =====================================================
+   Modal
+   ===================================================== */
+.modal-back{
+  position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:100;
+}
+.modal-back.open{display:flex}
+.modal{
+  background:#fff;border-radius:8px;width:min(520px,92vw);padding:24px 26px;border:1px solid var(--line);
+  box-shadow:0 10px 40px rgba(0,0,0,.18);
+}
+.modal h3{margin:0 0 10px;color:var(--ink);font-size:16px}
+.modal p{font-size:13px;color:var(--text);line-height:1.7;margin:0 0 14px}
+.modal .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+.modal button{border:1px solid var(--line);background:#fff;color:var(--text);padding:8px 14px;border-radius:6px;font-family:var(--sans);font-size:13px;cursor:pointer}
+.modal button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.modal ul{margin:4px 0 14px;padding-left:18px;font-size:12.5px;color:var(--mute);line-height:1.75}
+
+/* =====================================================
+   Print — PDF 내보내기용
+   ===================================================== */
+@media print{
+  @page{size:150mm 225mm;margin:0}
+  .topbar,.statusbar,aside.tree,section.editor,.preview .pane-head{display:none !important}
+  main.workspace{grid-template-columns:1fr;display:block}
+  section.preview{overflow:visible;background:#fff;height:auto}
+  .book-stage{padding:0;gap:0}
+  .book-page{
+    border:none;box-shadow:none;margin:0;page-break-after:always;transform:none !important;
+    width:150mm;min-height:225mm;padding:22mm 20mm;
+  }
+  .book-page:last-child{page-break-after:auto}
+  body,html{background:#fff}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ===================== Top bar ===================== -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark">H</div>
+      <div class="name">HCG Pub</div>
+      <span class="tag">alpha · demo</span>
+    </div>
+    <div class="toolbar">
+      <div class="group">
+        <label>테마</label>
+        <select id="sel-theme">
+          <option value="theme-default">기본</option>
+          <option value="theme-trade" selected>학지사 단행본</option>
+          <option value="theme-medical">메디컬 학술</option>
+          <option value="theme-textbook">강의교재</option>
+        </select>
+      </div>
+      <div class="group">
+        <label>판형</label>
+        <select id="sel-page">
+          <option value="crown" selected>신국판 150×225</option>
+          <option value="a5">A5 148×210</option>
+          <option value="b5">B5 176×250</option>
+          <option value="a4">A4 210×297</option>
+        </select>
+      </div>
+      <div class="group">
+        <label>본문</label>
+        <select id="sel-size">
+          <option value="9">9pt</option>
+          <option value="10" selected>10pt</option>
+          <option value="10.5">10.5pt</option>
+          <option value="11">11pt</option>
+          <option value="12">12pt</option>
+        </select>
+      </div>
+      <div class="group">
+        <button id="btn-sample" title="샘플 원고 불러오기">샘플 원고</button>
+        <button id="btn-clear" title="내용 지우기">초기화</button>
+      </div>
+      <div class="group">
+        <button id="btn-info" title="사용법">사용법</button>
+        <button id="btn-export" class="primary" title="PDF로 내보내기 (Ctrl/Cmd + P)">PDF 내보내기</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================== Workspace ===================== -->
+  <main class="workspace">
+    <aside class="tree">
+      <h4>프로젝트</h4>
+      <div class="item active"><span class="ic">📄</span><span>chapter-01.md</span></div>
+      <div class="item"><span class="ic">📄</span><span>chapter-02.md</span></div>
+      <div class="item"><span class="ic">📄</span><span>chapter-03.md</span></div>
+      <div class="group-title">리소스</div>
+      <div class="item"><span class="ic">🎨</span><span>themes/hakjisa.css</span></div>
+      <div class="item"><span class="ic">📑</span><span>metadata.yml</span></div>
+      <div class="hint">
+        이 데모는 다중 파일을 시뮬레이션만 합니다. 실제 구현에서는 GitHub 저장소나 학지사 내부 Git이 원고 저장소가 됩니다.
+      </div>
+    </aside>
+
+    <section class="editor">
+      <div class="pane-head">
+        <span><span class="dot"></span>Markdown · VFM 호환</span>
+        <span id="syncState">자동 동기화</span>
+      </div>
+      <textarea id="src" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+    </section>
+
+    <section class="preview">
+      <div class="pane-head">
+        <span>조판 프리뷰</span>
+        <div class="zoom">
+          <button id="zoom-out" title="축소">−</button>
+          <span id="zoom-label">100%</span>
+          <button id="zoom-in" title="확대">+</button>
+        </div>
+      </div>
+      <div class="book-stage" id="stage">
+        <article class="book-page theme-trade" id="page1">
+          <div class="rh"><span>학지사 · HCG Pub</span><span id="rh-title">조판 자동화 실험</span></div>
+          <div class="book-content" id="render"></div>
+          <div class="rf" id="rf">1</div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================== Footer ===================== -->
+  <footer class="statusbar">
+    <div class="group">
+      <span><span class="status-dot"></span>준비됨 · 로컬 데모</span>
+    </div>
+    <div class="group">
+      <span><span class="k">글자수</span><span id="cnt-chars">0</span></span>
+      <span><span class="k">단어수</span><span id="cnt-words">0</span></span>
+      <span><span class="k">단락</span><span id="cnt-para">0</span></span>
+      <span><span class="k">읽는 시간</span><span id="cnt-time">0분</span></span>
+    </div>
+  </footer>
+</div>
+
+<!-- ===================== Help modal ===================== -->
+<div class="modal-back" id="modal">
+  <div class="modal">
+    <h3>HCG Pub 데모 사용법</h3>
+    <p>이 데모는 Vivliostyle Pub 계열의 웹 조판 에디터 구조를 그대로 구현한 단일 파일 프로토타입입니다. 왼쪽에 Markdown을 입력하면 오른쪽에 책 레이아웃으로 실시간 조판됩니다.</p>
+    <ul>
+      <li>상단 <b>테마 / 판형 / 본문 크기</b>를 즉시 전환 가능</li>
+      <li><b>샘플 원고</b>로 빠르게 체험 가능(한국어·영어 혼용 포함)</li>
+      <li><b>PDF 내보내기</b>는 브라우저 인쇄 대화창에서 ‘PDF로 저장’ 선택</li>
+      <li>한글 금칙(<code>word-break: keep-all</code>) 적용되어 단어 중간에서 끊기지 않음</li>
+      <li>본 데모는 단일 HTML 파일로 동작하며, 모든 처리가 로컬 브라우저에서만 일어남(원고가 외부로 전송되지 않음)</li>
+    </ul>
+    <p style="font-size:12px;color:var(--mute)">실제 서비스화 시 필요한 기능: 다중 파일 원고 관리, Git 연동, 실시간 협업(공저자), 댓글/트랙체인지, HWPX 입력 변환, InDesign 최종 조판 연동.</p>
+    <div class="actions">
+      <button class="primary" id="btn-close">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================
+   Sample manuscript — 한국어 + 영어 혼용
+   ===================================================== */
+const SAMPLE = `# 1장. 조판 자동화의 시대
+
+현대의 편집·출판 현장은 **수작업 조판**에서 **자동화 파이프라인**으로
+빠르게 이동하고 있다. 특히 학술 단행본과 메디컬 도서 영역은
+반복되는 구조(제목-본문-각주-표)가 많아 자동화 효과가 크다.
+
+## 1.1 왜 지금인가
+
+세 가지 흐름이 2024~2026년 사이에 겹쳤다.
+
+1. **AI 언어 모델**이 맥락 기반의 용어 일관성 검증과
+   영한 번역 대조 작업을 실무 수준으로 수행하기 시작했다.
+2. **MCP(Model Context Protocol)** 규격이 등장하면서,
+   AI가 InDesign 같은 전문 DTP 도구를 직접 제어할 수 있는
+   길이 열렸다.
+3. **오픈소스 CSS 조판 엔진**(Vivliostyle.js 등)의 성숙도가
+   단행본 품질에 근접했다.
+
+> 즉, "저자 원고에서 인쇄용 PDF까지"를 부분적으로나마
+> 자동화할 수 있는 기술 스택이 처음으로 한자리에 모였다.
+
+## 1.2 무엇을 기대할 수 있는가
+
+| 작업 | 자동화 수준 | 비고 |
+|---|---|---|
+| 원고 구조 파싱 | ★★★★★ | HWPX 기반이면 거의 완전 자동 |
+| 스타일 자동 적용 | ★★★★★ | 학지사 마스터 템플릿 연결 시 |
+| 번역 검증 대조표 | ★★★★★ | Claude 4.6 기준 최상위 품질 |
+| 이미지 정밀 배치 | ★★★☆☆ | 대략 배치 후 사람 조정 |
+| 수식·화학식 | ★☆☆☆☆ | 별도 도구 연계 필요 |
+
+## 1.3 한국어·영어 모두 되는가
+
+결론부터 말하면 **기술 레벨에서는 모두 된다**. 이 프로젝트가 사용하는
+모든 도구—python-hwpx, Claude, MCP 서버, InDesign—는 모두 UTF-8
+기반이므로 \`Hello, 안녕하세요\`처럼 한 문장 안에 여러 언어가
+섞여 있어도 동일하게 처리된다.
+
+### 한글 조판 품질에 대한 주의
+
+다만 "디자인 레벨에서 예쁘게 조판되느냐"는 별개다. 한글은
+*금칙 처리*, *줄 끝 공백*, *단어 중간 줄바꿈 방지* 같은
+세밀한 규칙이 필요하다. 이 데모도 CSS \`word-break: keep-all\`로
+단어 중간이 끊어지지 않도록 처리되어 있지만, 상용 수준의
+세부 조판은 InDesign CJK 설정이나 World Tools Pro 같은
+전문 도구의 도움을 받는 것이 안전하다.
+
+---
+
+## 1.4 Example: English Interleaved
+
+The same editor seamlessly renders Latin text together with
+Korean. This matters because our medical titles frequently
+carry **bilingual references** such as *Diagnostic and
+Statistical Manual of Mental Disorders* (DSM-5-TR) alongside
+their Korean translations.
+
+\`\`\`
+def parse_hwpx(path):
+    with open(path, 'rb') as f:
+        return extract_structure(f.read())
+\`\`\`
+
+> "자동화는 사람을 대체하는 것이 아니라, 사람이 판단에
+>  집중할 수 있도록 반복 작업을 걷어내는 일이다."
+
+이 챕터의 요약: 자동화는 이미 **현실적**으로 가능하며,
+한국어·영어 혼용 원고에서도 동등하게 작동한다. 다음 장에서는
+실제 파이프라인의 단계별 구성을 살펴본다.
+`;
+
+/* =====================================================
+   Markdown pipeline
+   ===================================================== */
+marked.setOptions({
+  breaks:false,
+  gfm:true,
+  headerIds:true,
+  mangle:false,
+});
+
+const $ = id => document.getElementById(id);
+const src = $('src');
+const render = $('render');
+const stage = $('stage');
+const page1 = $('page1');
+
+function md2html(s){
+  const raw = marked.parse(s || '');
+  return DOMPurify.sanitize(raw, {ADD_ATTR:['target']});
+}
+
+/* =====================================================
+   Counters
+   ===================================================== */
+const WORD_RE = /\S+/g;
+function updateCounters(text){
+  const chars = [...text].length;
+  const words = (text.match(WORD_RE) || []).length;
+  const paras = text.split(/\n{2,}/).filter(p => p.trim().length).length;
+  const minutes = Math.max(1, Math.round(chars / 500)); // 한글 기준 500자/분 가정
+  $('cnt-chars').textContent = chars.toLocaleString();
+  $('cnt-words').textContent = words.toLocaleString();
+  $('cnt-para').textContent = paras.toLocaleString();
+  $('cnt-time').textContent = minutes + '분';
+}
+
+/* =====================================================
+   Render (debounced)
+   ===================================================== */
+let debounceId;
+function scheduleRender(){
+  clearTimeout(debounceId);
+  $('syncState').textContent = '동기화 중…';
+  debounceId = setTimeout(doRender, 120);
+}
+function doRender(){
+  const text = src.value;
+  render.innerHTML = md2html(text);
+  updateCounters(text);
+
+  // Running header: 첫 h1 텍스트를 제목으로
+  const firstH1 = render.querySelector('h1');
+  if (firstH1) $('rh-title').textContent = firstH1.textContent;
+
+  $('syncState').textContent = '자동 동기화';
+}
+
+/* =====================================================
+   Theme + page format
+   ===================================================== */
+const themes = ['theme-default','theme-trade','theme-medical','theme-textbook'];
+function setTheme(t){
+  themes.forEach(c => page1.classList.remove(c));
+  page1.classList.add(t);
+}
+$('sel-theme').addEventListener('change', e => setTheme(e.target.value));
+
+const PAGE_SIZES = {
+  crown:{w:'150mm',h:'225mm',pad:'22mm 20mm 22mm 20mm',label:'신국판'},
+  a5:{w:'148mm',h:'210mm',pad:'20mm 18mm 20mm 18mm',label:'A5'},
+  b5:{w:'176mm',h:'250mm',pad:'22mm 20mm 22mm 20mm',label:'B5'},
+  a4:{w:'210mm',h:'297mm',pad:'25mm 22mm 25mm 22mm',label:'A4'},
+};
+function setPage(key){
+  const p = PAGE_SIZES[key]; if(!p) return;
+  page1.style.setProperty('--page-w', p.w);
+  page1.style.setProperty('--page-h', p.h);
+  page1.style.setProperty('--page-pad', p.pad);
+}
+$('sel-page').addEventListener('change', e => setPage(e.target.value));
+
+$('sel-size').addEventListener('change', e => {
+  render.style.fontSize = e.target.value + 'pt';
+});
+
+/* =====================================================
+   Zoom (preview only)
+   ===================================================== */
+let zoom = 1.0;
+function setZoom(v){
+  zoom = Math.max(0.5, Math.min(1.8, +v.toFixed(2)));
+  page1.style.setProperty('--zoom', zoom);
+  $('zoom-label').textContent = Math.round(zoom * 100) + '%';
+}
+$('zoom-in').addEventListener('click', () => setZoom(zoom + 0.1));
+$('zoom-out').addEventListener('click', () => setZoom(zoom - 0.1));
+
+/* =====================================================
+   Buttons
+   ===================================================== */
+$('btn-sample').addEventListener('click', () => {
+  src.value = SAMPLE;
+  scheduleRender();
+});
+$('btn-clear').addEventListener('click', () => {
+  if (confirm('현재 원고를 모두 지웁니다. 계속할까요?')){
+    src.value = '';
+    scheduleRender();
+  }
+});
+$('btn-export').addEventListener('click', () => window.print());
+$('btn-info').addEventListener('click', () => $('modal').classList.add('open'));
+$('btn-close').addEventListener('click', () => $('modal').classList.remove('open'));
+$('modal').addEventListener('click', e => { if (e.target.id==='modal') $('modal').classList.remove('open'); });
+
+/* =====================================================
+   Keyboard shortcuts
+   ===================================================== */
+document.addEventListener('keydown', e => {
+  const meta = e.ctrlKey || e.metaKey;
+  if (meta && e.key === 's'){ e.preventDefault(); /* no-op: auto-sync */ }
+  if (meta && e.key === 'p'){ /* browser handles print */ }
+  if (meta && e.key === 'Enter'){ e.preventDefault(); window.print(); }
+});
+
+/* =====================================================
+   Init
+   ===================================================== */
+src.addEventListener('input', scheduleRender);
+src.value = SAMPLE;
+setTheme('theme-trade');
+setPage('crown');
+render.style.fontSize = '10pt';
+doRender();
+</script>
+</body>
+</html>
