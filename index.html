@@ -3319,15 +3319,55 @@ function verifyTextPreserved(plainBefore, styledHtml){
   return { ok, beforeLen, afterLen, lossPct };
 }
 
+/* ─── Image token stripping ────────────────────────────────────
+   AI 요청 본문에 base64 data URL이 통째로 실리면 토큰이 폭발합니다
+   (2MB 이미지 한 장 ≈ 약 700k 토큰). 분석 직전에 모든 <img> 의
+   src/alt/class 를 빼내 placeholder 토큰으로 치환하고, 응답을
+   받은 뒤 동일 토큰을 찾아 원래 속성으로 복원합니다. */
+function stripImagesForAI(html){
+  const table = Object.create(null);
+  let i = 0;
+  // img 태그 전체를 통째로 치환 (self-close/non-close 모두)
+  const stripped = html.replace(/<img\b[^>]*>/gi, (tag)=>{
+    const id = 'HCGIMG' + (i++);
+    // 원본 속성 보존 (src, alt, class, style, width/height 등 전부)
+    table[id] = tag;
+    // AI 에게 건네는 자리표시자 — 속성은 모두 제거하고 토큰만 남김
+    return `<img data-hcg-img="${id}">`;
+  });
+  return { html: stripped, table };
+}
+function restoreImagesFromAI(html, table){
+  return html.replace(/<img\b[^>]*data-hcg-img="(HCGIMG\d+)"[^>]*>/gi, (_m, id)=>{
+    return table[id] || _m;   // 토큰을 잃어버리면 최소한 자리표시자라도 남김
+  });
+}
+/* rough estimator: ~4 chars per token for Korean+HTML (conservative) */
+function estimateTokens(str){ return Math.ceil((str||'').length / 3.5); }
+
 async function callClaudeForAutoStyle({ apiKey, model, html, addToc, splitFront, userDirective }){
+  /* 1) base64 이미지 분리 → 토큰 폭발 방지 */
+  const { html: cleanHtml, table: imgTable } = stripImagesForAI(html);
+
+  /* 2) 여전히 너무 크면 사용자에게 명확한 안내 (수용치의 절반을 한도로) */
+  const est = estimateTokens(cleanHtml) + 1200 /* system+overhead */;
+  const HARD_CAP = 180_000;  // 안전한 상한선 (Sonnet 기준 200k 컨텍스트의 약 90%)
+  if (est > HARD_CAP){
+    throw new Error(
+      `본문이 너무 길어 한 번에 분석할 수 없습니다 (약 ${est.toLocaleString()} 토큰 > ${HARD_CAP.toLocaleString()}). ` +
+      `장(chapter) 단위로 나눠 실행하거나, 일부 섹션을 임시로 제거한 뒤 다시 시도해 주세요.`
+    );
+  }
+
   const system = [
     '당신은 한국어 출판물의 **교정·조판 전문가**입니다.',
     '입력으로 저자가 작성한 본문 HTML을 받습니다.',
     '',
     '# 절대 규칙 (위반 시 작업 실패)',
     '1. **본문의 모든 텍스트(문자)는 한 글자도 빠짐없이 그대로 보존**해야 합니다. 요약·생략·재작성·번역·오타 수정 금지.',
-    '2. 기존 <img> 태그의 src·class·alt, <table>의 모든 셀 내용은 **완벽히 보존**.',
-    '3. 단락 순서도 그대로 유지합니다. 단, 프론트매터(목차/머리글/저자소개 등)는 지시에 따라 앞으로 이동 가능.',
+    '2. 모든 <img data-hcg-img="HCGIMG..."> 토큰은 **속성·순서 그대로 유지**하세요. 속성을 추가·삭제·수정 금지. 이 토큰은 실제 이미지의 자리표시자이며 나중에 원본으로 복원됩니다.',
+    '3. <table>의 모든 셀 내용은 **완벽히 보존**.',
+    '4. 단락 순서도 그대로 유지합니다. 단, 프론트매터(목차/머리글/저자소개 등)는 지시에 따라 앞으로 이동 가능.',
     '',
     '# 태그 재조정 규칙',
     '- 문서 제목/대제목 → <h1>',
@@ -3373,7 +3413,7 @@ async function callClaudeForAutoStyle({ apiKey, model, html, addToc, splitFront,
     '- 태그 교정 외에 텍스트 내용을 절대 수정하지 마세요.',
   ].filter(Boolean).join('\n');
 
-  const userMsg = `다음 HTML의 태그를 규칙에 맞게 재조정하되, 텍스트 내용은 한 글자도 바꾸지 마세요.\n\n---\n${html}`;
+  const userMsg = `다음 HTML의 태그를 규칙에 맞게 재조정하되, 텍스트 내용은 한 글자도 바꾸지 마세요.\n<img data-hcg-img="..."> 토큰은 **그대로** 두세요 (이미지 자리표시자).\n\n---\n${cleanHtml}`;
 
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -3410,10 +3450,13 @@ async function callClaudeForAutoStyle({ apiKey, model, html, addToc, splitFront,
   }
 
   /* Strip code fences Claude may add despite instructions. */
-  return text
+  const cleaned = text
     .replace(/^```(?:html)?\s*/i, '')
     .replace(/\s*```\s*$/, '')
     .trim();
+
+  /* Restore original <img> tags (src/alt/class) from placeholder tokens. */
+  return restoreImagesFromAI(cleaned, imgTable);
 }
 </script>
 
