@@ -563,6 +563,15 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
 .ProseMirror p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:justify;word-break:keep-all;overflow-wrap:break-word;text-indent:var(--body-indent)}
 /* Tiptap Highlight & Color */
 .ProseMirror mark,.page-content mark{background:#FFF59D;padding:0 2px;border-radius:2px}
+/* 자동분류가 부여하는 회색 callout 음영 — 문단 전체를 회색 배경으로 보이게 */
+.ProseMirror mark[data-color="#EEEEEE"],.page-content mark[data-color="#EEEEEE"]{
+  background:#EEEEEE;padding:2pt 8pt;border-radius:3pt;display:inline-block;
+}
+/* 자동분류가 부여하는 "📷 이미지 첨부" 라벨 */
+.ProseMirror mark[data-color="#DDEBF7"],.page-content mark[data-color="#DDEBF7"]{
+  background:#DDEBF7;padding:1pt 6pt;border-radius:3pt;
+  font-size:9pt;color:#1F4E79;letter-spacing:.2px;
+}
 .ProseMirror [style*="color"],.page-content [style*="color"]{/* inline */}
 .ProseMirror h1+p,.ProseMirror h2+p,.ProseMirror h3+p{text-indent:0}
 .ProseMirror ul,.ProseMirror ol{margin:0 0 10pt;padding-left:18pt}
@@ -674,6 +683,41 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
 /* 프리뷰(.book)에서는 링크 스타일 제거 (내보내기와 일치) */
 .book .toc-link{cursor:text;color:inherit;text-decoration:none}
 .book .toc-link::after{display:none}
+
+/* ───────────────────────────────────────────────────────────────
+   목차 리스트: 글머리 번호 필수 — "목차" 헤딩 뒤의 UL/OL은 항상
+   번호 매김이 되어야 한다. 에디터·뷰어(.book)·인쇄 공통 스타일.
+   ─────────────────────────────────────────────────────────────── */
+.toc-list,
+ol.toc-list,
+ul.toc-list{
+  list-style:decimal outside !important;
+  padding-left:1.8em !important;
+  margin:.6em 0 1.2em !important;
+  counter-reset:toc-counter;
+}
+ul.toc-list{ list-style:none !important; }
+ul.toc-list > li{ counter-increment:toc-counter; position:relative; }
+ul.toc-list > li::before{
+  content:counter(toc-counter)". ";
+  position:absolute; left:-1.5em; color:var(--ink,#222); font-weight:500;
+}
+.toc-list > li{ margin:.15em 0; padding-left:.2em; }
+/* "목차" 라벨 — 리스트 상단에 소제목성 안내 문구 자동 삽입 */
+.toc-list::before{
+  content:"— 목차 —";
+  display:block;
+  font-size:9pt;
+  color:var(--mute,#8a7e5c);
+  letter-spacing:2px;
+  text-align:center;
+  margin:-4px 0 10px;
+  opacity:.75;
+}
+/* 인쇄/PDF에도 동일하게 적용 */
+@media print{
+  .toc-list,ol.toc-list,ul.toc-list{ list-style:decimal outside !important; }
+}
 
 /* 툴바를 #edit-pane 안으로 이동 (에디터 영역 전용) */
 #edit-pane .edit-toolbar{
@@ -1726,7 +1770,7 @@ function normalizePastedHtml(html){
   return tmp.innerHTML;
 }
 
-const editor = new Editor({
+const editor = window.editor = new Editor({
   element: $('#editor'),
   extensions: [
     StarterKit.configure({
@@ -1761,8 +1805,8 @@ const editor = new Editor({
     <h2>3. WYSIWYG 조판</h2>
     <p>용지 크기, 여백, 단 구성, 본문 서체·크기·행간, 도곽 머리말/꼬리말 — 왼쪽 사이드바에서 조정하면 에디터 영역에 즉시 반영됩니다. "내보내기 → PDF"를 누르면 같은 모습으로 출력됩니다.</p>
   `,
-  onUpdate({ editor }){ updateStatus(editor); scheduleReflow(); scheduleTocHyperlinks(); },
-  onSelectionUpdate({ editor }){ updateToolbar(editor); }
+  onUpdate({ editor }){ updateStatus(editor); scheduleReflow(); scheduleTocHyperlinks(); scheduleSidebarFromCursor(); },
+  onSelectionUpdate({ editor }){ updateToolbar(editor); scheduleSidebarFromCursor(); }
 });
 
 /* 에디터 업데이트가 빈번하므로 debounce */
@@ -1847,16 +1891,23 @@ function getColumnWidthPx(){
 }
 
 /* Debounced reflow: paste / typing fires many events; coalesce and wait
-   for layout to settle before measuring. */
+   for layout to settle before measuring. 사용자 요청(2026-04-17): 에디터↔뷰어
+   매칭이 최대한 실시간이어야 함 — 단일 rAF 로 단축하되, 측정 안정화를 위해
+   idle 경로에 안전망 paginate() 1회를 추가한다. */
 let _reflowTimer = null;
+let _reflowSafety = null;
 function scheduleReflow(){
   if (_reflowTimer) cancelAnimationFrame(_reflowTimer);
   _reflowTimer = requestAnimationFrame(()=>{
-    _reflowTimer = requestAnimationFrame(()=>{
-      _reflowTimer = null;
-      paginate();
-    });
+    _reflowTimer = null;
+    try { paginate(); } catch(e){ console.warn('paginate:', e); }
   });
+  /* 입력 폭주 구간에서 마지막 값이 최종 반영되도록 안전망 */
+  clearTimeout(_reflowSafety);
+  _reflowSafety = setTimeout(() => {
+    _reflowSafety = null;
+    try { paginate(); } catch(e){}
+  }, 160);
 }
 /* Back-compat alias: earlier code calls reflow() directly. */
 function reflow(){ paginate(); }
@@ -1955,10 +2006,38 @@ function paginate(){
       pages.push([]); curH = 0;
     }
   };
+  /* 사용자 요청(2026-04-17): 뷰어의 빈 영역 최소화.
+     다음 블록 하나가 현재 페이지를 초과할 때, 블록이 splittable 하면
+     남은 여유 공간만큼만 뜯어서 현재 페이지에 채우고 나머지를 다음 페이지로
+     넘긴다. 이렇게 하면 페이지 하단의 대형 공백이 대부분 사라진다. */
+  const MIN_FILL_HEADROOM = 80; /* 80px 이상 공간이 남아있을 때만 채우기 시도 */
   for (const item of flattened){
     if (item.break){ forceNewPage(); continue; }
     if (item.h === 0) continue;
+    const remaining = pageCapH - curH;
     if (curH + item.h > pageCapH && pages[pages.length - 1].length > 0){
+      if (item.el && canSplitBlock(item.el) && remaining > MIN_FILL_HEADROOM){
+        const sub = splitTextBlock(item.el, remaining);
+        if (sub.length >= 2){
+          const first = sub[0];
+          const fh = measureBlockHeight(first);
+          if (fh <= remaining + 1){
+            pages[pages.length - 1].push({ ...item, el: first, h: fh });
+            curH += fh;
+            /* 나머지 조각을 다음 페이지(들)에 분배 */
+            pages.push([]); curH = 0;
+            for (let i = 1; i < sub.length; i++){
+              const sh = measureBlockHeight(sub[i]);
+              if (curH + sh > pageCapH && pages[pages.length - 1].length > 0){
+                pages.push([]); curH = 0;
+              }
+              pages[pages.length - 1].push({ ...item, el: sub[i], h: sh });
+              curH += sh;
+            }
+            continue;
+          }
+        }
+      }
       pages.push([]);
       curH = 0;
     }
@@ -2006,22 +2085,106 @@ function paginate(){
 
   applyHeaderFooter();
   updateStatus(editor);
+  /* 뷰어(.book)의 목차 리스트를 표시. 에디터에선 installTocHyperlinks가
+     이미 .toc-list 클래스를 부여하지만, 페이지 분할로 인해 "목차" 헤딩과
+     다음 리스트가 서로 다른 .page-content에 흩어질 수 있으므로 여기서
+     전역 재탐색한다. */
+  try { markTocListsInPreview(); } catch(e){ console.warn('markTocListsInPreview:', e); }
 }
 
-/* Heuristic: a block is "splittable" if it's a paragraph or a heading
-   that has no block-level children besides text/inline. */
+/* 뷰어의 모든 .page-content를 돌며 "목차" 헤딩 뒤에 오는 UL/OL(다른 페이지로
+   넘어가도 인접 페이지까지 추적)에 .toc-list 클래스를 부여한다. */
+function markTocListsInPreview(){
+  const contents = document.querySelectorAll('#book .page-content');
+  if (!contents.length) return;
+  /* 문서 순서로 평탄화된 블록 리스트 만들기 */
+  const flat = [];
+  contents.forEach(c => {
+    Array.from(c.children).forEach(el => {
+      if (el.tagName === 'SECTION'){
+        Array.from(el.children).forEach(e2 => flat.push(e2));
+      } else flat.push(el);
+    });
+  });
+  let tocSeen = false;
+  for (const el of flat){
+    const tag = el.tagName;
+    if (/^H[1-6]$/.test(tag)){
+      const t = (el.textContent || '').trim();
+      tocSeen = (t === '목차' || t === '차례');
+      continue;
+    }
+    if (tocSeen && (tag === 'UL' || tag === 'OL')){
+      el.classList.add('toc-list');
+      /* 한 번 부여하면 목차 블록 인식은 다음 헤딩 전까지 유지 */
+    }
+    /* 목차 헤딩 다음에 비-리스트 블록이 나오면 목차 모드 종료 */
+    if (tocSeen && !(tag === 'UL' || tag === 'OL' || tag === 'P' && !el.textContent.trim())){
+      /* 실제 컨텐츠 블록 만나면 그 이후론 아님 */
+      if (tag !== 'UL' && tag !== 'OL' && el.textContent.trim().length > 0 && !/^H[1-6]$/.test(tag)){
+        tocSeen = false;
+      }
+    }
+  }
+}
+
+/* Heuristic: a block is "splittable" if it's a paragraph, a list item,
+   or a UL/OL container. Lists are split per-item to prevent TOC items
+   being lost when a long list exceeds one page. */
 function canSplitBlock(el){
   if (!el) return false;
   const tag = el.tagName;
+  if (tag === 'UL' || tag === 'OL') return true;
   if (tag !== 'P' && tag !== 'LI' && tag !== 'BLOCKQUOTE') return false;
   /* No embedded images/tables that'd be awkward to split. */
   if (el.querySelector('img, table, pre, hr')) return false;
   return true;
 }
 
+/* Split a UL/OL into multiple lists whose heights each fit within maxH.
+   WHY: TOC(목차) lists can have 30+ items; if the whole UL exceeds one
+   page, paginate() used to hold the entire block in one place, which
+   made part of the TOC invisible beyond the page frame. Splitting per-
+   item guarantees every list item is actually rendered. */
+function splitListBlock(el, maxH){
+  const tag = el.tagName;
+  const items = Array.from(el.children).filter(c => c.tagName === 'LI');
+  if (items.length === 0) return [el];
+  const pieces = [];
+  const mkShell = () => {
+    const shell = el.cloneNode(false); /* <ul>/<ol> with same classes/attrs, no children */
+    return shell;
+  };
+  let shell = mkShell();
+  const m = getMeasurer();
+  const measureShell = (sh) => {
+    m.innerHTML = ''; m.appendChild(sh);
+    const h = sh.getBoundingClientRect().height;
+    m.innerHTML = '';
+    return h;
+  };
+  for (const li of items){
+    shell.appendChild(li.cloneNode(true));
+    const h = measureShell(shell);
+    if (h > maxH && shell.children.length > 1){
+      /* last li pushed overflow — pop it into a new shell */
+      const last = shell.lastElementChild;
+      shell.removeChild(last);
+      pieces.push(shell);
+      shell = mkShell();
+      shell.appendChild(last);
+    }
+  }
+  if (shell.children.length > 0) pieces.push(shell);
+  return pieces.length > 0 ? pieces : [el];
+}
+
 /* Split a paragraph-like block into multiple <p>s whose heights each fit
    within `maxH`. Binary-halves text runs to land just under the limit. */
 function splitTextBlock(el, maxH){
+  if (el.tagName === 'UL' || el.tagName === 'OL'){
+    return splitListBlock(el, maxH);
+  }
   const text = el.textContent;
   if (!text || text.length < 20) return [el];
   const words = text.split(/(\s+)/);   /* keep whitespace */
@@ -2189,6 +2352,93 @@ function runAutoClassifyFromToolbar(){
   }
 }
 
+/* ============================================================
+   좌측 사이드바: 커서 위치의 실제 값 실시간 반영
+   ============================================================ */
+let __sbT = 0;
+function scheduleSidebarFromCursor(){
+  clearTimeout(__sbT);
+  __sbT = setTimeout(() => {
+    try { updateSidebarFromCursor(); }
+    catch(e){ console.warn('updateSidebarFromCursor:', e); }
+  }, 60);
+}
+function _getCursorDomNode(ed){
+  try{
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0){
+      let n = sel.focusNode;
+      if (n && n.nodeType === 3) n = n.parentElement;
+      if (n && n.closest && n.closest('#editor')) return n;
+    }
+    const { from } = ed.state.selection;
+    const dom = ed.view.domAtPos(from);
+    let el = dom.node;
+    if (el && el.nodeType === 3) el = el.parentElement;
+    if (el && el.closest && el.closest('#editor')) return el;
+  }catch(e){}
+  return null;
+}
+function _matchFontFamilyOption(cs){
+  const sel = document.getElementById('sel-font');
+  if (!sel) return;
+  const want = (cs || '').replace(/['"]/g,'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  if (!want.length) return;
+  for (const opt of sel.options){
+    const has = (opt.value || '').replace(/['"]/g,'').split(',').map(s=>s.trim().toLowerCase());
+    if (want.some(w => has.includes(w))){ sel.value = opt.value; return; }
+  }
+}
+function _setInputIfDifferent(id, val, decimals){
+  const el = document.getElementById(id);
+  if (!el || document.activeElement === el) return;
+  const cur = parseFloat(el.value);
+  const n = Number(val);
+  if (!isFinite(n)) return;
+  const rounded = decimals != null ? Number(n.toFixed(decimals)) : n;
+  if (cur === rounded) return;
+  el.value = rounded;
+}
+function updateSidebarFromCursor(){
+  if (!window.editor) return;
+  const node = _getCursorDomNode(editor);
+  if (!node) return;
+  const cs = getComputedStyle(node);
+  const blockEl = (() => {
+    let p = node;
+    while (p && p !== document && !['P','H1','H2','H3','H4','LI','BLOCKQUOTE','DIV'].includes(p.tagName)) p = p.parentElement;
+    return p && p.tagName ? p : node;
+  })();
+  const bcs = getComputedStyle(blockEl);
+
+  /* 서체 */
+  _matchFontFamilyOption(cs.fontFamily);
+  /* 크기 (px → pt: 1pt = 1.333px) */
+  const pxSize = parseFloat(cs.fontSize);
+  if (isFinite(pxSize)) _setInputIfDifferent('in-size', pxSize / 1.3333333333, 1);
+  /* 행간 (line-height / font-size) */
+  let lh = cs.lineHeight;
+  if (lh && lh !== 'normal'){
+    const lhPx = parseFloat(lh);
+    if (isFinite(lhPx) && isFinite(pxSize) && pxSize > 0){
+      _setInputIfDifferent('in-lead', lhPx / pxSize, 2);
+    }
+  }
+  /* 자간 ‰ (letter-spacing은 em이 아니라 px로 computed — 1em = 1.0 × font-size) */
+  const lsPx = parseFloat(cs.letterSpacing);
+  if (isFinite(lsPx) && isFinite(pxSize) && pxSize > 0){
+    _setInputIfDifferent('in-tracking', Math.round((lsPx / pxSize) * 1000));
+  } else {
+    _setInputIfDifferent('in-tracking', 0);
+  }
+  /* 단락 간격 (margin-bottom px → pt) */
+  const mbPx = parseFloat(bcs.marginBottom);
+  if (isFinite(mbPx)) _setInputIfDifferent('in-para-gap', mbPx / 1.3333333333, 0);
+  /* 들여쓰기 */
+  const tiPx = parseFloat(bcs.textIndent);
+  if (isFinite(tiPx)) _setInputIfDifferent('in-indent', tiPx / 1.3333333333, 0);
+}
+
 function updateToolbar(ed){
   const map = {
     bold: ed.isActive('bold'),
@@ -2211,6 +2461,7 @@ function updateToolbar(ed){
   });
 }
 updateToolbar(editor);
+setTimeout(() => { try { updateSidebarFromCursor(); } catch(e){} }, 200);
 
 /* ============================================================
    Image insertion + SlickWrap-style polygon shape-outside
@@ -2360,16 +2611,8 @@ $('#img-ok').addEventListener('click', ()=>{
   pendingImageUrl = null;
 });
 
-$('#editor').addEventListener('click', e=>{
-  const img = e.target.closest('img');
-  if (!img) return;
-  const current = img.classList.contains('float-left') ? 'float-left'
-                : img.classList.contains('float-right') ? 'float-right' : 'center';
-  const next = current === 'center' ? 'float-left' : current === 'float-left' ? 'float-right' : 'center';
-  setImagePosition(img, next);
-  const label = next === 'center' ? '가운데' : next === 'float-left' ? '왼쪽 (SlickWrap 감싸기)' : '오른쪽 (SlickWrap 감싸기)';
-  toast(`이미지 배치: ${label}`, 'info');
-});
+/* 이미지 클릭 → 좌/우 토글 기능은 사용자 요청(2026-04-17)으로 제거.
+   기타 크기/배치 오버레이(float popup, image-overlay 등) 기능은 유지. */
 
 /* Compute polygon for any images that arrive via paste / uploaded document */
 function rescanEditorImages(){
@@ -3944,12 +4187,16 @@ function extractPlainText(node){
 /* ═══════════════════════════════════════════════════════════════
    키워드 기반 자동 분류 엔진 — Claude 없이 즉시 실행
    ───────────────────────────────────────────────────────────────
-   규칙
-    · H1 : '저자 소개', '목차', '참고문헌', '머리말', '서문',
-           '헌사', '추천사', '부록', '색인/찾아보기', '감사의 글' 등
-    · H2 : 숫자/알파벳/로마자로 시작(=번호 매겨진 장·절 제목)
-    · H3 : '그림 N', '표 N', '사진 N', '도 N' (도판 캡션)
-   요구: "상단 2행 / 하단 1행" — CSS에서 이미 처리됨
+   규칙 (v2 — 2026-04 재설계)
+    · H1     : '저자 소개', '목차', '참고문헌', '머리말', '서문',
+               '헌사', '추천사', '부록', '색인/찾아보기', '감사의 글' 등
+    · H2     : 숫자 접두  — '제N장/절/편/부', 'N.', '1.1', 'Chapter N'
+    · H3     : 알파벳·로마자 접두 — 'A.', 'B.', 'I.', 'II.', 'Part III'
+    · FIG    : 도판 캡션 '그림 N', '표 N', 'Figure N' — 본문 크기 + 굵게,
+               위에 "📷 이미지 첨부" 라벨 자동 삽입
+    · CALLOUT: 블릿(· • ● ▪ □ ○ ◇ ■ ◆) 또는 소문자 로마자(i. ii. iii.)
+               → 볼드 + 회색 음영 + 상단 2행 / 하단 1행 여백
+                 (상단에 이미 빈 행이 있으면 여백 추가 생략)
    ═══════════════════════════════════════════════════════════════ */
 const H1_EXACT = new Set([
   '저자 소개','저자소개','저자 약력','저자약력','역자 소개','역자소개',
@@ -3965,72 +4212,169 @@ const H1_EXACT = new Set([
 ]);
 const H1_PREFIX = ['저자 소개','저자소개','역자 소개','역자소개','감사의 글','감사의글','추천의 글','추천의글'];
 
+/* 자동분류가 사용하는 하이라이트 색 — CSS에서 매칭하여 음영/라벨 스타일 적용 */
+const CLF_GRAY   = '#EEEEEE';   /* callout 음영 */
+const CLF_BLUE   = '#DDEBF7';   /* "이미지 첨부" 라벨 */
+
 function classifyByKeyword(raw){
   const t = (raw || '').replace(/\s+/g,' ').trim();
   if (!t) return null;
-  if (t.length > 120) return null; // 긴 블록은 본문
+  if (t.length > 140) return null; // 긴 블록은 본문으로 유지
 
   /* H1: 주요 섹션 이름 (정확 일치 또는 그 단어로 시작) */
   if (H1_EXACT.has(t)) return 'h1';
   if (H1_PREFIX.some(w => t === w || t.startsWith(w + ' ') || t.startsWith(w + ':') || t.startsWith(w + '—') || t.startsWith(w + '-'))) return 'h1';
 
-  /* H3: 도판 캡션 "그림 1", "그림 2.5", "<그림 2>", "표 3-1", "Figure 2.5" */
-  if (t.length <= 80 && /^[<\[\(〈【]?\s*(그림|표|사진|도표|도|Figure|Fig\.?|Table|Photo)\s*[0-9IVXLCMⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/i.test(t)){
-    return 'h3';
+  /* FIG: 도판 캡션 — heading이 아닌 본문 굵게. 위에 라벨 자동 추가 */
+  if (t.length <= 100 && /^[<\[\(〈【]?\s*(그림|표|사진|도표|도|Figure|Fig\.?|Table|Photo)\s*[0-9IVXLCMⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/i.test(t)){
+    return 'fig';
   }
 
-  /* H2: "제N장/편/절/부", "N. 제목", "1.1 제목", "A. 제목" 등 (헤딩 길이 제한) */
-  if (t.length <= 80){
+  if (t.length <= 100){
+    /* H2: 숫자 접두 */
     if (/^제\s*\d+\s*(장|절|편|부|항)/.test(t)) return 'h2';
-    if (/^Chapter\s+\d+/i.test(t)) return 'h2';
-    if (/^Part\s+[IVX\d]+/i.test(t)) return 'h2';
     if (/^\d+(\.\d+){0,3}\.?\s+\S/.test(t)) return 'h2';
-    if (/^[A-Z](\.\d+){0,3}\.?\s+\S/.test(t)) return 'h2';
-    if (/^[IVXLCM]+\.\s+\S/.test(t)) return 'h2';
+    if (/^Chapter\s+\d+/i.test(t)) return 'h2';
+    if (/^Part\s+\d+/i.test(t)) return 'h2';
+    /* H3: 대문자 알파벳·로마자 접두 */
+    if (/^[A-Z](\.\d+){0,3}\.?\s+\S/.test(t)) return 'h3';
+    if (/^[IVXLCM]+\.\s+\S/.test(t)) return 'h3';
+    if (/^Part\s+[IVX]+/i.test(t)) return 'h3';
+    /* CALLOUT: 블릿 또는 소문자 로마자 접두 */
+    if (/^[•·●■◆▪□◇○▶■]/.test(t)) return 'callout';
+    if (/^[ivxlcm]+\s*[\.\)]\s+\S/.test(t) && t.length <= 80) return 'callout';
   }
   return null;
 }
 
-/* JSON(docJson)에 키워드 규칙 적용 — 본문 한 글자도 바꾸지 않고 type/level만 교체 */
-function applyKeywordRules(docJson){
-  if (!docJson || !Array.isArray(docJson.content)) return docJson;
-  const newContent = docJson.content.map(node => {
-    if (!node || typeof node !== 'object') return node;
-    /* 이미 heading 상위 레벨로 선언됐으면 건드리지 않음 (수동 지정 존중) */
-    const type = node.type;
-    if (type !== 'paragraph' && type !== 'heading') return node;
-    /* 이미지만 포함된 블록은 패스 */
-    const hasImage = Array.isArray(node.content) && node.content.some(c => c && c.type === 'image');
-    if (hasImage) return node;
-    const text = extractPlainText(node);
-    const tag = classifyByKeyword(text);
-    if (!tag) return node;
-    const level = tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3;
-    const inline = Array.isArray(node.content) ? node.content : [];
-    return { type:'heading', attrs:{ level }, content: inline };
+/* 같은 type의 기존 mark를 새 mark로 교체(혹은 추가) — TipTap mark 병합 헬퍼 */
+function mergeMark(existing, add){
+  const arr = Array.isArray(existing) ? [...existing] : [];
+  const idx = arr.findIndex(m => m && m.type === add.type);
+  if (idx >= 0) arr[idx] = add; else arr.push(add);
+  return arr;
+}
+/* 인라인 배열 전체 텍스트 노드에 mark 덧칠 */
+function markAllInline(inline, marks){
+  if (!Array.isArray(inline)) return inline;
+  return inline.map(c => {
+    if (!c || typeof c !== 'object') return c;
+    if (c.type !== 'text') return c;
+    let ms = Array.isArray(c.marks) ? c.marks : [];
+    for (const m of marks) ms = mergeMark(ms, m);
+    return { ...c, marks: ms };
   });
-  return { ...docJson, content: newContent };
+}
+/* 빈 문단 감지 */
+function isEmptyPara(node){
+  if (!node || node.type !== 'paragraph') return false;
+  const c = node.content;
+  if (!Array.isArray(c) || c.length === 0) return true;
+  return c.every(x => x?.type === 'text' && !String(x.text || '').trim());
 }
 
-/* HTML 조각에 동일 규칙 적용 — 붙여넣기 훅용 */
+/* JSON(docJson)에 키워드 규칙 적용 — 본문 한 글자도 바꾸지 않고 태그/mark만 변경 */
+function applyKeywordRules(docJson){
+  if (!docJson || !Array.isArray(docJson.content)) return docJson;
+  const emptyPara = () => ({ type:'paragraph', content:[] });
+  const figLabel  = () => ({
+    type:'paragraph',
+    attrs: docJson.content[0]?.attrs ? undefined : undefined,
+    content:[{ type:'text', text:'📷 이미지 첨부', marks:[
+      { type:'italic' },
+      { type:'highlight', attrs:{ color: CLF_BLUE }},
+    ]}],
+  });
+  const out = [];
+  for (let i = 0; i < docJson.content.length; i++){
+    const node = docJson.content[i];
+    if (!node || typeof node !== 'object'){ out.push(node); continue; }
+    const type = node.type;
+    if (type !== 'paragraph' && type !== 'heading'){
+      out.push(node); continue;
+    }
+    /* 이미지만 포함된 블록은 패스 */
+    const hasImage = Array.isArray(node.content) && node.content.some(c => c?.type === 'image');
+    if (hasImage){ out.push(node); continue; }
+
+    const text = extractPlainText(node);
+    const tag = classifyByKeyword(text);
+    if (!tag){ out.push(node); continue; }
+
+    const inline = Array.isArray(node.content) ? node.content : [];
+
+    if (tag === 'h1' || tag === 'h2' || tag === 'h3'){
+      const level = tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3;
+      out.push({ type:'heading', attrs:{ level }, content: inline });
+    }
+    else if (tag === 'fig'){
+      /* 앞에 "이미지 첨부" 라벨 + 본문 크기 굵게 */
+      const lastOut = out[out.length - 1];
+      if (!isEmptyPara(lastOut)) out.push(emptyPara());
+      out.push(figLabel());
+      out.push({
+        type:'paragraph',
+        content: markAllInline(inline, [{ type:'bold' }]),
+      });
+    }
+    else if (tag === 'callout'){
+      /* 상단 여백 2행(이미 빈 행이면 생략) + 회색 음영 + 볼드 + 하단 1행 */
+      const lastOut = out[out.length - 1];
+      if (!isEmptyPara(lastOut)){
+        out.push(emptyPara(), emptyPara());
+      }
+      out.push({
+        type:'paragraph',
+        content: markAllInline(inline, [
+          { type:'bold' },
+          { type:'highlight', attrs:{ color: CLF_GRAY }},
+        ]),
+      });
+      out.push(emptyPara());
+    }
+  }
+  return { ...docJson, content: out };
+}
+
+/* HTML 조각에 동일 규칙 적용 — 붙여넣기 훅용
+   (fig/callout은 <p><b>...</b></p> + 표식 클래스로 표현 — TipTap에 전달되면
+    bold mark로 남고, callout 회색 음영은 붙여넣기 이후 applyKeywordRules가
+    JSON 단계에서 다시 덧칠한다) */
 function applyKeywordRulesToHtml(html){
   if (!html) return html;
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
   const topNodes = Array.from(tmp.children);
   topNodes.forEach(node => {
-    /* paragraph 또는 일반 block만 대상 */
     const tn = node.tagName;
     if (!/^(P|DIV|SPAN)$/i.test(tn)) return;
-    /* 이미지 포함 블록은 패스 */
     if (node.querySelector('img')) return;
     const text = (node.textContent || '').trim();
     const tag = classifyByKeyword(text);
     if (!tag) return;
-    const h = document.createElement(tag);
-    /* inline 내용은 그대로 이동 */
-    while (node.firstChild) h.appendChild(node.firstChild);
-    node.replaceWith(h);
+    if (tag === 'h1' || tag === 'h2' || tag === 'h3'){
+      const h = document.createElement(tag);
+      while (node.firstChild) h.appendChild(node.firstChild);
+      node.replaceWith(h);
+    } else if (tag === 'fig'){
+      const label = document.createElement('p');
+      label.innerHTML = '<em><mark data-color="' + CLF_BLUE + '" style="background:' + CLF_BLUE + '">📷 이미지 첨부</mark></em>';
+      const p = document.createElement('p');
+      const b = document.createElement('strong');
+      while (node.firstChild) b.appendChild(node.firstChild);
+      p.appendChild(b);
+      node.replaceWith(label, p);
+    } else if (tag === 'callout'){
+      const p = document.createElement('p');
+      const b = document.createElement('strong');
+      const mk = document.createElement('mark');
+      mk.setAttribute('data-color', CLF_GRAY);
+      mk.setAttribute('style', 'background:' + CLF_GRAY);
+      while (node.firstChild) mk.appendChild(node.firstChild);
+      b.appendChild(mk);
+      p.appendChild(b);
+      node.replaceWith(p);
+    }
   });
   return tmp.innerHTML;
 }
