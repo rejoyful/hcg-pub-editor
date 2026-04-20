@@ -3,8 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HCG Pub — 학지사 조판 웹 에디터</title>
-<meta name="description" content="레거시 InDesign 조판을 걷어내기 위한 웹 기반 자동 조판 에디터. HWPX·DOCX·PPTX·HTML·MD·TXT·IDML 자동 파싱.">
+<title>HCG typesetting editor</title>
+<meta name="description" content="HCG typesetting editor — 웹 기반 자동 조판 에디터. HWPX·DOCX·PPTX·HTML·MD·TXT·IDML 자동 파싱.">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
 <style>
 /* ============================================================
    Design tokens
@@ -56,7 +58,7 @@ input,select{font-family:inherit;font-size:13px}
 .topbar{
   display:flex;align-items:center;gap:12px;
   padding:0 18px;background:var(--panel);border-bottom:1px solid var(--line);
-  position:sticky;top:0;z-index:20;
+  position:sticky;top:0;z-index:60;
 }
 .brand{font-weight:700;letter-spacing:-.2px;font-size:15px;display:flex;align-items:center;gap:6px}
 .brand small{color:var(--meta);font-weight:400;font-size:12px;margin-left:4px}
@@ -86,7 +88,7 @@ input,select{font-family:inherit;font-size:13px}
 .menu{
   position:absolute;top:calc(100% + 4px);right:0;min-width:220px;
   background:#fff;border:1px solid var(--line);border-radius:var(--radius);
-  box-shadow:var(--shadow);padding:4px;display:none;z-index:50;
+  box-shadow:0 12px 32px rgba(0,0,0,.18);padding:4px;display:none;z-index:200;
 }
 .menu.show{display:block}
 .menu button{
@@ -340,9 +342,8 @@ input,select{font-family:inherit;font-size:13px}
 }
 .toolbar button:hover{background:var(--soft);border-color:var(--line)}
 .toolbar button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
-.toolbar button b{font-weight:700}
-.toolbar button i{font-style:italic}
-.toolbar button u{text-decoration:underline}
+.toolbar button .ph,.toolbar button .ph-bold{font-size:17px;line-height:1;display:inline-block}
+.toolbar button span.tag{font-size:11px;font-weight:700;letter-spacing:.2px}
 
 .sub-top{
   position:sticky;top:0;z-index:30;
@@ -456,7 +457,7 @@ input,select{font-family:inherit;font-size:13px}
 <div class="app">
 
   <header class="topbar">
-    <div class="brand">HCG Pub <small>학지사 조판 에디터</small></div>
+    <div class="brand">HCG typesetting editor</div>
     <input type="text" class="doc-title" id="doc-title" placeholder="원고 제목 (도곽 머리말에 표시)" value="원고 제목">
     <div class="grow"></div>
     <button class="btn" id="btn-new" title="새 문서">새 문서</button>
@@ -577,34 +578,34 @@ input,select{font-family:inherit;font-size:13px}
       <div class="sub-top">
         <div class="toolbar" id="toolbar">
           <div class="grp">
-            <button data-cmd="undo" title="실행 취소 (⌘Z)">↶</button>
-            <button data-cmd="redo" title="다시 실행 (⌘⇧Z)">↷</button>
+            <button data-cmd="undo" title="실행 취소 (⌘Z)"><i class="ph ph-arrow-counter-clockwise"></i></button>
+            <button data-cmd="redo" title="다시 실행 (⌘⇧Z)"><i class="ph ph-arrow-clockwise"></i></button>
           </div>
           <div class="grp">
-            <button data-cmd="h1" title="제목 1">H1</button>
-            <button data-cmd="h2" title="제목 2">H2</button>
-            <button data-cmd="h3" title="제목 3">H3</button>
-            <button data-cmd="p" title="본문">본문</button>
+            <button data-cmd="h1" title="제목 1"><i class="ph ph-text-h-one"></i></button>
+            <button data-cmd="h2" title="제목 2"><i class="ph ph-text-h-two"></i></button>
+            <button data-cmd="h3" title="제목 3"><i class="ph ph-text-h-three"></i></button>
+            <button data-cmd="p" title="본문"><i class="ph ph-paragraph"></i></button>
           </div>
           <div class="grp">
-            <button data-cmd="bold" title="굵게 (⌘B)"><b>B</b></button>
-            <button data-cmd="italic" title="기울임 (⌘I)"><i>I</i></button>
-            <button data-cmd="underline" title="밑줄 (⌘U)"><u>U</u></button>
-            <button data-cmd="strike" title="취소선"><s>S</s></button>
+            <button data-cmd="bold" title="굵게 (⌘B)"><i class="ph ph-text-b"></i></button>
+            <button data-cmd="italic" title="기울임 (⌘I)"><i class="ph ph-text-italic"></i></button>
+            <button data-cmd="underline" title="밑줄 (⌘U)"><i class="ph ph-text-underline"></i></button>
+            <button data-cmd="strike" title="취소선"><i class="ph ph-text-strikethrough"></i></button>
           </div>
           <div class="grp">
-            <button data-cmd="bullet" title="글머리 기호">•</button>
-            <button data-cmd="ordered" title="번호">1.</button>
-            <button data-cmd="quote" title="인용문">"</button>
+            <button data-cmd="bullet" title="글머리 기호"><i class="ph ph-list-bullets"></i></button>
+            <button data-cmd="ordered" title="번호"><i class="ph ph-list-numbers"></i></button>
+            <button data-cmd="quote" title="인용문"><i class="ph ph-quotes"></i></button>
           </div>
           <div class="grp">
-            <button data-cmd="table" title="표 삽입">⊞</button>
-            <button data-cmd="image" title="이미지 삽입">🖼</button>
+            <button data-cmd="table" title="표 삽입"><i class="ph ph-table"></i></button>
+            <button data-cmd="image" title="이미지 삽입"><i class="ph ph-image"></i></button>
           </div>
           <div class="grp">
-            <button data-cmd="align-left" title="왼쪽 정렬">⬅</button>
-            <button data-cmd="align-center" title="가운데 정렬">◎</button>
-            <button data-cmd="align-right" title="오른쪽 정렬">➡</button>
+            <button data-cmd="align-left" title="왼쪽 정렬"><i class="ph ph-text-align-left"></i></button>
+            <button data-cmd="align-center" title="가운데 정렬"><i class="ph ph-text-align-center"></i></button>
+            <button data-cmd="align-right" title="오른쪽 정렬"><i class="ph ph-text-align-right"></i></button>
           </div>
         </div>
       </div>
@@ -1045,6 +1046,47 @@ async function handleUploadedFile(file){
 /* ============================================================
    Tiptap init
    ============================================================ */
+function normalizePastedHtml(html){
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  // Kill script/style/link/meta that HWP / Word clipboards often drag in
+  tmp.querySelectorAll('script, style, link, meta, xml, o\\:p, w\\:sdt').forEach(n=>n.remove());
+  // Unwrap font tags and spans that only carry junk styling
+  tmp.querySelectorAll('font').forEach(f=>{
+    const frag = document.createDocumentFragment();
+    while (f.firstChild) frag.appendChild(f.firstChild);
+    f.replaceWith(frag);
+  });
+  // Strip inline style except text-align, keep the editor's own typography in charge
+  tmp.querySelectorAll('[style]').forEach(n=>{
+    const s = n.getAttribute('style') || '';
+    const ta = s.match(/text-align\s*:\s*(left|center|right|justify)/i);
+    n.removeAttribute('style');
+    if (ta) n.style.textAlign = ta[1];
+  });
+  // Drop class names that collide with our own (but keep img float classes)
+  tmp.querySelectorAll('[class]').forEach(n=>{
+    if (n.tagName === 'IMG'){
+      const cls = (n.className || '').split(/\s+/).filter(c=>/^(float-left|float-right|center)$/.test(c));
+      if (cls.length) n.className = cls.join(' '); else n.removeAttribute('class');
+    } else {
+      n.removeAttribute('class');
+    }
+  });
+  // Collapse totally-empty paragraphs that HWP uses for spacing
+  tmp.querySelectorAll('p').forEach(p=>{
+    if (!p.textContent.trim() && !p.querySelector('img,br,hr,table')) p.remove();
+  });
+  // Hoist single-child div wrappers up to paragraphs
+  tmp.querySelectorAll('div').forEach(d=>{
+    if (d.children.length === 0 && d.textContent.trim()){
+      const p = document.createElement('p'); p.textContent = d.textContent;
+      d.replaceWith(p);
+    }
+  });
+  return tmp.innerHTML;
+}
+
 const editor = new Editor({
   element: $('#editor'),
   extensions: [
@@ -1058,6 +1100,9 @@ const editor = new Editor({
     TableRow, TableCell, TableHeader,
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
   ],
+  editorProps: {
+    transformPastedHTML(html){ return normalizePastedHtml(html); }
+  },
   content: `
     <h1>학지사 조판 에디터 — HCG Pub</h1>
     <p>환영합니다. 이곳이 <strong>곧 책 페이지</strong>입니다. 별도 프리뷰 없이, 지금 보이는 모습이 그대로 PDF로 출력됩니다.</p>
@@ -1115,20 +1160,61 @@ let _reflowTimer = null;
 function scheduleReflow(){
   if (_reflowTimer) cancelAnimationFrame(_reflowTimer);
   _reflowTimer = requestAnimationFrame(()=>{
-    _reflowTimer = null;
-    reflow();
+    _reflowTimer = requestAnimationFrame(()=>{
+      _reflowTimer = null;
+      reflow();
+    });
   });
+}
+
+/** Measure editor content height using its last rendered block's offsetTop+offsetHeight
+ *  for a tight bound, then fall back to scrollHeight. */
+function measureEditorContentH(){
+  const pm = document.querySelector('#editor .ProseMirror');
+  if (!pm) return 0;
+  // Find last non-empty child block
+  const children = pm.children;
+  let lastBottom = 0;
+  for (let i = children.length - 1; i >= 0; i--){
+    const c = children[i];
+    const r = c.getBoundingClientRect();
+    if (r.height > 0 && (c.textContent.trim().length > 0 || c.querySelector('img,table,hr'))){
+      const pmTop = pm.getBoundingClientRect().top;
+      lastBottom = (r.bottom - pmTop);
+      break;
+    }
+  }
+  // scrollHeight is an over-estimate if the pm has a min-height taller than actual
+  // offset-based measurement is tighter
+  const scroll = pm.scrollHeight;
+  return Math.max(10, lastBottom > 0 ? Math.min(lastBottom + 4, scroll) : scroll);
 }
 
 function reflow(){
   const pageInnerH = getPageInnerHpx();
-  const fullH = getEditorContentHpx();
+  if (pageInnerH <= 0) return;
+  const fullH = measureEditorContentH();
   let pagesNeeded = Math.max(1, Math.ceil(fullH / pageInnerH));
   if (pagesNeeded % 2 === 1) pagesNeeded += 1;  // always fill a full spread
   const spreadsNeeded = Math.max(1, pagesNeeded / 2);
   syncSpreads(spreadsNeeded);
   updateMirrors();
+  trimEmptyTrailingSpreads(pageInnerH);
   applyHeaderFooter();
+}
+
+/** After content shrinks, drop any trailing spread whose pages show no visible content. */
+function trimEmptyTrailingSpreads(pageInnerH){
+  const book = $('#book');
+  const spreads = Array.from(book.querySelectorAll('.spread'));
+  for (let i = spreads.length - 1; i >= 1; i--){   // never drop spread 0
+    const sp = spreads[i];
+    const leftIdx  = parseInt(sp.querySelector('.page-left')?.dataset.pageIdx  || '0', 10);
+    const fullH = measureEditorContentH();
+    // A page at index N shows content if fullH > N * pageInnerH
+    if (fullH > leftIdx * pageInnerH) break;   // this spread still has content — keep all below
+    sp.remove();
+  }
 }
 
 function syncSpreads(target){
@@ -1758,10 +1844,46 @@ window.addEventListener('keydown', e=>{
 applyPaper('B5');
 applyMargins();
 applyHeaderFooter();
-/* Give Tiptap a moment to mount, then paginate the initial content */
+
+/* Automatic reflow triggers — catch paste, image load, resize, DOM mutations.
+   This is what guarantees the editor's true rendered height drives pagination,
+   instead of a stale scrollHeight measured before layout settles. */
+function installEditorObservers(){
+  const pm = document.querySelector('#editor .ProseMirror');
+  if (!pm){ setTimeout(installEditorObservers, 100); return; }
+
+  // Size changes (fonts loaded, images decoded, content added/removed)
+  const ro = new ResizeObserver(()=>scheduleReflow());
+  ro.observe(pm);
+
+  // Structural mutations (new nodes, attribute changes) — debounced via scheduleReflow's rAF
+  const mo = new MutationObserver(()=>scheduleReflow());
+  mo.observe(pm, { subtree: true, childList: true, characterData: true });
+
+  // Image load completions (some imgs report scrollHeight wrong until decoded)
+  pm.addEventListener('load', e=>{
+    if (e.target.tagName === 'IMG'){
+      scheduleReflow();
+      if (e.target.classList.contains('float-left') || e.target.classList.contains('float-right')){
+        applyImageShape(e.target);
+      }
+    }
+  }, true);
+
+  // Paste — run reflow on the NEXT tick, then once more after images may have loaded
+  pm.addEventListener('paste', ()=>{
+    setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 0);
+    setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 200);
+    setTimeout(()=>{ scheduleReflow(); }, 800);
+  });
+}
+installEditorObservers();
+
+/* Initial paginate after Tiptap mounts */
 setTimeout(()=>{ rescanEditorImages(); scheduleReflow(); }, 80);
+setTimeout(()=>{ scheduleReflow(); }, 400);
 setStatus('에디터 준비 완료', 'ok');
-console.log('[HCG Pub] ready');
+console.log('[HCG typesetting editor] ready');
 </script>
 
 </body>
