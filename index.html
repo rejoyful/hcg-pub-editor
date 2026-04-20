@@ -102,15 +102,24 @@ input,select{font-family:inherit;font-size:13px}
 .menu button:hover{background:var(--soft)}
 .menu button small{color:var(--meta);font-size:11px;margin-left:auto}
 
-/* Main layout */
-.main{display:grid;grid-template-columns:280px 1fr;overflow:hidden}
+/* Main layout — sidebar is position:fixed so it stays visible while the
+   stage scrolls. The grid keeps the column reserved so the stage starts
+   at the correct x-offset. */
+.main{display:grid;grid-template-columns:280px 1fr;overflow:hidden;position:relative}
 
 /* ============================================================
-   Sidebar
+   Sidebar — fully fixed on the left (like app navigation)
    ============================================================ */
 .side{
+  position:fixed;
+  left:0;
+  top:52px;     /* below topbar */
+  bottom:22px;  /* above statusbar */
+  width:280px;
   background:var(--panel);border-right:1px solid var(--line);
   overflow-y:auto;padding:14px 16px 40px;
+  z-index:30;
+  box-sizing:border-box;
 }
 .side h3{
   font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
@@ -268,43 +277,39 @@ input,select{font-family:inherit;font-size:13px}
   left:2px;top:50%;width:3px;height:42px;
   transform:translateY(-50%);
 }
-/* Dock mode: floating (draggable window) */
+/* Dock mode: external popup window
+   When in "float" mode the in-page #edit-pane collapses into a small
+   status bar that shows "편집 창이 외부 창에 열려 있습니다" and a
+   "되돌리기" button. The real editor lives inside a browser popup
+   (window.open) so dual-monitor users can move it to a second screen. */
 #edit-pane.dock-float{
-  left:var(--edit-float-x, 20%);
-  top:var(--edit-float-y, 120px);
-  right:auto;bottom:auto;
-  width:var(--edit-float-w, 640px);
-  height:var(--edit-float-h, 380px);
-  max-height:none;min-height:0;
-  border:2px solid var(--accent);border-radius:8px;
-  box-shadow:0 20px 60px rgba(0,0,0,.22), 0 4px 12px rgba(0,0,0,.12);
-  overflow:hidden;
+  left:280px;right:0;bottom:22px;top:auto;
+  height:56px;min-height:56px;max-height:56px;
+  background:linear-gradient(180deg,#fff,#fafaf5);
+  border-top:2px dashed var(--accent);
+  box-shadow:0 -4px 12px rgba(0,0,0,.04);
 }
-#edit-pane.dock-float .edit-resize{display:none}
-#edit-pane.dock-float .edit-head{cursor:move;user-select:none}
-#edit-pane.dock-float::after{
-  content:"";position:absolute;right:0;bottom:0;width:14px;height:14px;
-  cursor:nwse-resize;
-  background:linear-gradient(135deg, transparent 50%, var(--line) 50%, var(--line) 60%, transparent 60%, transparent 70%, var(--line) 70%, var(--line) 80%, transparent 80%);
-  z-index:5;
+#edit-pane.dock-float .edit-body,
+#edit-pane.dock-float .edit-resize{display:none !important}
+#edit-pane.dock-float .edit-hint{
+  color:var(--accent);font-weight:600;font-size:12px;
 }
-/* Stage padding removed when dock is not at bottom */
-body.dock-mode-right .stage{padding-bottom:60px !important}
-body.dock-mode-right .main{grid-template-columns:280px 1fr var(--edit-dock-w, 480px) !important;}
-body.dock-mode-right #edit-pane{position:static;border:0;box-shadow:none}
-body.dock-mode-right #edit-pane{grid-column:3;height:auto;max-height:none}
-body.dock-mode-float .stage{padding-bottom:60px !important}
+/* Stage padding adjustments per dock mode */
+body.dock-mode-right .stage{padding-bottom:60px !important;padding-right:calc(var(--edit-dock-w, 480px) + 32px) !important}
+body.dock-mode-right #edit-pane{}
+body.dock-mode-float .stage{padding-bottom:90px !important}
 
 /* Dock action toolbar icons */
-#edit-pane .dock-modes{display:inline-flex;gap:2px;margin-right:6px}
+#edit-pane .dock-modes{display:inline-flex;gap:3px;margin-right:6px;flex:0 0 auto}
 #edit-pane .dock-modes button{
-  width:26px;height:24px;padding:0;
-  background:transparent;border:1px solid transparent;
+  width:28px;height:26px;padding:0;
+  background:transparent;border:1px solid var(--line);
   border-radius:4px;color:var(--meta);cursor:pointer;
   display:inline-flex;align-items:center;justify-content:center;
   font-size:13px;
 }
-#edit-pane .dock-modes button:hover{background:var(--soft);color:var(--ink)}
+#edit-pane .dock-modes button svg{display:block;pointer-events:none}
+#edit-pane .dock-modes button:hover{background:var(--soft);color:var(--ink);border-color:var(--mute)}
 #edit-pane .dock-modes button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
 
 /* Sidebar section collapsible groups */
@@ -719,6 +724,64 @@ body.dock-mode-float .stage{padding-bottom:60px !important}
 .modal .ai-status.err{color:var(--warn)}
 .modal .ai-status.ok{color:var(--ok)}
 
+/* Rich AI progress panel (shown while analysis runs) */
+.ai-progress{
+  display:none;margin:10px 0 12px;padding:14px;
+  border:1px solid var(--accent);border-radius:8px;
+  background:linear-gradient(180deg,#fff, var(--accent-soft));
+}
+.ai-progress.show{display:block;animation:aiFade .25s ease}
+@keyframes aiFade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.ai-progress .ai-head{
+  display:flex;align-items:center;gap:10px;margin-bottom:10px;
+}
+.ai-progress .ai-spinner{
+  width:22px;height:22px;border-radius:50%;
+  border:3px solid var(--accent-soft);
+  border-top-color:var(--accent);
+  animation:spin .8s linear infinite;flex:0 0 auto;
+}
+.ai-progress .ai-title{
+  font-size:12.5px;font-weight:700;color:var(--ink);flex:1;
+}
+.ai-progress .ai-timer{
+  font-size:11px;color:var(--meta);font-variant-numeric:tabular-nums;
+  background:#fff;padding:2px 8px;border-radius:10px;border:1px solid var(--line);
+}
+.ai-phases{
+  display:grid;grid-template-columns:repeat(4, 1fr);gap:6px;
+  margin:0 0 8px;
+}
+.ai-phases .ph-step{
+  position:relative;padding:6px 4px 6px 22px;border-radius:4px;
+  font-size:11px;color:var(--meta);
+  background:#fff;border:1px solid var(--line);
+  line-height:1.2;
+}
+.ai-phases .ph-step::before{
+  content:"";position:absolute;left:6px;top:50%;transform:translateY(-50%);
+  width:10px;height:10px;border-radius:50%;background:var(--line);
+}
+.ai-phases .ph-step.done{color:var(--ok);border-color:var(--ok)}
+.ai-phases .ph-step.done::before{background:var(--ok);box-shadow:0 0 0 2px #fff inset}
+.ai-phases .ph-step.active{color:var(--accent);border-color:var(--accent);font-weight:700;background:#fff}
+.ai-phases .ph-step.active::before{
+  background:var(--accent);
+  animation:aiPulse 1s ease-in-out infinite;
+}
+@keyframes aiPulse{0%,100%{box-shadow:0 0 0 0 var(--accent)}50%{box-shadow:0 0 0 4px rgba(139,110,62,.2)}}
+.ai-progress .ai-detail{
+  font-size:11px;color:var(--ink);min-height:14px;
+  background:#fff;border-radius:4px;padding:6px 8px;border:1px solid var(--line);
+}
+.ai-progress.err{border-color:var(--warn);background:#fff4f0}
+.ai-progress.err .ai-spinner{border-top-color:var(--warn);animation:none;border-color:var(--warn)}
+.ai-progress.ok{border-color:var(--ok);background:#f0faf2}
+.ai-progress.ok .ai-spinner{border-top-color:var(--ok);animation:none;border-color:var(--ok)}
+/* Prevent backdrop-click dismiss while busy */
+.modal.busy{pointer-events:auto}
+.modal.busy .card{box-shadow:0 20px 60px rgba(0,0,0,.3), 0 0 0 3px var(--accent)}
+
 /* ============================================================
    Print / PDF export
    ============================================================ */
@@ -992,9 +1055,15 @@ body.dock-mode-float .stage{padding-bottom:60px !important}
       <span class="edit-label"><i class="ph ph-pencil-simple"></i> 편집</span>
       <span class="edit-hint">이미지는 드래그해서 놓거나 붙여넣기 가능 — 페이지 위에 자유롭게 배치됩니다.</span>
       <span class="dock-modes" role="group" aria-label="도크 위치">
-        <button id="dock-bottom" class="active" title="하단 고정"><i class="ph ph-dock-bottom"></i></button>
-        <button id="dock-right" title="우측 도크"><i class="ph ph-dock-right"></i></button>
-        <button id="dock-float" title="플로팅 창"><i class="ph ph-browser"></i></button>
+        <button id="dock-bottom" class="active" title="하단 고정" aria-label="하단 도크">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="1.5" y="10" width="13" height="5" rx="0.5" fill="currentColor" opacity=".85"/></svg>
+        </button>
+        <button id="dock-right" title="우측 도크" aria-label="우측 도크">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="10" y="1.5" width="5" height="13" rx="0.5" fill="currentColor" opacity=".85"/></svg>
+        </button>
+        <button id="dock-float" title="새 창으로 분리 (듀얼 모니터)" aria-label="새 창으로 분리">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.5" y="3.5" width="10" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 9.5 L13 3 M10 3 H13 V6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </button>
       </span>
       <span class="edit-actions">
         <button class="btn" id="btn-ai-style" title="Claude AI로 제목·소제목·목차 자동 스타일링">
@@ -1046,6 +1115,20 @@ body.dock-mode-float .stage{padding-bottom:60px !important}
       <textarea id="ai-prompt" rows="2" placeholder="예: 번호가 매겨진 항목은 소제목(h3)으로 처리"></textarea>
     </div>
     <div class="ai-status" id="ai-status"></div>
+    <div class="ai-progress" id="ai-progress" role="status" aria-live="polite">
+      <div class="ai-head">
+        <div class="ai-spinner" id="ai-spin"></div>
+        <div class="ai-title" id="ai-progress-title">Claude 분석을 시작합니다…</div>
+        <div class="ai-timer" id="ai-timer">0.0s</div>
+      </div>
+      <div class="ai-phases">
+        <div class="ph-step" data-phase="connect">① 연결</div>
+        <div class="ph-step" data-phase="analyze">② 분석</div>
+        <div class="ph-step" data-phase="verify">③ 검증</div>
+        <div class="ph-step" data-phase="apply">④ 적용</div>
+      </div>
+      <div class="ai-detail" id="ai-progress-detail">대기 중…</div>
+    </div>
     <div class="ai-diff-warn" id="ai-diff-warn" style="display:none"></div>
     <div class="foot">
       <button class="btn" id="ai-cancel">취소</button>
@@ -2496,35 +2579,276 @@ try {
   if (savedW >= 320 && savedW <= window.innerWidth * 0.7){
     document.documentElement.style.setProperty('--edit-dock-w', savedW + 'px');
   }
-  const fw = parseInt(localStorage.getItem('hcg_float_w') || '0', 10);
-  const fh = parseInt(localStorage.getItem('hcg_float_h') || '0', 10);
-  const fx = localStorage.getItem('hcg_float_x') || '';
-  const fy = localStorage.getItem('hcg_float_y') || '';
-  if (fw) document.documentElement.style.setProperty('--edit-float-w', fw + 'px');
-  if (fh) document.documentElement.style.setProperty('--edit-float-h', fh + 'px');
-  if (fx) document.documentElement.style.setProperty('--edit-float-x', fx);
-  if (fy) document.documentElement.style.setProperty('--edit-float-y', fy);
+  /* (legacy float position vars removed — float now uses real popup window) */
 } catch(e){}
 
 function applyDockMode(mode){
+  /* 'float' uses a REAL browser popup (window.open). When clicking the
+     float button, we open the popup and show a compact status bar in
+     the main window. Other modes are in-page docks. */
+  if (mode === 'float'){
+    /* Ensure in-page pane is minimised to the float status bar */
+    editPane.classList.remove('dock-bottom','dock-right');
+    editPane.classList.add('dock-float');
+    document.body.classList.remove('dock-mode-bottom','dock-mode-right');
+    document.body.classList.add('dock-mode-float');
+    for (const [k,b] of Object.entries(dockBtns)){ if (b) b.classList.toggle('active', k === mode); }
+    try { localStorage.setItem('hcg_dock_mode', mode); } catch(e){}
+    /* Update the edit-hint to explain popup */
+    const hint = editPane.querySelector('.edit-hint');
+    if (hint) hint.innerHTML = '<i class="ph ph-arrow-square-out"></i> 편집기가 별도 창에 열렸습니다 — 드래그해서 좌측 모니터로 이동할 수 있어요.';
+    openFloatPopup();
+    setTimeout(scheduleReflow, 80);
+    return;
+  }
+  /* Non-float: close any existing popup & restore in-page layout */
+  closeFloatPopup();
   editPane.classList.remove('dock-bottom','dock-right','dock-float');
   document.body.classList.remove('dock-mode-bottom','dock-mode-right','dock-mode-float');
   editPane.classList.add('dock-' + mode);
   document.body.classList.add('dock-mode-' + mode);
   for (const [k,b] of Object.entries(dockBtns)){ if (b) b.classList.toggle('active', k === mode); }
+  const hint = editPane.querySelector('.edit-hint');
+  if (hint) hint.textContent = '이미지는 드래그해서 놓거나 붙여넣기 가능 — 페이지 위에 자유롭게 배치됩니다.';
   try { localStorage.setItem('hcg_dock_mode', mode); } catch(e){}
   setTimeout(scheduleReflow, 80);
 }
 let initialMode = 'bottom';
 try { initialMode = localStorage.getItem('hcg_dock_mode') || 'bottom'; } catch(e){}
+/* Never auto-restore float mode on fresh load — force bottom */
+if (initialMode === 'float') initialMode = 'bottom';
 applyDockMode(initialMode);
 for (const [k,b] of Object.entries(dockBtns)){
   if (b) b.addEventListener('click', ()=>applyDockMode(k));
 }
 
-/* --- Drag-to-resize (adapts to current dock mode) --- */
+/* ============================================================
+   Float popup window — real OS-level browser window (like DevTools)
+   • Opens a blank same-origin window and injects a minimal editor
+     shell (contenteditable + basic toolbar).
+   • Syncs HTML bidirectionally with the main editor.
+   • Falls back to alert if the browser blocks popups.
+   ============================================================ */
+let _floatWin = null;
+let _floatSyncing = false;
+let _floatSyncHandle = 0;
+
+function openFloatPopup(){
+  if (_floatWin && !_floatWin.closed){ _floatWin.focus(); return; }
+  const w = 900, h = 680;
+  const x = Math.max(0, (screen.width  - w) / 2);
+  const y = Math.max(0, (screen.height - h) / 2);
+  try {
+    _floatWin = window.open('', 'hcg-edit-float',
+      `width=${w},height=${h},left=${x},top=${y},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`);
+  } catch(e){ _floatWin = null; }
+
+  if (!_floatWin){
+    toast('팝업이 차단되었습니다. 브라우저 설정에서 허용해주세요.', 'err');
+    applyDockMode('bottom');
+    return;
+  }
+
+  /* Inject minimal styled shell */
+  const currentHTML = editor ? editor.getHTML() : '';
+  _floatWin.document.open();
+  _floatWin.document.write(`<!doctype html><html lang="ko"><head>
+<meta charset="utf-8"><title>HCG 편집기 — 분리 창</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%;background:#F5F5F2;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR","Malgun Gothic",sans-serif;color:#1A1A1A}
+  .fw-head{display:flex;align-items:center;gap:10px;padding:8px 14px;background:linear-gradient(180deg,#FBFBF8,#fff);border-bottom:1px solid #E5E5DF;position:sticky;top:0;z-index:10}
+  .fw-head .fw-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
+  .fw-head .fw-dot{width:8px;height:8px;border-radius:50%;background:#2E7D32;display:inline-block}
+  .fw-head .fw-hint{flex:1;font-size:11px;color:#6B6B66}
+  .fw-toolbar{display:flex;gap:4px;padding:6px 12px;background:#fff;border-bottom:1px solid #E5E5DF;flex-wrap:wrap}
+  .fw-toolbar button{padding:4px 10px;background:#fff;border:1px solid #E5E5DF;border-radius:4px;cursor:pointer;font-size:12px;color:#1A1A1A}
+  .fw-toolbar button:hover{background:#F5F5F2;border-color:#8B6E3E}
+  .fw-toolbar button.active{background:#1A1A1A;color:#fff;border-color:#1A1A1A}
+  .fw-toolbar .sep{width:1px;background:#E5E5DF;margin:0 4px}
+  .fw-body{padding:22px 32px;max-width:780px;margin:0 auto}
+  .fw-edit{background:#fff;border:1px solid #E5E5DF;border-radius:6px;min-height:calc(100vh - 180px);padding:28px 36px;outline:none;font-size:11pt;line-height:1.75;box-shadow:0 4px 14px rgba(0,0,0,.04)}
+  .fw-edit:focus{border-color:#8B6E3E}
+  .fw-edit h1{font-size:22pt;font-weight:700;margin:0 0 12pt;letter-spacing:-.3px}
+  .fw-edit h2{font-size:16pt;font-weight:700;margin:18pt 0 8pt}
+  .fw-edit h3{font-size:13pt;font-weight:700;margin:14pt 0 6pt}
+  .fw-edit p{margin:0 0 10pt;text-align:justify;word-break:keep-all}
+  .fw-edit img{max-width:100%;border-radius:2pt;vertical-align:middle}
+  .fw-edit blockquote{border-left:3px solid #E5E5DF;padding:2pt 12pt;margin:10pt 0;color:#6B6B66;font-style:italic}
+  .fw-edit.drop-active{outline:3px dashed #8B6E3E;outline-offset:-8px;background:#F5EFE4}
+  .fw-status{position:fixed;bottom:0;left:0;right:0;background:#1A1A1A;color:#E8E8E3;padding:4px 14px;font-size:11px;display:flex;align-items:center;gap:10px}
+  .fw-status .fw-gap{flex:1}
+</style></head><body>
+<div class="fw-head">
+  <span class="fw-dot"></span>
+  <span class="fw-title">HCG 편집기 (분리 창)</span>
+  <span class="fw-hint">자동으로 메인 화면과 동기화됩니다. 듀얼 모니터에서 좌측 화면으로 드래그해보세요.</span>
+</div>
+<div class="fw-toolbar" id="fw-tools">
+  <button data-cmd="bold" title="굵게"><b>B</b></button>
+  <button data-cmd="italic" title="기울임"><i>I</i></button>
+  <button data-cmd="underline" title="밑줄"><u>U</u></button>
+  <span class="sep"></span>
+  <button data-cmd="h1" title="제목1">H1</button>
+  <button data-cmd="h2" title="제목2">H2</button>
+  <button data-cmd="h3" title="제목3">H3</button>
+  <button data-cmd="p" title="본문">본문</button>
+  <span class="sep"></span>
+  <button data-cmd="ul" title="글머리">• 목록</button>
+  <button data-cmd="ol" title="번호">1. 목록</button>
+  <button data-cmd="blockquote" title="인용">“인용”</button>
+  <span class="sep"></span>
+  <button data-cmd="undo">실행취소</button>
+  <button data-cmd="redo">다시실행</button>
+</div>
+<div class="fw-body">
+  <div id="fw-edit" class="fw-edit" contenteditable="true" spellcheck="false"></div>
+</div>
+<div class="fw-status">
+  <span>● 연결됨</span>
+  <span class="fw-gap"></span>
+  <span id="fw-count">0자</span>
+  <span>· 자동 동기화 중</span>
+</div>
+<\script>
+(function(){
+  const edit = document.getElementById('fw-edit');
+  const count = document.getElementById('fw-count');
+  const tools = document.getElementById('fw-tools');
+
+  function updateCount(){
+    count.textContent = (edit.innerText || '').replace(/\\s+/g,' ').trim().length + '자';
+  }
+
+  tools.addEventListener('click', e=>{
+    const b = e.target.closest('button'); if (!b) return;
+    const cmd = b.dataset.cmd;
+    edit.focus();
+    const m = { bold:'bold', italic:'italic', underline:'underline',
+                undo:'undo', redo:'redo',
+                ul:['insertUnorderedList'], ol:['insertOrderedList'],
+                h1:['formatBlock','H1'], h2:['formatBlock','H2'],
+                h3:['formatBlock','H3'], p:['formatBlock','P'],
+                blockquote:['formatBlock','BLOCKQUOTE'] }[cmd];
+    if (!m) return;
+    if (Array.isArray(m)) document.execCommand(m[0], false, m[1] || null);
+    else document.execCommand(m, false, null);
+    sendUp();
+  });
+
+  /* Image drop */
+  edit.addEventListener('dragover', e=>{ e.preventDefault(); edit.classList.add('drop-active'); });
+  edit.addEventListener('dragleave', ()=>edit.classList.remove('drop-active'));
+  edit.addEventListener('drop', e=>{
+    e.preventDefault(); edit.classList.remove('drop-active');
+    const files = Array.from(e.dataTransfer?.files || []).filter(f=>f.type.startsWith('image/'));
+    if (!files.length) return;
+    Promise.all(files.map(f=>new Promise(res=>{
+      const fr = new FileReader();
+      fr.onload = ()=>res(fr.result);
+      fr.readAsDataURL(f);
+    }))).then(urls=>{
+      urls.forEach(u=>{
+        const img = '<p><img src="'+u+'" alt=""></p>';
+        document.execCommand('insertHTML', false, img);
+      });
+      sendUp();
+    });
+  });
+
+  function sendUp(){
+    try {
+      if (window.opener && !window.opener.closed){
+        window.opener.__hcgSyncFromFloat(edit.innerHTML);
+      }
+    } catch(e){}
+    updateCount();
+  }
+  let t = 0;
+  edit.addEventListener('input', ()=>{
+    clearTimeout(t);
+    t = setTimeout(sendUp, 350);
+  });
+
+  /* Expose for main window to push updates down */
+  window.__hcgSyncFromMain = function(html){
+    if (edit.innerHTML !== html) edit.innerHTML = html;
+    updateCount();
+  };
+  /* Notify parent on close */
+  window.addEventListener('beforeunload', ()=>{
+    try { if (window.opener && !window.opener.closed) window.opener.__hcgFloatClosed(); } catch(e){}
+  });
+
+  /* Initial seed */
+  edit.innerHTML = ${JSON.stringify(currentHTML)};
+  updateCount();
+  edit.focus();
+})();
+<\/script></body></html>`);
+  _floatWin.document.close();
+
+  /* Install sync bridges on the main window */
+  window.__hcgSyncFromFloat = function(html){
+    if (_floatSyncing) return;
+    _floatSyncing = true;
+    try {
+      editor.commands.setContent(html, false);
+      setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 40);
+    } finally { _floatSyncing = false; }
+  };
+  window.__hcgFloatClosed = function(){
+    _floatWin = null;
+    /* Auto-revert to bottom dock when popup closes */
+    if (document.body.classList.contains('dock-mode-float')){
+      applyDockMode('bottom');
+      toast('분리 창이 닫혀 하단 도크로 복귀했습니다.', 'info');
+    }
+  };
+
+  /* Poll for close (some browsers don't fire beforeunload reliably) */
+  clearInterval(_floatSyncHandle);
+  _floatSyncHandle = setInterval(()=>{
+    if (!_floatWin || _floatWin.closed){
+      clearInterval(_floatSyncHandle);
+      try { window.__hcgFloatClosed && window.__hcgFloatClosed(); } catch(e){}
+    }
+  }, 500);
+}
+
+function closeFloatPopup(){
+  clearInterval(_floatSyncHandle);
+  if (_floatWin && !_floatWin.closed){
+    try { _floatWin.close(); } catch(e){}
+  }
+  _floatWin = null;
+}
+
+/* Push edits from main editor DOWN to the popup */
+function pushToFloatPopup(){
+  if (_floatSyncing) return;
+  if (!_floatWin || _floatWin.closed) return;
+  try {
+    _floatSyncing = true;
+    const html = editor.getHTML();
+    if (_floatWin.__hcgSyncFromMain) _floatWin.__hcgSyncFromMain(html);
+  } catch(e){} finally { _floatSyncing = false; }
+}
+/* Hook into editor updates (debounced). Must be called after editor is created. */
+if (typeof editor !== 'undefined' && editor && editor.on){
+  let _pushT = 0;
+  editor.on('update', ()=>{
+    clearTimeout(_pushT);
+    _pushT = setTimeout(pushToFloatPopup, 300);
+  });
+}
+
+/* --- Drag-to-resize (adapts to current dock mode; float uses real popup
+   window and doesn't participate in in-page resize) --- */
 let _dockDrag = null;
 editResize.addEventListener('mousedown', e=>{
+  if (editPane.classList.contains('dock-float')) return;  /* no in-page resize in float mode */
   e.preventDefault();
   const mode = [...editPane.classList].find(c => c.startsWith('dock-'));
   _dockDrag = {
@@ -2537,81 +2861,27 @@ editResize.addEventListener('mousedown', e=>{
   document.body.style.userSelect = 'none';
 });
 window.addEventListener('mousemove', e=>{
-  if (_dockDrag){
-    if (_dockDrag.mode === 'dock-right'){
-      const delta = _dockDrag.startX - e.clientX;
-      const w = Math.max(320, Math.min(window.innerWidth * 0.7, _dockDrag.startW + delta));
-      document.documentElement.style.setProperty('--edit-dock-w', w + 'px');
-    } else {
-      const delta = _dockDrag.startY - e.clientY;
-      const h = Math.max(120, Math.min(window.innerHeight * 0.72, _dockDrag.startH + delta));
-      document.documentElement.style.setProperty('--edit-dock-h', h + 'px');
-    }
-    return;
-  }
-  if (_floatDrag){
-    if (_floatDrag.kind === 'move'){
-      const dx = e.clientX - _floatDrag.startX;
-      const dy = e.clientY - _floatDrag.startY;
-      const x = Math.max(0, Math.min(window.innerWidth - 200, _floatDrag.startLeft + dx));
-      const y = Math.max(0, Math.min(window.innerHeight - 80, _floatDrag.startTop + dy));
-      document.documentElement.style.setProperty('--edit-float-x', x + 'px');
-      document.documentElement.style.setProperty('--edit-float-y', y + 'px');
-    } else if (_floatDrag.kind === 'resize'){
-      const dx = e.clientX - _floatDrag.startX;
-      const dy = e.clientY - _floatDrag.startY;
-      const w = Math.max(360, Math.min(window.innerWidth - 20, _floatDrag.startW + dx));
-      const h = Math.max(200, Math.min(window.innerHeight - 20, _floatDrag.startH + dy));
-      document.documentElement.style.setProperty('--edit-float-w', w + 'px');
-      document.documentElement.style.setProperty('--edit-float-h', h + 'px');
-    }
+  if (!_dockDrag) return;
+  if (_dockDrag.mode === 'dock-right'){
+    const delta = _dockDrag.startX - e.clientX;
+    const w = Math.max(320, Math.min(window.innerWidth * 0.7, _dockDrag.startW + delta));
+    document.documentElement.style.setProperty('--edit-dock-w', w + 'px');
+  } else {
+    const delta = _dockDrag.startY - e.clientY;
+    const h = Math.max(120, Math.min(window.innerHeight * 0.72, _dockDrag.startH + delta));
+    document.documentElement.style.setProperty('--edit-dock-h', h + 'px');
   }
 });
 window.addEventListener('mouseup', ()=>{
-  if (_dockDrag){
-    _dockDrag = null;
-    document.body.style.cursor = ''; document.body.style.userSelect = '';
-    try {
-      const r = editPane.getBoundingClientRect();
-      localStorage.setItem('hcg_dock_h', String(Math.round(r.height)));
-      localStorage.setItem('hcg_dock_w', String(Math.round(r.width)));
-    } catch(e){}
-    setTimeout(scheduleReflow, 80);
-  }
-  if (_floatDrag){
-    _floatDrag = null;
-    document.body.style.cursor = ''; document.body.style.userSelect = '';
-    try {
-      const r = editPane.getBoundingClientRect();
-      localStorage.setItem('hcg_float_w', String(Math.round(r.width)));
-      localStorage.setItem('hcg_float_h', String(Math.round(r.height)));
-      localStorage.setItem('hcg_float_x', String(Math.round(r.left)) + 'px');
-      localStorage.setItem('hcg_float_y', String(Math.round(r.top)) + 'px');
-    } catch(e){}
-    setTimeout(scheduleReflow, 80);
-  }
-});
-
-/* --- Floating window: drag by header, resize handle at bottom-right --- */
-let _floatDrag = null;
-editHead.addEventListener('mousedown', e=>{
-  if (!editPane.classList.contains('dock-float')) return;
-  /* ignore clicks on buttons inside the head */
-  if (e.target.closest('button, input, select, .ph')) return;
-  const r = editPane.getBoundingClientRect();
-  _floatDrag = { kind:'move', startX:e.clientX, startY:e.clientY, startLeft:r.left, startTop:r.top };
-  document.body.style.cursor = 'move'; document.body.style.userSelect = 'none';
-  e.preventDefault();
-});
-editPane.addEventListener('mousedown', e=>{
-  if (!editPane.classList.contains('dock-float')) return;
-  const r = editPane.getBoundingClientRect();
-  /* Detect bottom-right 14×14 resize gripper */
-  if (e.clientX >= r.right - 14 && e.clientY >= r.bottom - 14){
-    _floatDrag = { kind:'resize', startX:e.clientX, startY:e.clientY, startW:r.width, startH:r.height };
-    document.body.style.cursor = 'nwse-resize'; document.body.style.userSelect = 'none';
-    e.preventDefault(); e.stopPropagation();
-  }
+  if (!_dockDrag) return;
+  _dockDrag = null;
+  document.body.style.cursor = ''; document.body.style.userSelect = '';
+  try {
+    const r = editPane.getBoundingClientRect();
+    localStorage.setItem('hcg_dock_h', String(Math.round(r.height)));
+    localStorage.setItem('hcg_dock_w', String(Math.round(r.width)));
+  } catch(e){}
+  setTimeout(scheduleReflow, 80);
 });
 
 editToggle.addEventListener('click', ()=>{
@@ -2809,6 +3079,59 @@ function aiShowDiffWarn(html){
   aiDiffWarn.innerHTML = html || '';
 }
 
+/* ---- Rich progress panel state machine ---- */
+const aiProg       = $('#ai-progress');
+const aiProgTitle  = $('#ai-progress-title');
+const aiProgDetail = $('#ai-progress-detail');
+const aiTimer      = $('#ai-timer');
+let _aiTimerStart = 0, _aiTimerHandle = 0;
+
+const AI_PHASE_LABELS = {
+  connect: { title:'API에 연결 중입니다', detail:'Anthropic 서버에 요청을 보내고 있습니다…' },
+  analyze: { title:'Claude가 본문을 분석하고 있습니다', detail:'제목·소제목·목차·머리글 등 역할을 분류 중입니다. 본문은 변경되지 않습니다.' },
+  verify : { title:'본문 보존 여부를 검증 중입니다', detail:'원문과 AI 응답을 문자 단위로 비교해 내용 손실이 없는지 확인합니다.' },
+  apply  : { title:'편집기에 결과를 적용 중입니다', detail:'페이지 재조판을 진행합니다.' },
+};
+function aiProgressShow(){
+  aiProg.className = 'ai-progress show';
+  aiModal.classList.add('busy');
+  aiProg.querySelectorAll('.ph-step').forEach(s=>s.classList.remove('done','active'));
+  aiProgTitle.textContent = '준비 중…';
+  aiProgDetail.textContent = '대기 중…';
+  _aiTimerStart = Date.now();
+  clearInterval(_aiTimerHandle);
+  _aiTimerHandle = setInterval(()=>{
+    const s = ((Date.now() - _aiTimerStart) / 1000).toFixed(1);
+    aiTimer.textContent = s + 's';
+  }, 100);
+}
+function aiProgressPhase(phase){
+  const steps = Array.from(aiProg.querySelectorAll('.ph-step'));
+  let hit = false;
+  for (const s of steps){
+    const p = s.dataset.phase;
+    if (p === phase){ s.classList.add('active'); s.classList.remove('done'); hit = true; }
+    else if (!hit){ s.classList.add('done'); s.classList.remove('active'); }
+    else { s.classList.remove('done','active'); }
+  }
+  const lbl = AI_PHASE_LABELS[phase];
+  if (lbl){ aiProgTitle.textContent = lbl.title; aiProgDetail.textContent = lbl.detail; }
+}
+function aiProgressFinish(kind, msg){
+  aiProg.querySelectorAll('.ph-step').forEach(s=>{ s.classList.add('done'); s.classList.remove('active'); });
+  aiProg.classList.remove('show');
+  aiProg.classList.add('show', kind === 'err' ? 'err' : 'ok');
+  aiProgTitle.textContent = kind === 'err' ? '중단되었습니다' : '완료되었습니다';
+  if (msg) aiProgDetail.textContent = msg;
+  clearInterval(_aiTimerHandle);
+  aiModal.classList.remove('busy');
+}
+function aiProgressHide(){
+  aiProg.classList.remove('show','err','ok');
+  clearInterval(_aiTimerHandle);
+  aiModal.classList.remove('busy');
+}
+
 /* Populate model dropdown — fetch /v1/models when a key is available,
    otherwise use fallback list. Sonnet is default selection. */
 async function populateAiModels(apiKey){
@@ -2874,9 +3197,23 @@ btnAi.addEventListener('click', async ()=>{
 aiReloadModels.addEventListener('click', ()=>populateAiModels(aiKeyInp.value.trim()));
 aiKeyInp.addEventListener('change', ()=>populateAiModels(aiKeyInp.value.trim()));
 
-$('#ai-cancel').addEventListener('click', ()=>aiModal.classList.remove('show'));
+$('#ai-cancel').addEventListener('click', ()=>{
+  if (aiModal.classList.contains('busy')){
+    toast('AI 분석이 진행 중입니다 — 완료 후 닫아주세요', 'info');
+    return;
+  }
+  aiProgressHide();
+  aiModal.classList.remove('show');
+});
+/* Backdrop click: only dismiss when NOT busy (prevents losing progress mid-analysis) */
 aiModal.addEventListener('click', e=>{
-  if (e.target === aiModal) aiModal.classList.remove('show');
+  if (e.target !== aiModal) return;
+  if (aiModal.classList.contains('busy')){
+    toast('AI 분석이 진행 중입니다 — 잠시만 기다려주세요', 'info');
+    return;
+  }
+  aiProgressHide();
+  aiModal.classList.remove('show');
 });
 
 $('#ai-apply').addEventListener('click', async ()=>{
@@ -2895,13 +3232,19 @@ $('#ai-apply').addEventListener('click', async ()=>{
     return;
   }
 
-  aiSetStatus('Claude가 본문을 분석하고 있습니다… (본문은 절대 변경되지 않습니다)', 'busy');
+  aiSetStatus('');
   aiShowDiffWarn('');
+  aiProgressShow();
+  aiProgressPhase('connect');
   $('#ai-apply').disabled = true;
+  $('#ai-cancel').textContent = '분석 중…';
 
   const snapshot = editor.getJSON(); // rollback safety net
 
   try {
+    /* Phase: analyze (while the fetch is in-flight) */
+    setTimeout(()=>aiProgressPhase('analyze'), 400);
+
     const styled = await callClaudeForAutoStyle({
       apiKey: key,
       model,
@@ -2911,7 +3254,8 @@ $('#ai-apply').addEventListener('click', async ()=>{
       userDirective: aiPrompt.value.trim(),
     });
 
-    /* VERIFY: extract plaintext from Claude's HTML and compare to original. */
+    /* Phase: verify */
+    aiProgressPhase('verify');
     const check = verifyTextPreserved(plainBefore, styled);
     if (!check.ok){
       editor.commands.setContent(snapshot, false);
@@ -2920,22 +3264,27 @@ $('#ai-apply').addEventListener('click', async ()=>{
         `원본: ${check.beforeLen}자 · AI 응답: ${check.afterLen}자 · 손실: ${check.beforeLen - check.afterLen}자<br>` +
         `모델이 본문을 요약·생략했을 수 있습니다. 더 작은 단위로 나눠 다시 시도하거나, 더 정확한 모델(Opus)을 선택하세요.`
       );
-      aiSetStatus('적용 중단 — 본문이 보존되지 않음', 'err');
+      aiProgressFinish('err', `본문 보존 실패 — 원문 ${check.beforeLen}자 중 ${check.afterLen}자만 전달됨 (${check.lossPct}% 손실)`);
       return;
     }
 
+    /* Phase: apply */
+    aiProgressPhase('apply');
     editor.commands.setContent(styled, false);
     setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 40);
-    aiSetStatus(`완료 — 본문 ${check.beforeLen}자 모두 보존됨`, 'ok');
+    aiProgressFinish('ok', `완료 — 본문 ${check.beforeLen}자 모두 보존, 구조와 스타일만 적용되었습니다.`);
     toast('AI 자동 스타일 적용 완료', 'ok');
-    setTimeout(()=>aiModal.classList.remove('show'), 800);
+    setTimeout(()=>{
+      aiModal.classList.remove('show');
+      aiProgressHide();
+    }, 1400);
   } catch(err){
     console.error(err);
-    /* Safety: restore snapshot if anything threw mid-apply. */
     try { editor.commands.setContent(snapshot, false); } catch(e){}
-    aiSetStatus('실패: ' + (err.message || err), 'err');
+    aiProgressFinish('err', '실패: ' + (err.message || err));
   } finally {
     $('#ai-apply').disabled = false;
+    $('#ai-cancel').textContent = '닫기';
   }
 });
 
