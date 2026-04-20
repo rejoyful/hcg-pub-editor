@@ -637,7 +637,14 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
 }
 .toolbar button:hover{background:var(--soft);border-color:var(--line)}
 .toolbar button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
-.toolbar button .ph,.toolbar button .ph-bold{font-size:17px;line-height:1;display:inline-block}
+/* 툴바 아이콘: 모든 버튼/스와치/라벨 내부 Phosphor 아이콘을 동일 크기로 통일(17px) */
+.toolbar button .ph,.toolbar button .ph-bold,
+.toolbar .color-swatch .ph,.toolbar .color-swatch .ph-bold,
+.toolbar label .ph,.toolbar label .ph-bold{
+  font-size:17px;line-height:1;display:inline-flex;align-items:center;justify-content:center;
+  width:17px;height:17px;                 /* 자가 정렬 박스를 고정해 글자형 렌더러 편차 제거 */
+  vertical-align:middle;
+}
 .toolbar button span.tag{font-size:11px;font-weight:700;letter-spacing:.2px}
 /* 색상·음영 swatch (인풋 클릭하면 즉시 색 변경) */
 .toolbar .color-swatch{
@@ -1891,30 +1898,36 @@ function getColumnWidthPx(){
 }
 
 /* Debounced reflow: paste / typing fires many events; coalesce and wait
-   for layout to settle before measuring. 사용자 요청(2026-04-17): 에디터↔뷰어
-   매칭이 최대한 실시간이어야 함 — 단일 rAF 로 단축하되, 측정 안정화를 위해
-   idle 경로에 안전망 paginate() 1회를 추가한다. */
+   for layout to settle before measuring. 2026-04-20: 성능 개선을 위해
+   ① 안전망 타임아웃 제거(이중 실행 방지) ② 활성 입력 구간(typing/paste)은
+   짧은 debounce(90ms) 로 지연 실행, idle 상태(경량 작업)는 rAF 1회
+   ③ _suspendReflow 플래그 추가: 에디터 팬/이미지 드래그 중에는 실행 생략
+   (드래그가 끝날 때 단 한 번만 paginate). */
 let _reflowTimer = null;
-let _reflowSafety = null;
+let _reflowRAF = null;
+let _suspendReflow = false;
 function scheduleReflow(){
-  if (_reflowTimer) cancelAnimationFrame(_reflowTimer);
-  _reflowTimer = requestAnimationFrame(()=>{
+  if (_suspendReflow) return;           /* 드래그 중에는 스킵 */
+  if (_reflowRAF) cancelAnimationFrame(_reflowRAF);
+  clearTimeout(_reflowTimer);
+  _reflowTimer = setTimeout(() => {
     _reflowTimer = null;
-    try { paginate(); } catch(e){ console.warn('paginate:', e); }
-  });
-  /* 입력 폭주 구간에서 마지막 값이 최종 반영되도록 안전망 */
-  clearTimeout(_reflowSafety);
-  _reflowSafety = setTimeout(() => {
-    _reflowSafety = null;
-    try { paginate(); } catch(e){}
-  }, 160);
+    _reflowRAF = requestAnimationFrame(() => {
+      _reflowRAF = null;
+      try { paginate(); } catch(e){ console.warn('paginate:', e); }
+    });
+  }, 90);
+}
+function setReflowSuspended(suspended){
+  _suspendReflow = !!suspended;
+  if (!suspended) scheduleReflow();     /* 드래그 끝 — 지금 1회 실행 */
 }
 /* Back-compat alias: earlier code calls reflow() directly. */
 function reflow(){ paginate(); }
 
 /* ------------------------------------------------------------
    Measurer — hidden div that renders a single block at column
-   width to measure its rendered height. Lives off-screen.
+   width. Used by splitTextBlock for word-level splitting.
    ------------------------------------------------------------ */
 let _measurerHost = null;
 function getMeasurer(){
@@ -1939,25 +1952,47 @@ function measureBlockHeight(block){
 }
 
 /* ------------------------------------------------------------
-   Main paginate() — walks editor top-level blocks, measures each
-   at column width, buckets into pages by capacity = columns × H.
-   When a block's height alone exceeds a page, it's split (for
-   paragraphs / long text) into multiple sub-blocks via binary
-   word-chunking, so Word-style continuation still works.
+   Page bucket — a real .page-content clone held off-screen,
+   filled cumulatively. getBoundingClientRect 가 **형제 간
+   margin collapse + 제목의 2.4em 여백 + first-child 규칙** 등을
+   자연스럽게 반영하므로 단일 블록 측정의 오차 문제가 사라진다.
+   ------------------------------------------------------------ */
+let _pagerBucket = null;
+function getPagerBucket(){
+  if (!_pagerBucket || !_pagerBucket.host.isConnected){
+    const host = document.createElement('div');
+    host.className = 'measurer-host';
+    const clip = document.createElement('div');
+    clip.className = 'page-content';
+    clip.setAttribute('data-pager','1');
+    host.appendChild(clip);
+    document.body.appendChild(host);
+    _pagerBucket = { host, clip };
+  }
+  /* 매 reflow 시 컬럼 폭에 맞춰 갱신 */
+  _pagerBucket.clip.style.width = getColumnWidthPx() + 'px';
+  return _pagerBucket;
+}
+
+/* ------------------------------------------------------------
+   Main paginate() — 2026-04-20 재작성:
+   per-block 측정의 오차(제목 margin-top 과소추정 등)로 인한 페이지 넘김
+   시 글귀 사라짐을 해결하기 위해, 실제 .page-content 클론에 블록을
+   하나씩 쌓으면서 누적 높이가 페이지 용량을 초과하는 시점을 감지해
+   페이지를 구분한다. 이 방식은 형제 간 margin collapse, :first-child
+   규칙, 제목/단락 여백을 모두 브라우저가 실제로 계산한 값으로 반영하므로
+   "측정값과 실제값의 불일치로 인한 잘림" 계열 버그가 구조적으로 차단된다.
    ------------------------------------------------------------ */
 function paginate(){
   const pm = document.querySelector('#editor .ProseMirror');
   if (!pm) return;
   const pageInnerH = getPageInnerHpx();
   const columns = getColumns();
-  /* Each page can hold ~= columns × pageInnerH worth of linear content
-     (at column width). Reserve a tiny buffer for column-break rounding. */
+  /* 페이지 용량(단일 컬럼 흐름 기준): columns × 컬럼 높이. 작은 버퍼를 빼서
+     열 분배 시 미세 반올림으로 넘치는 것을 방지. */
   const pageCapH = Math.max(50, pageInnerH * columns - 4);
 
-  /* Flatten editor children but also expand <section class="front-matter">
-     into its inner children, tagged with a hint so the section boundary
-     can trigger a page-break. Explicit <hr class="page-break"> becomes a
-     PAGE-BREAK marker. */
+  /* front-matter / page-break 펼치기 */
   const rawBlocks = Array.from(pm.children).filter(n => n.nodeType === 1);
   const expanded = [];
   for (const b of rawBlocks){
@@ -1966,20 +2001,16 @@ function paginate(){
       continue;
     }
     if (b.tagName === 'SECTION' && b.classList.contains('front-matter')){
-      /* Start the front-matter on a fresh page if we aren't already there. */
       expanded.push({ kind: 'break', el: null });
       const inner = Array.from(b.children).filter(n => n.nodeType === 1);
       for (const c of inner) expanded.push({ kind: 'block', el: c, inFront: true, frontClass: b.className });
-      /* End the front-matter section with its own page break. */
       expanded.push({ kind: 'break', el: null });
       continue;
     }
     expanded.push({ kind: 'block', el: b });
   }
 
-  /* Split oversized blocks so no single block exceeds one page. Paragraphs
-     get word-split; tables / images / pre that don't split cleanly keep
-     their place (may overflow their own page — acceptable edge case). */
+  /* 단일 블록이 한 페이지보다 큰 경우(긴 단락/긴 목차) 미리 쪼갠다. */
   const flattened = [];
   for (const item of expanded){
     if (item.kind === 'break'){ flattened.push({ break:true }); continue; }
@@ -1987,77 +2018,92 @@ function paginate(){
     const h = measureBlockHeight(b);
     const meta = item.inFront ? { inFront:true, frontClass:item.frontClass } : {};
     if (h <= pageInnerH || !canSplitBlock(b)){
-      flattened.push({ el: b, h, ...meta });
+      flattened.push({ el: b, ...meta });
     } else {
       for (const piece of splitTextBlock(b, pageInnerH)){
-        const ph = measureBlockHeight(piece);
-        flattened.push({ el: piece, h: ph, ...meta });
+        flattened.push({ el: piece, ...meta });
       }
     }
   }
 
-  /* Bucket into pages by cumulative height. Explicit breaks start a new page
-     immediately (even if the current page is empty — empty pages are dropped
-     later). */
+  /* 누적 버킷으로 페이지 구분. 각 블록을 실제 .page-content 클론에 append
+     하고 rect.height 를 읽어 pageCapH 초과 여부로 판정. 초과 시 방금 넣은
+     블록을 빼내고 새 버킷을 시작한 뒤 다시 append. */
+  const pager = getPagerBucket();
+  const clip = pager.clip;
+  clip.innerHTML = '';
+  clip.classList.remove('is-front-matter');
+
   const pages = [[]];
-  let curH = 0;
-  const forceNewPage = ()=>{
-    if (pages[pages.length - 1].length > 0){
-      pages.push([]); curH = 0;
+  let currentFrontClass = null;
+  let currentSection = null;
+
+  const resetBucket = () => {
+    clip.innerHTML = '';
+    clip.classList.remove('is-front-matter');
+    currentFrontClass = null;
+    currentSection = null;
+  };
+  const startNewPage = () => {
+    pages.push([]);
+    resetBucket();
+  };
+  const appendToBucket = (item) => {
+    const clone = item.el.cloneNode(true);
+    let host = clip;
+    if (item.inFront){
+      if (currentFrontClass !== item.frontClass){
+        const sec = document.createElement('section');
+        sec.className = item.frontClass;
+        clip.appendChild(sec);
+        clip.classList.add('is-front-matter');
+        currentSection = sec;
+        currentFrontClass = item.frontClass;
+      }
+      host = currentSection;
+    } else {
+      currentFrontClass = null;
+      currentSection = null;
+    }
+    host.appendChild(clone);
+    return clone;
+  };
+  const bucketHeight = () => clip.getBoundingClientRect().height;
+  const popLastFromBucket = (clone) => {
+    const parent = clone.parentNode;
+    parent.removeChild(clone);
+    if (currentSection && currentSection.children.length === 0){
+      currentSection.remove();
+      currentSection = null;
+      currentFrontClass = null;
     }
   };
-  /* 사용자 요청(2026-04-17): 뷰어의 빈 영역 최소화.
-     다음 블록 하나가 현재 페이지를 초과할 때, **paragraph 블록에 한해**
-     남은 여유 공간만큼만 뜯어서 현재 페이지에 채우고 나머지를 다음 페이지로
-     넘긴다. UL/OL 은 splitListBlock이 flattened 단계에서 이미 li 단위로
-     쪼개므로 여기서 또 건드리지 않는다 — 그렇지 않으면 측정 오차와 재분할
-     충돌로 li가 누락될 수 있음(목차 앞부분 증발 증상). */
-  const MIN_FILL_HEADROOM = 80; /* 80px 이상 공간이 남아있을 때만 채우기 시도 */
-  const isParagraphSplittable = (el) => {
-    if (!el) return false;
-    const tag = el.tagName;
-    return tag === 'P' || tag === 'BLOCKQUOTE';
-  };
+
   for (const item of flattened){
-    if (item.break){ forceNewPage(); continue; }
-    if (item.h === 0) continue;
-    const remaining = pageCapH - curH;
-    if (curH + item.h > pageCapH && pages[pages.length - 1].length > 0){
-      if (item.el && isParagraphSplittable(item.el) && remaining > MIN_FILL_HEADROOM){
-        const sub = splitTextBlock(item.el, remaining);
-        if (sub.length >= 2){
-          const first = sub[0];
-          const fh = measureBlockHeight(first);
-          if (fh <= remaining + 1){
-            pages[pages.length - 1].push({ ...item, el: first, h: fh });
-            curH += fh;
-            /* 나머지 조각을 다음 페이지(들)에 분배 */
-            pages.push([]); curH = 0;
-            for (let i = 1; i < sub.length; i++){
-              const sh = measureBlockHeight(sub[i]);
-              if (curH + sh > pageCapH && pages[pages.length - 1].length > 0){
-                pages.push([]); curH = 0;
-              }
-              pages[pages.length - 1].push({ ...item, el: sub[i], h: sh });
-              curH += sh;
-            }
-            continue;
-          }
-        }
-      }
-      pages.push([]);
-      curH = 0;
+    if (item.break){
+      if (pages[pages.length - 1].length > 0) startNewPage();
+      continue;
+    }
+    const clone = appendToBucket(item);
+    const h = bucketHeight();
+    if (h > pageCapH && pages[pages.length - 1].length > 0){
+      /* 현재 페이지를 넘어선다 → 방금 넣은 블록을 빼고 새 페이지로 이월 */
+      popLastFromBucket(clone);
+      startNewPage();
+      appendToBucket(item);
     }
     pages[pages.length - 1].push(item);
-    curH += item.h;
   }
+
   if (pages.length === 0 || (pages.length === 1 && pages[0].length === 0)){
-    pages[0] = [];  /* empty document → still show one page */
+    pages[0] = [];
   }
-  /* Round up to even for spread symmetry. */
   if (pages.length % 2 === 1) pages.push([]);
 
-  /* Sync DOM: make exactly pages.length/2 spreads, and write content. */
+  /* 버킷 비움 — 불필요한 DOM 유지로 리플로우를 늘리지 않도록 */
+  clip.innerHTML = '';
+  clip.classList.remove('is-front-matter');
+
   const spreadsNeeded = pages.length / 2;
   syncSpreads(spreadsNeeded);
 
@@ -2067,8 +2113,6 @@ function paginate(){
     const content = page.querySelector('.page-content');
     if (!content) return;
     content.innerHTML = '';
-    /* Mark pages that contain front-matter so CSS can style them distinctly,
-       and wrap each run of front-matter blocks into its <section>. */
     let currentFront = null;
     let host = content;
     content.classList.remove('is-front-matter');
@@ -2092,10 +2136,6 @@ function paginate(){
 
   applyHeaderFooter();
   updateStatus(editor);
-  /* 뷰어(.book)의 목차 리스트를 표시. 에디터에선 installTocHyperlinks가
-     이미 .toc-list 클래스를 부여하지만, 페이지 분할로 인해 "목차" 헤딩과
-     다음 리스트가 서로 다른 .page-content에 흩어질 수 있으므로 여기서
-     전역 재탐색한다. */
   try { markTocListsInPreview(); } catch(e){ console.warn('markTocListsInPreview:', e); }
 }
 
@@ -2976,15 +3016,14 @@ function installEditorObservers(){
   const pm = document.querySelector('#editor .ProseMirror');
   if (!pm){ setTimeout(installEditorObservers, 100); return; }
 
-  // Size changes (fonts loaded, images decoded, content added/removed)
+  /* 2026-04-20: 성능 최적화
+     - onUpdate 에서 이미 scheduleReflow() 호출 → MutationObserver 제거
+       (이중 트리거가 typing 중 대량 리플로우의 주원인이었음)
+     - ResizeObserver 는 유지하되 편집 컨테이너 자체 크기 변화만 감지
+     - paste 는 onUpdate 로 1회 트리거되므로 이미지 로드 후 1회만 추가 호출 */
   const ro = new ResizeObserver(()=>scheduleReflow());
   ro.observe(pm);
 
-  // Structural mutations (new nodes, attribute changes) — debounced via scheduleReflow's rAF
-  const mo = new MutationObserver(()=>scheduleReflow());
-  mo.observe(pm, { subtree: true, childList: true, characterData: true });
-
-  // Image load completions (some imgs report scrollHeight wrong until decoded)
   pm.addEventListener('load', e=>{
     if (e.target.tagName === 'IMG'){
       scheduleReflow();
@@ -2994,11 +3033,9 @@ function installEditorObservers(){
     }
   }, true);
 
-  // Paste — run reflow on the NEXT tick, then once more after images may have loaded
+  /* 붙여넣기 — 이미지 디코딩이 끝나고 나서 1회 더 측정(대부분 200ms 내) */
   pm.addEventListener('paste', ()=>{
-    setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 0);
-    setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 200);
-    setTimeout(()=>{ scheduleReflow(); }, 800);
+    setTimeout(()=>{ rescanEditorImages(); scheduleReflow(); }, 260);
   });
 }
 installEditorObservers();
@@ -3508,6 +3545,7 @@ editResize.addEventListener('mousedown', e=>{
   };
   document.body.style.cursor = (mode === 'dock-right') ? 'ew-resize' : 'ns-resize';
   document.body.style.userSelect = 'none';
+  setReflowSuspended(true);    /* 드래그 동안 paginate 스킵 */
 });
 window.addEventListener('mousemove', e=>{
   if (!_dockDrag) return;
@@ -3530,7 +3568,7 @@ window.addEventListener('mouseup', ()=>{
     localStorage.setItem('hcg_dock_h', String(Math.round(r.height)));
     localStorage.setItem('hcg_dock_w', String(Math.round(r.width)));
   } catch(e){}
-  setTimeout(scheduleReflow, 80);
+  setReflowSuspended(false);     /* 드래그 종료 — 1회 paginate 재개 */
 });
 
 editToggle.addEventListener('click', ()=>{
