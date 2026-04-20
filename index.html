@@ -2007,16 +2007,23 @@ function paginate(){
     }
   };
   /* 사용자 요청(2026-04-17): 뷰어의 빈 영역 최소화.
-     다음 블록 하나가 현재 페이지를 초과할 때, 블록이 splittable 하면
+     다음 블록 하나가 현재 페이지를 초과할 때, **paragraph 블록에 한해**
      남은 여유 공간만큼만 뜯어서 현재 페이지에 채우고 나머지를 다음 페이지로
-     넘긴다. 이렇게 하면 페이지 하단의 대형 공백이 대부분 사라진다. */
+     넘긴다. UL/OL 은 splitListBlock이 flattened 단계에서 이미 li 단위로
+     쪼개므로 여기서 또 건드리지 않는다 — 그렇지 않으면 측정 오차와 재분할
+     충돌로 li가 누락될 수 있음(목차 앞부분 증발 증상). */
   const MIN_FILL_HEADROOM = 80; /* 80px 이상 공간이 남아있을 때만 채우기 시도 */
+  const isParagraphSplittable = (el) => {
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'P' || tag === 'BLOCKQUOTE';
+  };
   for (const item of flattened){
     if (item.break){ forceNewPage(); continue; }
     if (item.h === 0) continue;
     const remaining = pageCapH - curH;
     if (curH + item.h > pageCapH && pages[pages.length - 1].length > 0){
-      if (item.el && canSplitBlock(item.el) && remaining > MIN_FILL_HEADROOM){
+      if (item.el && isParagraphSplittable(item.el) && remaining > MIN_FILL_HEADROOM){
         const sub = splitTextBlock(item.el, remaining);
         if (sub.length >= 2){
           const first = sub[0];
@@ -2145,37 +2152,46 @@ function canSplitBlock(el){
    WHY: TOC(목차) lists can have 30+ items; if the whole UL exceeds one
    page, paginate() used to hold the entire block in one place, which
    made part of the TOC invisible beyond the page frame. Splitting per-
-   item guarantees every list item is actually rendered. */
+   item guarantees every list item is actually rendered.
+
+   안전원칙: 원본 shell을 절대 measurer에 직접 넣지 않는다 — clone을
+   만들어 측정하고, 원본 shell은 순수 데이터 컨테이너로만 사용한다.
+   이렇게 하면 innerHTML='' 부작용으로 li를 잃을 가능성이 0이 된다. */
 function splitListBlock(el, maxH){
-  const tag = el.tagName;
   const items = Array.from(el.children).filter(c => c.tagName === 'LI');
   if (items.length === 0) return [el];
-  const pieces = [];
-  const mkShell = () => {
-    const shell = el.cloneNode(false); /* <ul>/<ol> with same classes/attrs, no children */
-    return shell;
-  };
-  let shell = mkShell();
   const m = getMeasurer();
-  const measureShell = (sh) => {
-    m.innerHTML = ''; m.appendChild(sh);
-    const h = sh.getBoundingClientRect().height;
+  const measureClone = (sh) => {
+    const copy = sh.cloneNode(true);
+    m.innerHTML = '';
+    m.appendChild(copy);
+    const h = copy.getBoundingClientRect().height;
     m.innerHTML = '';
     return h;
   };
+  const pieces = [];
+  let shell = el.cloneNode(false);
   for (const li of items){
-    shell.appendChild(li.cloneNode(true));
-    const h = measureShell(shell);
+    const candidate = li.cloneNode(true);
+    shell.appendChild(candidate);
+    const h = measureClone(shell);
     if (h > maxH && shell.children.length > 1){
-      /* last li pushed overflow — pop it into a new shell */
-      const last = shell.lastElementChild;
-      shell.removeChild(last);
+      /* 마지막 li가 한계를 넘겼다 → 직전 shell을 확정하고 새 shell로 마지막 li 이월 */
+      shell.removeChild(candidate);
       pieces.push(shell);
-      shell = mkShell();
-      shell.appendChild(last);
+      shell = el.cloneNode(false);
+      shell.appendChild(candidate);
     }
   }
   if (shell.children.length > 0) pieces.push(shell);
+  /* 안전망: 원본 li 개수 합과 shell 내 li 개수 합이 일치하는지 확인.
+     일치하지 않으면 split을 포기하고 원본을 그대로 반환한다 (누락 방지). */
+  let splitCount = 0;
+  for (const p of pieces) splitCount += p.children.length;
+  if (splitCount !== items.length){
+    console.warn('splitListBlock: mismatch', splitCount, 'vs', items.length, '— fallback to original');
+    return [el];
+  }
   return pieces.length > 0 ? pieces : [el];
 }
 
@@ -4273,7 +4289,12 @@ function isEmptyPara(node){
   return c.every(x => x?.type === 'text' && !String(x.text || '').trim());
 }
 
-/* JSON(docJson)에 키워드 규칙 적용 — 본문 한 글자도 바꾸지 않고 태그/mark만 변경 */
+/* JSON(docJson)에 키워드 규칙 적용 — 본문 한 글자도 바꾸지 않고 태그/mark만 변경.
+   추가 규칙(2026-04-20): "목차"/"차례" 헤딩 이후 다음 "진짜 본문"(숫자 접두 H2
+   또는 100자 이상 단락, 블록 이미지/표, 또는 heading 원본) 전까지의 짧은
+   단락들은 bulletList 내부 listItem으로 묶는다. 이 구간에서는 classifyByKeyword
+   결과(예: '서문'→h1)를 무시하여, 목차 항목이 헤딩으로 승격되지 않게 한다. */
+const TOC_ENTRY_TEXTS = new Set(['목차','차례','Contents','contents','CONTENTS','Table of Contents']);
 function applyKeywordRules(docJson){
   if (!docJson || !Array.isArray(docJson.content)) return docJson;
   const emptyPara = () => ({ type:'paragraph', content:[] });
@@ -4286,26 +4307,84 @@ function applyKeywordRules(docJson){
     ]}],
   });
   const out = [];
+  let inTocRegion = false;
+  let tocItems = []; /* 수집된 listItem들 */
+  const flushToc = () => {
+    if (tocItems.length > 0){
+      out.push({ type:'bulletList', content: tocItems });
+      tocItems = [];
+    }
+    inTocRegion = false;
+  };
+
   for (let i = 0; i < docJson.content.length; i++){
     const node = docJson.content[i];
-    if (!node || typeof node !== 'object'){ out.push(node); continue; }
+    if (!node || typeof node !== 'object'){ flushToc(); out.push(node); continue; }
     const type = node.type;
-    if (type !== 'paragraph' && type !== 'heading'){
-      out.push(node); continue;
-    }
-    /* 이미지만 포함된 블록은 패스 */
-    const hasImage = Array.isArray(node.content) && node.content.some(c => c?.type === 'image');
-    if (hasImage){ out.push(node); continue; }
 
-    const text = extractPlainText(node);
-    const tag = classifyByKeyword(text);
-    if (!tag){ out.push(node); continue; }
+    /* paragraph/heading이 아닌 블록(이미지/표/HR/list 등)은 목차 종료 신호 */
+    if (type !== 'paragraph' && type !== 'heading'){
+      flushToc();
+      out.push(node);
+      continue;
+    }
+
+    /* 이미지만 포함된 블록은 패스(목차 종료 신호) */
+    const hasImage = Array.isArray(node.content) && node.content.some(c => c?.type === 'image');
+    if (hasImage){ flushToc(); out.push(node); continue; }
 
     const inline = Array.isArray(node.content) ? node.content : [];
+    const text = extractPlainText(node);
+    const tag = classifyByKeyword(text);
+
+    /* ── 목차 진입: "목차"/"차례" 헤딩 감지 ── */
+    if (!inTocRegion && TOC_ENTRY_TEXTS.has(text.trim())){
+      flushToc();
+      out.push({ type:'heading', attrs:{ level:1 }, content: inline });
+      inTocRegion = true;
+      continue;
+    }
+
+    /* ── 목차 영역 처리 ── */
+    if (inTocRegion){
+      /* 목차 종료 조건:
+         - 숫자 접두 H2 (예: "1. 서론", "제1장 …")
+         - 긴 본문 단락(80자 초과)
+         - 원본이 이미 heading 타입
+         - callout/fig 표식 (도판은 목차 안에 있을 수 없음)
+         - backmatter 키워드("참고문헌/색인/찾아보기/부록/감사의 글"):
+           목차 안에도 들어올 수 있으나, 실무상 대부분 본문의 새 섹션 경계.
+           → 목차 종료 + 해당 블록을 H1로 처리.
+      */
+      const TOC_EXIT_BACKMATTER = new Set([
+        '참고문헌','참고 문헌','색인','찾아보기','부록','감사의 글','판권','저작권'
+      ]);
+      const isLongBody = text.length > 80;
+      const isNumberedH2 = tag === 'h2';
+      const isOriginalHeading = type === 'heading';
+      const isFigOrCallout = (tag === 'fig' || tag === 'callout');
+      const isBackmatter = TOC_EXIT_BACKMATTER.has(text.trim());
+
+      if (isLongBody || isNumberedH2 || isOriginalHeading || isFigOrCallout || isBackmatter){
+        flushToc();
+        /* 이 블록 자체는 일반 규칙으로 처리하도록 폴스루 */
+      } else {
+        /* 빈 단락은 건너뜀(리스트 내부에 공백 넣지 않음) */
+        if (!text.trim()) continue;
+        tocItems.push({
+          type:'listItem',
+          content:[{ type:'paragraph', content: inline }],
+        });
+        continue;
+      }
+    }
+
+    if (!tag){ out.push(node); continue; }
 
     if (tag === 'h1' || tag === 'h2' || tag === 'h3'){
       const level = tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3;
       out.push({ type:'heading', attrs:{ level }, content: inline });
+      /* H1이 새로 나타나면 목차 가능성은 사라진 상태 */
     }
     else if (tag === 'fig'){
       /* 앞에 "이미지 첨부" 라벨 + 본문 크기 굵게 */
@@ -4333,6 +4412,7 @@ function applyKeywordRules(docJson){
       out.push(emptyPara());
     }
   }
+  flushToc();
   return { ...docJson, content: out };
 }
 
