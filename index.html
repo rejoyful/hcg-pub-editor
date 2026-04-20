@@ -41,6 +41,9 @@
   --ui-family: "Noto Sans KR","SF Pro Text","Helvetica Neue","Segoe UI",sans-serif;
   --body-size: 10pt;
   --body-leading: 1.75;
+  --body-tracking: 0em;
+  --body-para-gap: 0pt;
+  --body-indent: 0pt;
   --columns: 1;
 }
 
@@ -248,6 +251,165 @@ input,select{font-family:inherit;font-size:13px}
 #edit-pane.collapsed .edit-body{display:none}
 #edit-pane.collapsed .edit-head{border-bottom:0}
 
+/* Dock mode: right (sidebar-style panel) */
+#edit-pane.dock-right{
+  left:auto; right:0; top:52px; bottom:22px;
+  width:var(--edit-dock-w, 480px); height:auto;
+  max-height:none; min-height:0;
+  border-top:0; border-left:2px solid var(--accent);
+  box-shadow:-10px 0 24px rgba(0,0,0,.08), -1px 0 0 var(--line);
+}
+#edit-pane.dock-right .edit-resize{
+  height:auto;width:6px;cursor:ew-resize;
+  position:absolute;left:0;top:0;bottom:0;
+  background:linear-gradient(90deg, transparent, rgba(0,0,0,.04));
+}
+#edit-pane.dock-right .edit-resize::after{
+  left:2px;top:50%;width:3px;height:42px;
+  transform:translateY(-50%);
+}
+/* Dock mode: floating (draggable window) */
+#edit-pane.dock-float{
+  left:var(--edit-float-x, 20%);
+  top:var(--edit-float-y, 120px);
+  right:auto;bottom:auto;
+  width:var(--edit-float-w, 640px);
+  height:var(--edit-float-h, 380px);
+  max-height:none;min-height:0;
+  border:2px solid var(--accent);border-radius:8px;
+  box-shadow:0 20px 60px rgba(0,0,0,.22), 0 4px 12px rgba(0,0,0,.12);
+  overflow:hidden;
+}
+#edit-pane.dock-float .edit-resize{display:none}
+#edit-pane.dock-float .edit-head{cursor:move;user-select:none}
+#edit-pane.dock-float::after{
+  content:"";position:absolute;right:0;bottom:0;width:14px;height:14px;
+  cursor:nwse-resize;
+  background:linear-gradient(135deg, transparent 50%, var(--line) 50%, var(--line) 60%, transparent 60%, transparent 70%, var(--line) 70%, var(--line) 80%, transparent 80%);
+  z-index:5;
+}
+/* Stage padding removed when dock is not at bottom */
+body.dock-mode-right .stage{padding-bottom:60px !important}
+body.dock-mode-right .main{grid-template-columns:280px 1fr var(--edit-dock-w, 480px) !important;}
+body.dock-mode-right #edit-pane{position:static;border:0;box-shadow:none}
+body.dock-mode-right #edit-pane{grid-column:3;height:auto;max-height:none}
+body.dock-mode-float .stage{padding-bottom:60px !important}
+
+/* Dock action toolbar icons */
+#edit-pane .dock-modes{display:inline-flex;gap:2px;margin-right:6px}
+#edit-pane .dock-modes button{
+  width:26px;height:24px;padding:0;
+  background:transparent;border:1px solid transparent;
+  border-radius:4px;color:var(--meta);cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:13px;
+}
+#edit-pane .dock-modes button:hover{background:var(--soft);color:var(--ink)}
+#edit-pane .dock-modes button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* Sidebar section collapsible groups */
+.side h3{
+  cursor:pointer;user-select:none;
+  display:flex;align-items:center;justify-content:space-between;
+  padding-right:4px;
+}
+.side h3::after{
+  content:"▾";font-size:9px;color:var(--mute);
+  transition:transform .2s;
+}
+.side h3.collapsed::after{transform:rotate(-90deg)}
+.side .sec{transition:opacity .15s;overflow:hidden}
+.side h3.collapsed + .sec{display:none}
+
+/* Sidebar section badge (icon before title) */
+.side h3 .ic{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:16px;height:16px;margin-right:5px;font-size:12px;
+  color:var(--accent);
+}
+.side h3 .title-text{flex:1}
+
+/* Scrollbar polish on sidebar */
+.side::-webkit-scrollbar{width:6px}
+.side::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+
+/* Page break within content (explicit from AI / user) */
+.page-break{
+  border:0;margin:0;padding:0;height:0;
+  break-after:page;page-break-after:always;
+  display:block;
+}
+.page-break[data-label]::before{
+  content:attr(data-label);
+  display:block;text-align:center;color:var(--mute);
+  font-size:10px;letter-spacing:1px;
+  margin:6px 0;
+  border-top:1px dashed var(--line);
+  padding-top:6px;
+}
+
+/* Front matter section (book introduction, TOC, author intro) */
+.front-matter{
+  display:block;padding:0;margin:0 0 0 0;
+  /* Pagination treats these as force-separate */
+}
+.front-matter > *:first-child{margin-top:0}
+.front-matter.toc h2{
+  text-align:center;margin:0 0 18pt;font-size:20pt;
+  letter-spacing:2pt;
+}
+.front-matter.toc ol{list-style:none;padding:0;counter-reset:toc-chap}
+.front-matter.toc li{
+  display:flex;align-items:baseline;gap:6pt;
+  margin:6pt 0;line-height:1.5;
+}
+.front-matter.toc li .toc-title{flex:0 0 auto}
+.front-matter.toc li .toc-dots{
+  flex:1 1 auto;border-bottom:1pt dotted #888;
+  transform:translateY(-3pt);margin:0 4pt;
+}
+.front-matter.toc li .toc-pg{flex:0 0 auto;color:var(--mute);font-variant-numeric:tabular-nums}
+.front-matter.foreword,.front-matter.author,.front-matter.preface{
+  font-style:italic;color:#333;max-width:80%;margin:0 auto;
+}
+
+/* Editor drop-hint overlay */
+.ProseMirror.drop-active{outline:3px dashed var(--accent);outline-offset:-8px;background:var(--accent-soft)}
+
+/* Free-positioned images (wrapped in .img-free) */
+.ProseMirror .img-free{
+  position:relative;display:inline-block;
+  max-width:100%;user-select:none;
+}
+.ProseMirror .img-free img{display:block;max-width:100%;pointer-events:auto}
+.ProseMirror .img-free.selected{outline:2px solid var(--accent)}
+.ProseMirror .img-free .handle{
+  position:absolute;width:10px;height:10px;background:var(--accent);border:2px solid #fff;
+  border-radius:50%;cursor:nwse-resize;right:-6px;bottom:-6px;
+  box-shadow:0 1px 2px rgba(0,0,0,.3);z-index:5;
+  display:none;
+}
+.ProseMirror .img-free.selected .handle{display:block}
+.ProseMirror .img-free .move-handle{
+  position:absolute;left:-6px;top:-6px;width:18px;height:18px;
+  background:var(--accent);color:#fff;border-radius:50%;
+  font-size:11px;cursor:move;z-index:5;display:none;
+  align-items:center;justify-content:center;line-height:1;
+}
+.ProseMirror .img-free.selected .move-handle{display:flex}
+
+/* Model select loading state */
+.ai-row select.loading{background-image:linear-gradient(90deg, #fff, #f5f5ef, #fff);background-size:200% 100%;animation:aiLoadShimmer 1.2s linear infinite}
+@keyframes aiLoadShimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+
+/* Preserved-text diff warning banner */
+.ai-diff-warn{
+  margin:8px 0;padding:8px 10px;border-radius:4px;
+  background:#fff8e1;border:1px solid #ffd54f;color:#795500;
+  font-size:11.5px;line-height:1.5;
+}
+.ai-diff-warn b{color:#c62828}
+
 /* Divider label before the book preview */
 .book-head{
   width:100%;max-width:var(--page-w);
@@ -350,7 +512,9 @@ input,select{font-family:inherit;font-size:13px}
 .page-content h1{font-size:22pt;font-weight:700;margin:0 0 12pt;line-height:1.3;letter-spacing:-.3px;break-after:avoid}
 .page-content h2{font-size:16pt;font-weight:700;margin:18pt 0 8pt;line-height:1.4;break-after:avoid}
 .page-content h3{font-size:13pt;font-weight:700;margin:14pt 0 6pt;line-height:1.4;break-after:avoid}
-.page-content p{margin:0 0 8pt;text-align:justify;word-break:keep-all;overflow-wrap:break-word;text-indent:1em;orphans:2;widows:2}
+.page-content{letter-spacing:var(--body-tracking)}
+.page-content p{margin:0 0 var(--body-para-gap);text-align:justify;word-break:keep-all;overflow-wrap:break-word;text-indent:var(--body-indent);orphans:2;widows:2}
+.page-content p + p{margin-top:0}
 .page-content h1+p,.page-content h2+p,.page-content h3+p{text-indent:0}
 .page-content ul,.page-content ol{margin:0 0 10pt;padding-left:18pt}
 .page-content li{margin-bottom:3pt}
@@ -387,7 +551,8 @@ input,select{font-family:inherit;font-size:13px}
 .ProseMirror h1{font-size:22pt;font-weight:700;margin:0 0 12pt;line-height:1.3;letter-spacing:-.3px}
 .ProseMirror h2{font-size:16pt;font-weight:700;margin:18pt 0 8pt;line-height:1.4}
 .ProseMirror h3{font-size:13pt;font-weight:700;margin:14pt 0 6pt;line-height:1.4}
-.ProseMirror p{margin:0 0 8pt;text-align:justify;word-break:keep-all;overflow-wrap:break-word;text-indent:1em}
+.ProseMirror{letter-spacing:var(--body-tracking)}
+.ProseMirror p{margin:0 0 var(--body-para-gap);text-align:justify;word-break:keep-all;overflow-wrap:break-word;text-indent:var(--body-indent)}
 .ProseMirror h1+p,.ProseMirror h2+p,.ProseMirror h3+p{text-indent:0}
 .ProseMirror ul,.ProseMirror ol{margin:0 0 10pt;padding-left:18pt}
 .ProseMirror li{margin-bottom:3pt}
@@ -562,28 +727,53 @@ input,select{font-family:inherit;font-size:13px}
     size:var(--page-w) var(--page-h);
     margin:0;
   }
-  body{background:#fff}
-  .topbar,.side,.sub-top,.statusbar,.toast,.loader,.modal{display:none !important}
-  #edit-pane,.book-head{display:none !important}  /* hide editor; print the paginated book */
-  .main{grid-template-columns:1fr}
-  .stage{padding:0;overflow:visible;background:#fff}
-  .book{gap:0;padding:0;min-width:0}
-  .spread{display:block;box-shadow:none;background:transparent;page-break-inside:avoid}
-  .spread::before,.spread::after{display:none}
-  .page{
-    width:var(--page-w);height:var(--page-h);box-shadow:none;
-    page-break-after:always;overflow:hidden;
+  html,body{background:#fff !important;margin:0 !important;padding:0 !important;height:auto !important;overflow:visible !important}
+  body * { visibility: visible; }
+  .topbar,.side,.sub-top,.statusbar,.toast,.loader,.modal,#edit-pane,.book-head,.ProseMirror{display:none !important}
+  .app{display:block !important;height:auto !important;overflow:visible !important}
+  .main{display:block !important;grid-template-columns:none !important;overflow:visible !important;height:auto !important}
+  .stage{padding:0 !important;margin:0 !important;overflow:visible !important;background:#fff !important;display:block !important;height:auto !important}
+  .book{gap:0 !important;padding:0 !important;margin:0 !important;min-width:0 !important;display:block !important}
+  .spread{
+    display:block !important;
+    box-shadow:none !important;background:transparent !important;
+    grid-template-columns:none !important;
+    width:auto !important;
   }
-  .page:last-child{page-break-after:auto}
+  .spread::before,.spread::after{display:none !important}
+  .page{
+    width:var(--page-w) !important;height:var(--page-h) !important;
+    box-shadow:none !important;background:#fff !important;
+    page-break-after:always !important;break-after:page !important;
+    page-break-inside:avoid !important;
+    overflow:hidden !important;
+    display:block !important;position:relative !important;
+    margin:0 !important;
+  }
+  .page:last-child{page-break-after:auto !important;break-after:auto !important}
   .page-inner{
-    padding:var(--page-mt) var(--page-mr) var(--page-mb) var(--page-ml);
-    height:100%;
+    padding:var(--page-mt) var(--page-mr) var(--page-mb) var(--page-ml) !important;
+    height:100% !important;width:100% !important;
+    box-sizing:border-box !important;
     font-family:var(--body-family);
     font-size:var(--body-size);
     line-height:var(--body-leading);
   }
-  .page-clip{height:calc(var(--page-h) - var(--page-mt) - var(--page-mb));overflow:hidden;column-count:var(--columns);column-gap:8mm;column-fill:auto}
-  .page-content{pointer-events:none}
+  .page-clip{
+    height:calc(var(--page-h) - var(--page-mt) - var(--page-mb)) !important;
+    width:100% !important;
+    overflow:hidden !important;
+    column-count:var(--columns) !important;
+    column-gap:8mm !important;column-fill:auto !important;
+  }
+  .page-head,.page-foot{
+    position:absolute !important;left:0 !important;right:0 !important;
+    color:#555 !important;
+  }
+  .page-head{top:6mm !important;height:10mm !important;}
+  .page-foot{bottom:6mm !important;height:10mm !important;}
+  .page-content{pointer-events:none;color:#000 !important}
+  .page-content h1,.page-content h2,.page-content h3{color:#000 !important}
 }
 </style>
 </head>
@@ -612,100 +802,123 @@ input,select{font-family:inherit;font-size:13px}
   <div class="main">
 
     <aside class="side">
-      <h3>원고 가져오기</h3>
-      <div class="upload-zone" id="upload-zone">
-        <span class="big">⤓</span>
-        <div class="t">파일 업로드 / 드롭</div>
-        <div class="s">HWPX · DOCX · PPTX · HTML · MD · TXT · IDML</div>
-        <div class="s" style="margin-top:8px;color:var(--warn);font-size:10.5px;line-height:1.45">
-          ※ <b>HWP (바이너리)는 지원되지 않습니다</b><br>
-          한글 → <i>다른 이름으로 저장</i> → <b>.hwpx</b>로 저장 후 업로드하세요.
+      <h3 data-sec="import"><span><i class="ph ph-upload-simple ic"></i><span class="title-text">원고 가져오기</span></span></h3>
+      <div class="sec">
+        <div class="upload-zone" id="upload-zone">
+          <span class="big">⤓</span>
+          <div class="t">파일 업로드 / 드롭</div>
+          <div class="s">HWPX · DOCX · PPTX · HTML · MD · TXT · IDML</div>
+          <div class="s" style="margin-top:8px;color:var(--warn);font-size:10.5px;line-height:1.45">
+            ※ <b>HWP (바이너리)는 지원되지 않습니다</b><br>
+            한글 → <i>다른 이름으로 저장</i> → <b>.hwpx</b>로 저장 후 업로드하세요.
+          </div>
+        </div>
+        <input type="file" id="file-input" accept=".hwpx,.hwp,.docx,.pptx,.html,.htm,.md,.markdown,.txt,.idml,.indd,.xml,.zip" style="display:none" multiple>
+        <button class="btn" style="width:100%;margin-top:4px" id="btn-sample">샘플 원고 불러오기</button>
+        <div class="pipeline" id="pipeline" style="display:none">
+          <div class="step" data-step="unpack"><span class="ic">①</span><span>포맷 인식</span></div>
+          <div class="step" data-step="parse"><span class="ic">②</span><span>문서 파싱</span></div>
+          <div class="step" data-step="images"><span class="ic">③</span><span>이미지 추출·배치</span></div>
+          <div class="step" data-step="style"><span class="ic">④</span><span>스타일 정규화</span></div>
+          <div class="step" data-step="editor"><span class="ic">⑤</span><span>에디터 적용</span></div>
         </div>
       </div>
-      <input type="file" id="file-input" accept=".hwpx,.hwp,.docx,.pptx,.html,.htm,.md,.markdown,.txt,.idml,.indd,.xml,.zip" style="display:none" multiple>
-      <button class="btn" style="width:100%;margin-top:4px" id="btn-sample">샘플 원고 불러오기</button>
-      <div class="pipeline" id="pipeline" style="display:none">
-        <div class="step" data-step="unpack"><span class="ic">①</span><span>포맷 인식</span></div>
-        <div class="step" data-step="parse"><span class="ic">②</span><span>문서 파싱</span></div>
-        <div class="step" data-step="images"><span class="ic">③</span><span>이미지 추출·배치</span></div>
-        <div class="step" data-step="style"><span class="ic">④</span><span>스타일 정규화</span></div>
-        <div class="step" data-step="editor"><span class="ic">⑤</span><span>에디터 적용</span></div>
-      </div>
 
-      <h3>용지 · 여백</h3>
-      <div class="row">
-        <label>용지</label>
-        <select id="sel-paper">
-          <option value="B5" selected>B5 (182×257)</option>
-          <option value="A4">A4 (210×297)</option>
-          <option value="A5">A5 (148×210)</option>
-          <option value="Shinkook">신국판 (152×225)</option>
-          <option value="46">46판 (127×188)</option>
-        </select>
-      </div>
-      <div class="row">
-        <label>단</label>
-        <div class="seg" id="seg-columns">
-          <button data-val="1" class="active">1단</button>
-          <button data-val="2">2단</button>
+      <h3 data-sec="paper"><span><i class="ph ph-file ic"></i><span class="title-text">용지 · 여백</span></span></h3>
+      <div class="sec">
+        <div class="row">
+          <label>용지</label>
+          <select id="sel-paper">
+            <option value="B5" selected>B5 (182×257)</option>
+            <option value="A4">A4 (210×297)</option>
+            <option value="A5">A5 (148×210)</option>
+            <option value="Shinkook">신국판 (152×225)</option>
+            <option value="46">46판 (127×188)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>단</label>
+          <div class="seg" id="seg-columns">
+            <button data-val="1" class="active">1단</button>
+            <button data-val="2">2단</button>
+          </div>
+        </div>
+        <div class="row">
+          <label>상·하</label>
+          <input type="number" id="m-top" value="22" min="0" max="60" step="1">
+          <input type="number" id="m-bot" value="22" min="0" max="60" step="1">
+        </div>
+        <div class="row">
+          <label>좌·우</label>
+          <input type="number" id="m-left" value="20" min="0" max="60" step="1">
+          <input type="number" id="m-right" value="20" min="0" max="60" step="1">
         </div>
       </div>
-      <div class="row">
-        <label>상·하</label>
-        <input type="number" id="m-top" value="22" min="0" max="60" step="1">
-        <input type="number" id="m-bot" value="22" min="0" max="60" step="1">
-      </div>
-      <div class="row">
-        <label>좌·우</label>
-        <input type="number" id="m-left" value="20" min="0" max="60" step="1">
-        <input type="number" id="m-right" value="20" min="0" max="60" step="1">
+
+      <h3 data-sec="type"><span><i class="ph ph-text-aa ic"></i><span class="title-text">본문 조판</span></span></h3>
+      <div class="sec">
+        <div class="row">
+          <label>서체</label>
+          <select id="sel-font">
+            <option value='"Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif' selected>Noto Serif (명조)</option>
+            <option value='"Noto Sans KR","SF Pro Text","Helvetica Neue",sans-serif'>Noto Sans (고딕)</option>
+            <option value='"Nanum Myeongjo","Batang",serif'>나눔명조</option>
+            <option value='"Nanum Gothic","Malgun Gothic",sans-serif'>나눔고딕</option>
+            <option value='"Pretendard Variable","Pretendard","Apple SD Gothic Neo",sans-serif'>Pretendard</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>크기</label>
+          <input type="number" id="in-size" value="10" min="7" max="18" step="0.5">
+          <label style="min-width:32px;margin-left:4px">pt</label>
+        </div>
+        <div class="row">
+          <label>행간</label>
+          <input type="number" id="in-lead" value="1.75" min="1.0" max="2.5" step="0.05">
+        </div>
+        <div class="row">
+          <label>자간</label>
+          <input type="number" id="in-tracking" value="0" min="-50" max="100" step="1">
+          <label style="min-width:32px;margin-left:4px">‰</label>
+        </div>
+        <div class="row">
+          <label>단락 간격</label>
+          <input type="number" id="in-para-gap" value="0" min="0" max="24" step="1">
+          <label style="min-width:32px;margin-left:4px">pt</label>
+        </div>
+        <div class="row">
+          <label>들여쓰기</label>
+          <input type="number" id="in-indent" value="0" min="0" max="24" step="1">
+          <label style="min-width:32px;margin-left:4px">pt</label>
+        </div>
       </div>
 
-      <h3>본문 서체</h3>
-      <div class="row">
-        <label>서체</label>
-        <select id="sel-font">
-          <option value='"Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif' selected>Noto Serif (명조)</option>
-          <option value='"Noto Sans KR","SF Pro Text","Helvetica Neue",sans-serif'>Noto Sans (고딕)</option>
-          <option value='"Nanum Myeongjo","Batang",serif'>나눔명조</option>
-          <option value='"Nanum Gothic","Malgun Gothic",sans-serif'>나눔고딕</option>
-          <option value='"Pretendard Variable","Pretendard","Apple SD Gothic Neo",sans-serif'>Pretendard</option>
-        </select>
-      </div>
-      <div class="row">
-        <label>크기</label>
-        <input type="number" id="in-size" value="10" min="7" max="18" step="0.5">
-        <label style="min-width:32px;margin-left:4px">pt</label>
-      </div>
-      <div class="row">
-        <label>행간</label>
-        <input type="number" id="in-lead" value="1.75" min="1.0" max="2.5" step="0.05">
-      </div>
-
-      <h3>도곽 머리말 / 꼬리말</h3>
-      <div class="row">
-        <label>머리말</label>
-        <select id="sel-head-pos">
-          <option value="none">없음</option>
-          <option value="outer" selected>바깥쪽</option>
-          <option value="center">가운데</option>
-          <option value="left">왼쪽 고정</option>
-          <option value="right">오른쪽 고정</option>
-        </select>
-      </div>
-      <div class="row">
-        <label>쪽번호</label>
-        <select id="sel-foot-pos">
-          <option value="none">없음</option>
-          <option value="center" selected>가운데</option>
-          <option value="outer">바깥쪽</option>
-          <option value="left">왼쪽 고정</option>
-          <option value="right">오른쪽 고정</option>
-        </select>
-      </div>
-      <div class="row">
-        <label>시작쪽수</label>
-        <input type="number" id="in-start-page" value="1" min="1" step="1">
+      <h3 data-sec="headfoot"><span><i class="ph ph-book-open ic"></i><span class="title-text">도곽 머리말 / 꼬리말</span></span></h3>
+      <div class="sec">
+        <div class="row">
+          <label>머리말</label>
+          <select id="sel-head-pos">
+            <option value="none">없음</option>
+            <option value="outer" selected>바깥쪽</option>
+            <option value="center">가운데</option>
+            <option value="left">왼쪽 고정</option>
+            <option value="right">오른쪽 고정</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>쪽번호</label>
+          <select id="sel-foot-pos">
+            <option value="none">없음</option>
+            <option value="center" selected>가운데</option>
+            <option value="outer">바깥쪽</option>
+            <option value="left">왼쪽 고정</option>
+            <option value="right">오른쪽 고정</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>시작쪽수</label>
+          <input type="number" id="in-start-page" value="1" min="1" step="1">
+        </div>
       </div>
     </aside>
 
@@ -772,12 +985,17 @@ input,select{font-family:inherit;font-size:13px}
 
   </div>
 
-  <!-- Bottom dock: edit pane (always visible). Book preview above stays in view. -->
-  <div id="edit-pane" aria-label="편집 영역">
-    <div class="edit-resize" id="edit-resize" title="드래그해서 높이 조절"></div>
-    <div class="edit-head">
+  <!-- Edit pane (always visible, supports dock modes: bottom / right / float). -->
+  <div id="edit-pane" class="dock-bottom" aria-label="편집 영역">
+    <div class="edit-resize" id="edit-resize" title="드래그해서 크기 조절"></div>
+    <div class="edit-head" id="edit-head">
       <span class="edit-label"><i class="ph ph-pencil-simple"></i> 편집</span>
-      <span class="edit-hint">여기에 작성·붙여넣기 하면 위 책 뷰로 자동 조판됩니다.</span>
+      <span class="edit-hint">이미지는 드래그해서 놓거나 붙여넣기 가능 — 페이지 위에 자유롭게 배치됩니다.</span>
+      <span class="dock-modes" role="group" aria-label="도크 위치">
+        <button id="dock-bottom" class="active" title="하단 고정"><i class="ph ph-dock-bottom"></i></button>
+        <button id="dock-right" title="우측 도크"><i class="ph ph-dock-right"></i></button>
+        <button id="dock-float" title="플로팅 창"><i class="ph ph-browser"></i></button>
+      </span>
       <span class="edit-actions">
         <button class="btn" id="btn-ai-style" title="Claude AI로 제목·소제목·목차 자동 스타일링">
           <i class="ph ph-sparkle"></i> AI 자동 스타일
@@ -805,28 +1023,30 @@ input,select{font-family:inherit;font-size:13px}
 <div class="modal" id="ai-modal">
   <div class="card ai-card">
     <h4><i class="ph ph-sparkle"></i> Claude AI 자동 스타일</h4>
-    <p class="ai-desc">본문을 분석해 제목·소제목·목차를 자동으로 인식하고 스타일을 적용합니다.</p>
+    <p class="ai-desc">본문을 분석해 제목·소제목·목차·저자소개 등 역할별로 페이지를 구성하고 스타일을 적용합니다.
+      <b style="color:var(--warn)">본문 내용은 절대 수정되지 않습니다</b> — 태그와 페이지 구성만 변경됩니다.</p>
     <div class="ai-row">
       <label>API 키</label>
       <input type="password" id="ai-key" placeholder="sk-ant-api03-..." autocomplete="off">
     </div>
     <div class="ai-row">
       <label>모델</label>
-      <select id="ai-model">
-        <option value="claude-sonnet-4-5" selected>Claude Sonnet 4.5 (권장)</option>
-        <option value="claude-opus-4-5">Claude Opus 4.5 (최고 품질)</option>
-        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (빠름)</option>
-      </select>
+      <select id="ai-model" class="loading"><option>불러오는 중…</option></select>
+      <button class="btn ghost" id="ai-reload-models" title="모델 목록 새로고침" style="padding:4px 8px;font-size:11px">
+        <i class="ph ph-arrows-clockwise"></i>
+      </button>
     </div>
     <div class="ai-row ai-checks">
       <label class="check"><input type="checkbox" id="ai-save-key" checked> 이 브라우저에 키 저장</label>
-      <label class="check"><input type="checkbox" id="ai-add-toc"> 목차 자동 생성</label>
+      <label class="check"><input type="checkbox" id="ai-add-toc" checked> 목차 자동 생성 (별도 페이지)</label>
+      <label class="check"><input type="checkbox" id="ai-split-frontmatter" checked> 머리글·저자소개·서문 페이지 분리</label>
     </div>
     <div class="ai-row ai-prompt-row">
       <label>추가 지시(선택)</label>
       <textarea id="ai-prompt" rows="2" placeholder="예: 번호가 매겨진 항목은 소제목(h3)으로 처리"></textarea>
     </div>
     <div class="ai-status" id="ai-status"></div>
+    <div class="ai-diff-warn" id="ai-diff-warn" style="display:none"></div>
     <div class="foot">
       <button class="btn" id="ai-cancel">취소</button>
       <button class="btn primary" id="ai-apply">분석 & 적용</button>
@@ -1431,28 +1651,60 @@ function paginate(){
      (at column width). Reserve a tiny buffer for column-break rounding. */
   const pageCapH = Math.max(50, pageInnerH * columns - 4);
 
-  const blocks = Array.from(pm.children).filter(n => n.nodeType === 1);
+  /* Flatten editor children but also expand <section class="front-matter">
+     into its inner children, tagged with a hint so the section boundary
+     can trigger a page-break. Explicit <hr class="page-break"> becomes a
+     PAGE-BREAK marker. */
+  const rawBlocks = Array.from(pm.children).filter(n => n.nodeType === 1);
+  const expanded = [];
+  for (const b of rawBlocks){
+    if (b.tagName === 'HR' && b.classList.contains('page-break')){
+      expanded.push({ kind: 'break', el: b });
+      continue;
+    }
+    if (b.tagName === 'SECTION' && b.classList.contains('front-matter')){
+      /* Start the front-matter on a fresh page if we aren't already there. */
+      expanded.push({ kind: 'break', el: null });
+      const inner = Array.from(b.children).filter(n => n.nodeType === 1);
+      for (const c of inner) expanded.push({ kind: 'block', el: c, inFront: true, frontClass: b.className });
+      /* End the front-matter section with its own page break. */
+      expanded.push({ kind: 'break', el: null });
+      continue;
+    }
+    expanded.push({ kind: 'block', el: b });
+  }
 
   /* Split oversized blocks so no single block exceeds one page. Paragraphs
      get word-split; tables / images / pre that don't split cleanly keep
      their place (may overflow their own page — acceptable edge case). */
   const flattened = [];
-  for (const b of blocks){
+  for (const item of expanded){
+    if (item.kind === 'break'){ flattened.push({ break:true }); continue; }
+    const b = item.el;
     const h = measureBlockHeight(b);
+    const meta = item.inFront ? { inFront:true, frontClass:item.frontClass } : {};
     if (h <= pageInnerH || !canSplitBlock(b)){
-      flattened.push({ el: b, h });
+      flattened.push({ el: b, h, ...meta });
     } else {
       for (const piece of splitTextBlock(b, pageInnerH)){
         const ph = measureBlockHeight(piece);
-        flattened.push({ el: piece, h: ph });
+        flattened.push({ el: piece, h: ph, ...meta });
       }
     }
   }
 
-  /* Bucket into pages by cumulative height. */
+  /* Bucket into pages by cumulative height. Explicit breaks start a new page
+     immediately (even if the current page is empty — empty pages are dropped
+     later). */
   const pages = [[]];
   let curH = 0;
+  const forceNewPage = ()=>{
+    if (pages[pages.length - 1].length > 0){
+      pages.push([]); curH = 0;
+    }
+  };
   for (const item of flattened){
+    if (item.break){ forceNewPage(); continue; }
     if (item.h === 0) continue;
     if (curH + item.h > pageCapH && pages[pages.length - 1].length > 0){
       pages.push([]);
@@ -1477,8 +1729,26 @@ function paginate(){
     const content = page.querySelector('.page-content');
     if (!content) return;
     content.innerHTML = '';
-    for (const { el } of bucket){
-      content.appendChild(el.cloneNode(true));
+    /* Mark pages that contain front-matter so CSS can style them distinctly,
+       and wrap each run of front-matter blocks into its <section>. */
+    let currentFront = null;
+    let host = content;
+    content.classList.remove('is-front-matter');
+    for (const item of bucket){
+      if (item.inFront){
+        if (currentFront !== item.frontClass){
+          currentFront = item.frontClass;
+          const sec = document.createElement('section');
+          sec.className = currentFront;
+          content.appendChild(sec);
+          host = sec;
+          content.classList.add('is-front-matter');
+        }
+      } else {
+        currentFront = null;
+        host = content;
+      }
+      host.appendChild(item.el.cloneNode(true));
     }
   });
 
@@ -1876,6 +2146,22 @@ $('#in-lead').addEventListener('input', e=>{
   root.style.setProperty('--body-leading', e.target.value);
   scheduleReflow();
 });
+const _inTracking = document.getElementById('in-tracking');
+if (_inTracking) _inTracking.addEventListener('input', e=>{
+  /* 1‰ = 0.001em letter-spacing */
+  root.style.setProperty('--body-tracking', `${(parseFloat(e.target.value)||0) / 1000}em`);
+  scheduleReflow();
+});
+const _inParaGap = document.getElementById('in-para-gap');
+if (_inParaGap) _inParaGap.addEventListener('input', e=>{
+  root.style.setProperty('--body-para-gap', `${parseFloat(e.target.value)||0}pt`);
+  scheduleReflow();
+});
+const _inIndent = document.getElementById('in-indent');
+if (_inIndent) _inIndent.addEventListener('input', e=>{
+  root.style.setProperty('--body-indent', `${parseFloat(e.target.value)||0}pt`);
+  scheduleReflow();
+});
 
 /* Re-reflow on window resize (paper layout depends on rendered pixel heights) */
 let _resizeTimer = null;
@@ -2187,51 +2473,153 @@ setStatus('에디터 준비 완료', 'ok');
 console.log('[HCG typesetting editor] ready');
 
 /* ============================================================
-   Edit dock — drag-to-resize + collapse
+   Edit dock — DevTools-style dock modes (bottom / right / float)
+   + drag-to-resize + collapse + persistence
    ============================================================ */
-const editPane = $('#edit-pane');
+const editPane   = $('#edit-pane');
 const editResize = $('#edit-resize');
 const editToggle = $('#btn-edit-toggle');
+const editHead   = $('#edit-head');
+const dockBtns = {
+  bottom: $('#dock-bottom'),
+  right:  $('#dock-right'),
+  float:  $('#dock-float'),
+};
 
-/* Restore persisted height */
+/* Restore persisted sizes. */
 try {
   const savedH = parseInt(localStorage.getItem('hcg_dock_h') || '0', 10);
   if (savedH >= 120 && savedH <= window.innerHeight * 0.72){
     document.documentElement.style.setProperty('--edit-dock-h', savedH + 'px');
   }
+  const savedW = parseInt(localStorage.getItem('hcg_dock_w') || '0', 10);
+  if (savedW >= 320 && savedW <= window.innerWidth * 0.7){
+    document.documentElement.style.setProperty('--edit-dock-w', savedW + 'px');
+  }
+  const fw = parseInt(localStorage.getItem('hcg_float_w') || '0', 10);
+  const fh = parseInt(localStorage.getItem('hcg_float_h') || '0', 10);
+  const fx = localStorage.getItem('hcg_float_x') || '';
+  const fy = localStorage.getItem('hcg_float_y') || '';
+  if (fw) document.documentElement.style.setProperty('--edit-float-w', fw + 'px');
+  if (fh) document.documentElement.style.setProperty('--edit-float-h', fh + 'px');
+  if (fx) document.documentElement.style.setProperty('--edit-float-x', fx);
+  if (fy) document.documentElement.style.setProperty('--edit-float-y', fy);
 } catch(e){}
 
+function applyDockMode(mode){
+  editPane.classList.remove('dock-bottom','dock-right','dock-float');
+  document.body.classList.remove('dock-mode-bottom','dock-mode-right','dock-mode-float');
+  editPane.classList.add('dock-' + mode);
+  document.body.classList.add('dock-mode-' + mode);
+  for (const [k,b] of Object.entries(dockBtns)){ if (b) b.classList.toggle('active', k === mode); }
+  try { localStorage.setItem('hcg_dock_mode', mode); } catch(e){}
+  setTimeout(scheduleReflow, 80);
+}
+let initialMode = 'bottom';
+try { initialMode = localStorage.getItem('hcg_dock_mode') || 'bottom'; } catch(e){}
+applyDockMode(initialMode);
+for (const [k,b] of Object.entries(dockBtns)){
+  if (b) b.addEventListener('click', ()=>applyDockMode(k));
+}
+
+/* --- Drag-to-resize (adapts to current dock mode) --- */
 let _dockDrag = null;
 editResize.addEventListener('mousedown', e=>{
   e.preventDefault();
-  _dockDrag = { startY: e.clientY, startH: editPane.getBoundingClientRect().height };
-  document.body.style.cursor = 'ns-resize';
+  const mode = [...editPane.classList].find(c => c.startsWith('dock-'));
+  _dockDrag = {
+    startX: e.clientX, startY: e.clientY,
+    startW: editPane.getBoundingClientRect().width,
+    startH: editPane.getBoundingClientRect().height,
+    mode: mode || 'dock-bottom',
+  };
+  document.body.style.cursor = (mode === 'dock-right') ? 'ew-resize' : 'ns-resize';
   document.body.style.userSelect = 'none';
 });
 window.addEventListener('mousemove', e=>{
-  if (!_dockDrag) return;
-  const delta = _dockDrag.startY - e.clientY;   // dragging up = increase height
-  const newH = Math.max(120, Math.min(window.innerHeight * 0.72, _dockDrag.startH + delta));
-  document.documentElement.style.setProperty('--edit-dock-h', newH + 'px');
+  if (_dockDrag){
+    if (_dockDrag.mode === 'dock-right'){
+      const delta = _dockDrag.startX - e.clientX;
+      const w = Math.max(320, Math.min(window.innerWidth * 0.7, _dockDrag.startW + delta));
+      document.documentElement.style.setProperty('--edit-dock-w', w + 'px');
+    } else {
+      const delta = _dockDrag.startY - e.clientY;
+      const h = Math.max(120, Math.min(window.innerHeight * 0.72, _dockDrag.startH + delta));
+      document.documentElement.style.setProperty('--edit-dock-h', h + 'px');
+    }
+    return;
+  }
+  if (_floatDrag){
+    if (_floatDrag.kind === 'move'){
+      const dx = e.clientX - _floatDrag.startX;
+      const dy = e.clientY - _floatDrag.startY;
+      const x = Math.max(0, Math.min(window.innerWidth - 200, _floatDrag.startLeft + dx));
+      const y = Math.max(0, Math.min(window.innerHeight - 80, _floatDrag.startTop + dy));
+      document.documentElement.style.setProperty('--edit-float-x', x + 'px');
+      document.documentElement.style.setProperty('--edit-float-y', y + 'px');
+    } else if (_floatDrag.kind === 'resize'){
+      const dx = e.clientX - _floatDrag.startX;
+      const dy = e.clientY - _floatDrag.startY;
+      const w = Math.max(360, Math.min(window.innerWidth - 20, _floatDrag.startW + dx));
+      const h = Math.max(200, Math.min(window.innerHeight - 20, _floatDrag.startH + dy));
+      document.documentElement.style.setProperty('--edit-float-w', w + 'px');
+      document.documentElement.style.setProperty('--edit-float-h', h + 'px');
+    }
+  }
 });
 window.addEventListener('mouseup', ()=>{
-  if (!_dockDrag) return;
-  _dockDrag = null;
-  document.body.style.cursor = '';
-  document.body.style.userSelect = '';
-  try {
-    const h = editPane.getBoundingClientRect().height;
-    localStorage.setItem('hcg_dock_h', String(Math.round(h)));
-  } catch(e){}
-  setTimeout(scheduleReflow, 80);
+  if (_dockDrag){
+    _dockDrag = null;
+    document.body.style.cursor = ''; document.body.style.userSelect = '';
+    try {
+      const r = editPane.getBoundingClientRect();
+      localStorage.setItem('hcg_dock_h', String(Math.round(r.height)));
+      localStorage.setItem('hcg_dock_w', String(Math.round(r.width)));
+    } catch(e){}
+    setTimeout(scheduleReflow, 80);
+  }
+  if (_floatDrag){
+    _floatDrag = null;
+    document.body.style.cursor = ''; document.body.style.userSelect = '';
+    try {
+      const r = editPane.getBoundingClientRect();
+      localStorage.setItem('hcg_float_w', String(Math.round(r.width)));
+      localStorage.setItem('hcg_float_h', String(Math.round(r.height)));
+      localStorage.setItem('hcg_float_x', String(Math.round(r.left)) + 'px');
+      localStorage.setItem('hcg_float_y', String(Math.round(r.top)) + 'px');
+    } catch(e){}
+    setTimeout(scheduleReflow, 80);
+  }
+});
+
+/* --- Floating window: drag by header, resize handle at bottom-right --- */
+let _floatDrag = null;
+editHead.addEventListener('mousedown', e=>{
+  if (!editPane.classList.contains('dock-float')) return;
+  /* ignore clicks on buttons inside the head */
+  if (e.target.closest('button, input, select, .ph')) return;
+  const r = editPane.getBoundingClientRect();
+  _floatDrag = { kind:'move', startX:e.clientX, startY:e.clientY, startLeft:r.left, startTop:r.top };
+  document.body.style.cursor = 'move'; document.body.style.userSelect = 'none';
+  e.preventDefault();
+});
+editPane.addEventListener('mousedown', e=>{
+  if (!editPane.classList.contains('dock-float')) return;
+  const r = editPane.getBoundingClientRect();
+  /* Detect bottom-right 14×14 resize gripper */
+  if (e.clientX >= r.right - 14 && e.clientY >= r.bottom - 14){
+    _floatDrag = { kind:'resize', startX:e.clientX, startY:e.clientY, startW:r.width, startH:r.height };
+    document.body.style.cursor = 'nwse-resize'; document.body.style.userSelect = 'none';
+    e.preventDefault(); e.stopPropagation();
+  }
 });
 
 editToggle.addEventListener('click', ()=>{
   const collapsed = editPane.classList.toggle('collapsed');
   editToggle.querySelector('i').className = collapsed ? 'ph ph-caret-up' : 'ph ph-caret-down';
-  if (collapsed){
+  if (collapsed && editPane.classList.contains('dock-bottom')){
     document.documentElement.style.setProperty('--edit-dock-h', '38px');
-  } else {
+  } else if (!collapsed && editPane.classList.contains('dock-bottom')){
     const savedH = parseInt(localStorage.getItem('hcg_dock_h') || '260', 10);
     document.documentElement.style.setProperty('--edit-dock-h', Math.max(120, savedH) + 'px');
   }
@@ -2239,36 +2627,253 @@ editToggle.addEventListener('click', ()=>{
 });
 
 /* ============================================================
-   Claude AI — auto-style (headings, sub-headings, TOC)
-   Calls the Anthropic Messages API directly from the browser
-   (requires anthropic-dangerous-direct-browser-access header).
-   API key stored in localStorage if user opts in.
+   Sidebar — collapsible sections (click h3 to toggle)
    ============================================================ */
-const aiModal   = $('#ai-modal');
-const aiKeyInp  = $('#ai-key');
-const aiModel   = $('#ai-model');
-const aiSaveKey = $('#ai-save-key');
-const aiAddToc  = $('#ai-add-toc');
-const aiPrompt  = $('#ai-prompt');
-const aiStatus  = $('#ai-status');
-const btnAi     = $('#btn-ai-style');
+document.querySelectorAll('.side h3[data-sec]').forEach(h=>{
+  const key = 'hcg_side_' + h.dataset.sec;
+  try {
+    if (localStorage.getItem(key) === '1') h.classList.add('collapsed');
+  } catch(e){}
+  h.addEventListener('click', ()=>{
+    h.classList.toggle('collapsed');
+    try { localStorage.setItem(key, h.classList.contains('collapsed') ? '1' : '0'); } catch(e){}
+  });
+});
+
+/* ============================================================
+   Image drag-and-drop + paste — editor accepts image files and
+   data-URL images are inserted inline. Uses Tiptap's insertContent.
+   Free positioning is handled by the editor's image nodes — users
+   can click and drag inserted images to reposition via the native
+   .ProseMirror image interaction (absolute positioning below).
+   ============================================================ */
+function filesToImageInserts(files){
+  const imgs = [];
+  const promises = [];
+  for (const f of files){
+    if (!f.type || !f.type.startsWith('image/')) continue;
+    promises.push(new Promise((resolve, reject)=>{
+      const fr = new FileReader();
+      fr.onload = ()=>resolve({ src: fr.result, name: f.name });
+      fr.onerror = reject;
+      fr.readAsDataURL(f);
+    }));
+  }
+  return Promise.all(promises);
+}
+async function insertDroppedImages(files){
+  const items = await filesToImageInserts(files);
+  if (!items.length) return;
+  const chain = editor.chain().focus();
+  for (const it of items){
+    chain.insertContent({
+      type: 'image',
+      attrs: { src: it.src, alt: it.name || '' },
+    });
+    chain.insertContent('<p></p>');
+  }
+  chain.run();
+  setTimeout(()=>{ rescanEditorImages(); scheduleReflow(); }, 40);
+  toast(`이미지 ${items.length}개 삽입`, 'ok');
+}
+
+/* Drop files onto the editor. */
+const editorEl = document.getElementById('editor');
+['dragenter','dragover'].forEach(ev=>{
+  editorEl.addEventListener(ev, e=>{
+    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')){
+      e.preventDefault();
+      const pm = editorEl.querySelector('.ProseMirror');
+      pm && pm.classList.add('drop-active');
+    }
+  });
+});
+['dragleave','drop'].forEach(ev=>{
+  editorEl.addEventListener(ev, e=>{
+    const pm = editorEl.querySelector('.ProseMirror');
+    pm && pm.classList.remove('drop-active');
+  });
+});
+editorEl.addEventListener('drop', e=>{
+  if (!e.dataTransfer || !e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  if (files.length === 0) return;
+  e.preventDefault();
+  insertDroppedImages(files);
+});
+
+/* Paste images (e.g. screenshot from clipboard). */
+editorEl.addEventListener('paste', e=>{
+  if (!e.clipboardData) return;
+  const files = Array.from(e.clipboardData.files || []).filter(f => f.type.startsWith('image/'));
+  if (files.length === 0) return;
+  e.preventDefault();
+  insertDroppedImages(files);
+});
+
+/* ============================================================
+   Free-position image dragging in the editor.
+   Lets the user click an image, then drag it around (CSS translate)
+   plus a bottom-right handle for resize. Position is saved as a
+   `style="--img-dx:…px;--img-dy:…px;width:…px"` attribute that the
+   pagination clone preserves.
+   ============================================================ */
+(function installImageDrag(){
+  let sel = null, dragMode = null, start = null;
+
+  function pickImg(t){ return t && t.tagName === 'IMG' ? t : null; }
+  function clearSel(){
+    document.querySelectorAll('.ProseMirror img.selected').forEach(n=>n.classList.remove('selected'));
+    sel = null;
+  }
+  document.addEventListener('mousedown', e=>{
+    const pm = editorEl.querySelector('.ProseMirror');
+    if (!pm || !pm.contains(e.target)) return;
+    const img = pickImg(e.target);
+    if (!img){ clearSel(); return; }
+    clearSel();
+    sel = img; img.classList.add('selected');
+    /* Resize when clicking within the last 10px of the image (bottom-right corner) */
+    const r = img.getBoundingClientRect();
+    const nearCorner = (e.clientX >= r.right - 12) && (e.clientY >= r.bottom - 12);
+    dragMode = nearCorner ? 'resize' : 'move';
+    start = {
+      x: e.clientX, y: e.clientY,
+      w: r.width, h: r.height,
+      dx: parseFloat(img.dataset.dx || '0'),
+      dy: parseFloat(img.dataset.dy || '0'),
+    };
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e=>{
+    if (!sel || !start) return;
+    if (dragMode === 'move'){
+      const nx = start.dx + (e.clientX - start.x);
+      const ny = start.dy + (e.clientY - start.y);
+      sel.dataset.dx = String(nx);
+      sel.dataset.dy = String(ny);
+      sel.style.transform = `translate(${nx}px, ${ny}px)`;
+      sel.style.position = sel.style.position || 'relative';
+    } else if (dragMode === 'resize'){
+      const nw = Math.max(40, start.w + (e.clientX - start.x));
+      sel.style.width = nw + 'px';
+      sel.style.height = 'auto';
+    }
+  });
+  document.addEventListener('mouseup', ()=>{
+    if (sel){
+      document.body.style.userSelect = '';
+      sel = null; dragMode = null; start = null;
+      scheduleReflow();
+    }
+  });
+})();
+
+console.log('[HCG] dock modes, side collapse, image DnD + free-drag installed');
+
+/* ============================================================
+   Claude AI — auto-style (headings, sub-headings, TOC, front-matter)
+   • Fetches current model list from /v1/models
+   • Defaults to the latest Sonnet
+   • NEVER modifies user text content — only tags / groupings
+   • Verifies plaintext round-trip and rejects any text loss
+   ============================================================ */
+const aiModal         = $('#ai-modal');
+const aiKeyInp        = $('#ai-key');
+const aiModelSel      = $('#ai-model');
+const aiSaveKey       = $('#ai-save-key');
+const aiAddToc        = $('#ai-add-toc');
+const aiSplitFront    = $('#ai-split-frontmatter');
+const aiPrompt        = $('#ai-prompt');
+const aiStatus        = $('#ai-status');
+const aiDiffWarn      = $('#ai-diff-warn');
+const aiReloadModels  = $('#ai-reload-models');
+const btnAi           = $('#btn-ai-style');
+
+/* Hardcoded fallback if /v1/models is unreachable. Sorted newest-first. */
+const AI_MODELS_FALLBACK = [
+  { id:'claude-opus-4-7',            label:'Claude Opus 4.7 (최신·최고 품질)' },
+  { id:'claude-opus-4-6',            label:'Claude Opus 4.6' },
+  { id:'claude-sonnet-4-6',          label:'Claude Sonnet 4.6 (권장)' },
+  { id:'claude-sonnet-4-5',          label:'Claude Sonnet 4.5' },
+  { id:'claude-haiku-4-5-20251001',  label:'Claude Haiku 4.5 (빠름)' },
+];
 
 function aiSetStatus(msg, kind=''){
   aiStatus.className = 'ai-status ' + kind;
   aiStatus.textContent = msg;
 }
+function aiShowDiffWarn(html){
+  aiDiffWarn.style.display = html ? 'block' : 'none';
+  aiDiffWarn.innerHTML = html || '';
+}
 
-btnAi.addEventListener('click', ()=>{
-  /* Pre-fill from localStorage */
-  try {
-    const k = localStorage.getItem('hcg_ai_key') || '';
-    const m = localStorage.getItem('hcg_ai_model') || 'claude-sonnet-4-5';
-    aiKeyInp.value = k;
-    aiModel.value = m;
-  } catch(e){}
+/* Populate model dropdown — fetch /v1/models when a key is available,
+   otherwise use fallback list. Sonnet is default selection. */
+async function populateAiModels(apiKey){
+  aiModelSel.classList.add('loading');
+  aiModelSel.innerHTML = '<option>불러오는 중…</option>';
+  let models = null;
+  if (apiKey){
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/models?limit=50', {
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+      });
+      if (r.ok){
+        const j = await r.json();
+        const list = (j?.data || []).filter(m => m?.id && m?.id.startsWith('claude'));
+        list.sort((a,b)=>{
+          /* newest first using created_at then id */
+          const ta = Date.parse(a.created_at||'')||0;
+          const tb = Date.parse(b.created_at||'')||0;
+          if (ta !== tb) return tb - ta;
+          return (b.id||'').localeCompare(a.id||'');
+        });
+        if (list.length) models = list.map(m => ({ id:m.id, label:m.display_name || m.id }));
+      }
+    } catch(e){ /* swallow — use fallback */ }
+  }
+  if (!models) models = AI_MODELS_FALLBACK;
+
+  aiModelSel.innerHTML = '';
+  for (const m of models){
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.label + (m.id === pickDefaultModel(models) ? '  ★' : '');
+    aiModelSel.appendChild(opt);
+  }
+  /* Pick default: prefer saved, else latest Sonnet */
+  let saved = '';
+  try { saved = localStorage.getItem('hcg_ai_model') || ''; } catch(e){}
+  const ids = models.map(m=>m.id);
+  aiModelSel.value = ids.includes(saved) ? saved : pickDefaultModel(models);
+  aiModelSel.classList.remove('loading');
+}
+function pickDefaultModel(models){
+  /* Prefer newest Sonnet by id lexicographic order (claude-sonnet-4-6 > 4-5 etc.) */
+  const sonnets = models.filter(m => /sonnet/i.test(m.id)).map(m=>m.id).sort().reverse();
+  if (sonnets[0]) return sonnets[0];
+  /* Otherwise latest model */
+  return models[0]?.id || 'claude-sonnet-4-6';
+}
+
+btnAi.addEventListener('click', async ()=>{
+  let savedKey = '';
+  try { savedKey = localStorage.getItem('hcg_ai_key') || ''; } catch(e){}
+  aiKeyInp.value = savedKey;
   aiSetStatus('');
+  aiShowDiffWarn('');
   aiModal.classList.add('show');
+  await populateAiModels(savedKey);
 });
+aiReloadModels.addEventListener('click', ()=>populateAiModels(aiKeyInp.value.trim()));
+aiKeyInp.addEventListener('change', ()=>populateAiModels(aiKeyInp.value.trim()));
+
 $('#ai-cancel').addEventListener('click', ()=>aiModal.classList.remove('show'));
 aiModal.addEventListener('click', e=>{
   if (e.target === aiModal) aiModal.classList.remove('show');
@@ -2276,7 +2881,7 @@ aiModal.addEventListener('click', e=>{
 
 $('#ai-apply').addEventListener('click', async ()=>{
   const key = aiKeyInp.value.trim();
-  const model = aiModel.value;
+  const model = aiModelSel.value;
   if (!key){ aiSetStatus('API 키를 입력하세요.', 'err'); return; }
   if (aiSaveKey.checked){
     try { localStorage.setItem('hcg_ai_key', key); localStorage.setItem('hcg_ai_model', model); } catch(e){}
@@ -2284,13 +2889,17 @@ $('#ai-apply').addEventListener('click', async ()=>{
     try { localStorage.removeItem('hcg_ai_key'); } catch(e){}
   }
   const html = editor.getHTML();
-  if (!html || editor.getText().trim().length < 20){
+  const plainBefore = editor.getText().trim();
+  if (!html || plainBefore.length < 20){
     aiSetStatus('본문이 너무 짧습니다. 먼저 원고를 불러오거나 붙여넣기 하세요.', 'err');
     return;
   }
 
-  aiSetStatus('Claude가 본문을 분석하고 있습니다…', 'busy');
+  aiSetStatus('Claude가 본문을 분석하고 있습니다… (본문은 절대 변경되지 않습니다)', 'busy');
+  aiShowDiffWarn('');
   $('#ai-apply').disabled = true;
+
+  const snapshot = editor.getJSON(); // rollback safety net
 
   try {
     const styled = await callClaudeForAutoStyle({
@@ -2298,41 +2907,119 @@ $('#ai-apply').addEventListener('click', async ()=>{
       model,
       html,
       addToc: aiAddToc.checked,
+      splitFront: aiSplitFront.checked,
       userDirective: aiPrompt.value.trim(),
     });
+
+    /* VERIFY: extract plaintext from Claude's HTML and compare to original. */
+    const check = verifyTextPreserved(plainBefore, styled);
+    if (!check.ok){
+      editor.commands.setContent(snapshot, false);
+      aiShowDiffWarn(
+        `<b>본문이 ${check.lossPct}% 사라져서 적용을 중단했습니다.</b><br>` +
+        `원본: ${check.beforeLen}자 · AI 응답: ${check.afterLen}자 · 손실: ${check.beforeLen - check.afterLen}자<br>` +
+        `모델이 본문을 요약·생략했을 수 있습니다. 더 작은 단위로 나눠 다시 시도하거나, 더 정확한 모델(Opus)을 선택하세요.`
+      );
+      aiSetStatus('적용 중단 — 본문이 보존되지 않음', 'err');
+      return;
+    }
+
     editor.commands.setContent(styled, false);
     setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 40);
-    aiSetStatus('완료되었습니다.', 'ok');
+    aiSetStatus(`완료 — 본문 ${check.beforeLen}자 모두 보존됨`, 'ok');
     toast('AI 자동 스타일 적용 완료', 'ok');
-    setTimeout(()=>aiModal.classList.remove('show'), 600);
+    setTimeout(()=>aiModal.classList.remove('show'), 800);
   } catch(err){
     console.error(err);
+    /* Safety: restore snapshot if anything threw mid-apply. */
+    try { editor.commands.setContent(snapshot, false); } catch(e){}
     aiSetStatus('실패: ' + (err.message || err), 'err');
   } finally {
     $('#ai-apply').disabled = false;
   }
 });
 
-async function callClaudeForAutoStyle({ apiKey, model, html, addToc, userDirective }){
-  /* Strip scripts/styles that might confuse; send the raw body HTML. */
+/* Compare pre/post plain text — normalize whitespace & punctuation,
+   require ≥97% character retention. Returns { ok, beforeLen, afterLen, lossPct } */
+function verifyTextPreserved(plainBefore, styledHtml){
+  const tmp = document.createElement('div');
+  tmp.innerHTML = styledHtml;
+  /* Drop auto-generated TOC since it duplicates headings. */
+  tmp.querySelectorAll('.toc, nav.toc, .front-matter.toc').forEach(n=>n.remove());
+  const plainAfter = (tmp.textContent || '').trim();
+  const norm = s => s.replace(/\s+/g,'').replace(/[\u200B-\u200D\uFEFF]/g,'');
+  const nb = norm(plainBefore);
+  const na = norm(plainAfter);
+  const beforeLen = nb.length;
+  const afterLen  = na.length;
+  if (beforeLen === 0) return { ok:true, beforeLen, afterLen, lossPct:0 };
+  /* Require retention of all substrings of length 40+ from before */
+  const missing = [];
+  for (let i = 0; i + 40 <= nb.length; i += 40){
+    const chunk = nb.slice(i, i+40);
+    if (!na.includes(chunk)) { missing.push(chunk); if (missing.length >= 5) break; }
+  }
+  const ratio = afterLen / beforeLen;
+  const lossPct = Math.max(0, Math.round((1 - ratio) * 100));
+  const ok = ratio >= 0.97 && missing.length === 0;
+  return { ok, beforeLen, afterLen, lossPct };
+}
+
+async function callClaudeForAutoStyle({ apiKey, model, html, addToc, splitFront, userDirective }){
   const system = [
-    '당신은 한국어 출판물의 교정·조판 전문가입니다.',
+    '당신은 한국어 출판물의 **교정·조판 전문가**입니다.',
     '입력으로 저자가 작성한 본문 HTML을 받습니다.',
-    '문단의 역할을 파악하여 다음 규칙대로 HTML 태그를 다시 씌운 결과를 반환하세요:',
+    '',
+    '# 절대 규칙 (위반 시 작업 실패)',
+    '1. **본문의 모든 텍스트(문자)는 한 글자도 빠짐없이 그대로 보존**해야 합니다. 요약·생략·재작성·번역·오타 수정 금지.',
+    '2. 기존 <img> 태그의 src·class·alt, <table>의 모든 셀 내용은 **완벽히 보존**.',
+    '3. 단락 순서도 그대로 유지합니다. 단, 프론트매터(목차/머리글/저자소개 등)는 지시에 따라 앞으로 이동 가능.',
+    '',
+    '# 태그 재조정 규칙',
     '- 문서 제목/대제목 → <h1>',
     '- 장(Chapter) 제목 → <h2>',
     '- 절·소제목 → <h3>',
     '- 본문 단락 → <p>',
-    '- 나열/번호 목록은 <ul>·<ol>·<li>로 명확히 표현',
-    '- 인용문은 <blockquote>',
-    '- 기존 이미지(<img>)·표(<table>)는 절대 수정·삭제하지 말고 그대로 유지',
-    addToc ? '- 결과 최상단에 <nav class="toc"><h2>목차</h2><ol>…</ol></nav> 형태의 목차를 생성 (각 <h2>, <h3> 제목을 참조)' : '',
-    userDirective ? `- 추가 지시: ${userDirective}` : '',
+    '- 나열/번호 목록 → <ul>/<ol>/<li>',
+    '- 인용문 → <blockquote>',
     '',
-    '출력 형식: 오직 결과 HTML만 반환. 설명·마크다운 코드펜스·여는 말 금지. <body>나 <html>은 감싸지 마세요. 내용 순서는 보존하되 태그만 교정합니다.',
+    '# 프론트매터(책 소개 영역) 분리',
+    splitFront
+      ? [
+          '저자소개·머리글(Preface/Foreword)·서문·헌사·감사의 글 등 **책 소개 영역**은 본문과 구분해야 합니다.',
+          '이 영역을 다음과 같이 감싸세요 (각 영역은 별도의 페이지로 출력됩니다):',
+          '  <section class="front-matter preface">…</section>   ← 머리글/서문',
+          '  <section class="front-matter author">…</section>    ← 저자소개',
+          '  <section class="front-matter foreword">…</section>  ← 서문/인사말',
+          '  <section class="front-matter dedication">…</section>← 헌사',
+          '각 <section> 뒤에는 반드시 <hr class="page-break"> 을 추가해 다음 영역과 페이지를 나눕니다.',
+          '프론트매터 간 순서: 헌사 → 저자소개 → 머리글/서문 → (목차) → 본문. 원본에 이미 순서가 정해져 있다면 그 순서를 유지합니다.',
+        ].join('\n')
+      : '',
+    '',
+    '# 목차',
+    addToc
+      ? [
+          '결과의 **최상단**(프론트매터 뒤, 본문 앞)에 다음 구조로 목차 페이지를 생성하세요:',
+          '  <section class="front-matter toc">',
+          '    <h2>목차</h2>',
+          '    <ol>',
+          '      <li><span class="toc-title">장 제목</span><span class="toc-dots"></span><span class="toc-pg">1</span></li>',
+          '      …',
+          '    </ol>',
+          '  </section>',
+          '  <hr class="page-break">',
+          '쪽 번호는 모르면 비워 두세요. 목차에는 본문 내용(제목 외)을 포함하지 마세요 — **목차 페이지엔 목차만** 있어야 합니다.',
+        ].join('\n')
+      : '',
+    userDirective ? `# 사용자 추가 지시\n${userDirective}` : '',
+    '',
+    '# 출력 형식',
+    '- HTML **만** 출력. 설명·코드펜스·<body>/<html> 금지.',
+    '- 태그 교정 외에 텍스트 내용을 절대 수정하지 마세요.',
   ].filter(Boolean).join('\n');
 
-  const userMsg = `다음 HTML을 분석하여 규칙에 맞게 태그를 재조정한 HTML만 반환하세요.\n\n---\n${html}`;
+  const userMsg = `다음 HTML의 태그를 규칙에 맞게 재조정하되, 텍스트 내용은 한 글자도 바꾸지 마세요.\n\n---\n${html}`;
 
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -2344,7 +3031,7 @@ async function callClaudeForAutoStyle({ apiKey, model, html, addToc, userDirecti
     },
     body: JSON.stringify({
       model,
-      max_tokens: 8192,
+      max_tokens: 16000,
       system,
       messages: [{ role: 'user', content: userMsg }],
     }),
@@ -2362,7 +3049,13 @@ async function callClaudeForAutoStyle({ apiKey, model, html, addToc, userDirecti
   const text = (data?.content || []).map(b => b.type === 'text' ? b.text : '').join('').trim();
   if (!text) throw new Error('빈 응답');
 
-  /* Claude may wrap output in code fences despite instructions; strip them. */
+  /* If Claude's response got truncated (stop_reason !== 'end_turn'), warn. */
+  const stopReason = data?.stop_reason;
+  if (stopReason && stopReason !== 'end_turn' && stopReason !== 'stop_sequence'){
+    console.warn('[AI] unexpected stop_reason:', stopReason);
+  }
+
+  /* Strip code fences Claude may add despite instructions. */
   return text
     .replace(/^```(?:html)?\s*/i, '')
     .replace(/\s*```\s*$/, '')
