@@ -173,7 +173,7 @@ input,select{font-family:inherit;font-size:13px}
   position:relative;
 }
 .stage.drop-active::after{
-  content:"파일을 놓으면 자동으로 파싱됩니다 — HWPX · DOCX · PPTX · HTML · MD · TXT · IDML";
+  content:"파일을 놓으면 자동으로 파싱됩니다 — HWPX · DOCX · PPTX · PDF · HTML · MD · TXT · IDML";
   position:fixed;inset:52px 0 28px 280px;z-index:40;
   display:grid;place-items:center;
   background:rgba(26,26,26,.82);color:#fff;font-size:15px;
@@ -1079,17 +1079,18 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
 
   </div>
 
-  <!-- Edit pane (always visible, supports dock modes: bottom / right / float). -->
-  <div id="edit-pane" class="dock-bottom" aria-label="편집 영역">
+  <!-- Edit pane (always visible, supports dock modes: bottom / right / float).
+       기본값은 우측 도크 — 좌측 사이드바 · 중앙 프리뷰 · 우측 편집기 3분할 레이아웃. -->
+  <div id="edit-pane" class="dock-right" aria-label="편집 영역">
     <div class="edit-resize" id="edit-resize" title="드래그해서 크기 조절"></div>
     <div class="edit-head" id="edit-head">
       <span class="edit-label"><i class="ph ph-pencil-simple"></i> 편집</span>
       <span class="edit-hint">이미지는 드래그해서 놓거나 붙여넣기 가능 — 페이지 위에 자유롭게 배치됩니다.</span>
       <span class="dock-modes" role="group" aria-label="도크 위치">
-        <button id="dock-bottom" class="active" title="하단 고정" aria-label="하단 도크">
+        <button id="dock-bottom" title="하단 고정" aria-label="하단 도크">
           <i class="ph ph-arrow-line-down"></i>
         </button>
-        <button id="dock-right" title="우측 도크" aria-label="우측 도크">
+        <button id="dock-right" class="active" title="우측 도크" aria-label="우측 도크">
           <i class="ph ph-arrow-line-right"></i>
         </button>
         <button id="dock-float" title="새 창으로 분리 (듀얼 모니터)" aria-label="새 창으로 분리">
@@ -1752,7 +1753,7 @@ const editor = new Editor({
   content: `
     <h1>학지사 조판 에디터 — HCG Pub</h1>
     <p>환영합니다. 이곳이 <strong>곧 책 페이지</strong>입니다. 별도 프리뷰 없이, 지금 보이는 모습이 그대로 PDF로 출력됩니다.</p>
-    <p>왼쪽 사이드바에서 <strong>원고 파일을 업로드</strong>하거나, 이 영역에 직접 드래그해서 놓아 보세요. HWPX, DOCX, PPTX, HTML, Markdown, TXT, IDML을 자동으로 파싱해 이 자리에 올려드립니다.</p>
+    <p>왼쪽 사이드바에서 <strong>원고 파일을 업로드</strong>하거나, 이 영역에 직접 드래그해서 놓아 보세요. HWPX, DOCX, PPTX, <strong>PDF</strong>, HTML, Markdown, TXT, IDML을 자동으로 파싱해 이 자리에 올려드립니다.</p>
     <h2>1. 지원하는 원고 포맷</h2>
     <p>학지사·학지사메디컬의 기존 원고 유통 경로를 그대로 수용합니다. 교정자가 한글에서 작업한 HWPX, 외주 번역자가 Word로 보낸 DOCX, 강사의 강의안 PPTX, 영문 저자의 Markdown 어느 경로로 들어오든 동일한 파이프라인으로 조판됩니다.</p>
     <h2>2. 이미지 자동 배치</h2>
@@ -1766,6 +1767,7 @@ const editor = new Editor({
 
 /* 에디터 업데이트가 빈번하므로 debounce */
 let __tocT = 0;
+let __tocClickInstalled = false;   /* ← ensureTocClickHandler가 읽는 상태 — 선언이 호출보다 먼저여야 TDZ 크래시 방지 */
 function scheduleTocHyperlinks(){
   clearTimeout(__tocT);
   __tocT = setTimeout(() => {
@@ -1773,8 +1775,8 @@ function scheduleTocHyperlinks(){
   }, 180);
 }
 /* 초기 1회 + 클릭 델리게이트 설치 */
-ensureTocClickHandler();
-setTimeout(() => installTocHyperlinks(), 400);
+try { ensureTocClickHandler(); } catch(e){ console.warn('ensureTocClickHandler:', e); }
+setTimeout(() => { try { installTocHyperlinks(); } catch(e){ console.warn('installTocHyperlinks:', e); } }, 400);
 
 function updateStatus(ed){
   const text = ed.getText();
@@ -2814,10 +2816,12 @@ function applyDockMode(mode){
   try { localStorage.setItem('hcg_dock_mode', mode); } catch(e){}
   setTimeout(scheduleReflow, 80);
 }
-let initialMode = 'bottom';
-try { initialMode = localStorage.getItem('hcg_dock_mode') || 'bottom'; } catch(e){}
-/* Never auto-restore float mode on fresh load — force bottom */
-if (initialMode === 'float') initialMode = 'bottom';
+let initialMode = 'right';
+try { initialMode = localStorage.getItem('hcg_dock_mode') || 'right'; } catch(e){}
+/* Never auto-restore float mode on fresh load — force right */
+if (initialMode === 'float') initialMode = 'right';
+/* 기본 모드를 'right'로 바꾸는 과정에서 과거 'bottom' 세션을 강제 마이그레이션하진 않음 —
+   사용자가 명시적으로 하단을 골랐다면 존중. 새 사용자만 우측으로 시작. */
 applyDockMode(initialMode);
 for (const [k,b] of Object.entries(dockBtns)){
   if (b) b.addEventListener('click', ()=>applyDockMode(k));
@@ -3877,8 +3881,7 @@ function installTocHyperlinks(rootEl){
     });
   });
 }
-/* 에디터 전용 클릭 델리게이트 (한 번만 설치) */
-let __tocClickInstalled = false;
+/* 에디터 전용 클릭 델리게이트 (한 번만 설치 — 상태는 이 파일 상단에 선언) */
 function ensureTocClickHandler(){
   if (__tocClickInstalled) return;
   __tocClickInstalled = true;
