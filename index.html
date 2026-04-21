@@ -5467,12 +5467,26 @@ function verifyBodyBlocksPreserved(oldDoc, newDoc){
   return { ok:true, checked: oldTexts.length };
 }
 
-/* 노드 트리에서 plaintext만 뽑아내기 */
+/* 노드 트리에서 plaintext만 뽑아내기.
+   같은 블록 내부의 inline text run 들은 공백 없이 이어붙이고(기존 거동 유지),
+   블록-컨테이너(doc/listItem/blockquote/bulletList/orderedList/table*) 내부에서
+   자식 블록들 사이에는 공백 1칸을 삽입한다.
+   - paragraph/heading은 inline run container → sep='' (기존 동작 유지)
+   - doc/listItem 등 block container → sep=' '
+   목적: DOCX/HWPX가 "저자 소개"를 listItem 등으로 쪼갰을 때 H1_EXACT 매칭,
+   테이블 셀 사이 공백 결손으로 키워드 매칭이 실패하는 엣지 케이스 방어. */
+const BLOCK_CONTAINERS_FOR_TEXT = new Set([
+  'doc','listItem','blockquote',
+  'bulletList','orderedList',
+  'tableRow','tableCell','tableHeader',
+]);
 function extractPlainText(node){
   if (!node) return '';
   if (typeof node.text === 'string') return node.text;
   if (Array.isArray(node.content)){
-    return node.content.map(extractPlainText).join('');
+    const sep = BLOCK_CONTAINERS_FOR_TEXT.has(node.type) ? ' ' : '';
+    const joined = node.content.map(extractPlainText).join(sep);
+    return sep ? joined.replace(/\s+/g, ' ').trim() : joined;
   }
   return '';
 }
