@@ -36,6 +36,12 @@
   --page-mb: 22mm;
   --page-ml: 20mm;
 
+  /* bleed + crop marks (실제 인쇄 재단선/도련) */
+  --page-bleed: 3mm;
+  --page-mark-len: 5mm;
+  --page-mark-thick: 0.25mm;
+  --page-mark-color: #222;
+
   /* typography */
   --body-family: "Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif;
   --ui-family: "Noto Sans KR","SF Pro Text","Helvetica Neue","Segoe UI",sans-serif;
@@ -471,8 +477,79 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
   height:var(--page-h);
   background:#fff;
   position:relative;
-  overflow:hidden;
+  /* 재단선(crop marks)은 페이지 바깥으로 뻗어야 하므로 overflow:visible.
+     실제 콘텐츠 잘림은 내부 .page-clip 이 전담한다. */
+  overflow:visible;
 }
+
+/* 재단선 (crop marks) — 각 페이지 4모서리에 L자 형태로 표시.
+   body.show-crop-marks 가 켜졌을 때만 가시화. 도련(--page-bleed) 만큼 바깥으로 뻗음.
+   단일 ::before 에서 8개 선분을 linear-gradient 로 그려낸다. */
+.page::before{
+  content:"";
+  position:absolute;
+  pointer-events:none;
+  z-index:4;
+  display:none;
+  top:calc(-1 * var(--page-bleed));
+  right:calc(-1 * var(--page-bleed));
+  bottom:calc(-1 * var(--page-bleed));
+  left:calc(-1 * var(--page-bleed));
+  background-image:
+    linear-gradient(var(--page-mark-color),var(--page-mark-color)),
+    linear-gradient(var(--page-mark-color),var(--page-mark-color)),
+    linear-gradient(var(--page-mark-color),var(--page-mark-color)),
+    linear-gradient(var(--page-mark-color),var(--page-mark-color)),
+    linear-gradient(var(--page-mark-color),var(--page-mark-color)),
+    linear-gradient(var(--page-mark-color),var(--page-mark-color)),
+    linear-gradient(var(--page-mark-color),var(--page-mark-color)),
+    linear-gradient(var(--page-mark-color),var(--page-mark-color));
+  background-repeat:no-repeat;
+  background-size:
+    var(--page-mark-len) var(--page-mark-thick),
+    var(--page-mark-thick) var(--page-mark-len),
+    var(--page-mark-len) var(--page-mark-thick),
+    var(--page-mark-thick) var(--page-mark-len),
+    var(--page-mark-len) var(--page-mark-thick),
+    var(--page-mark-thick) var(--page-mark-len),
+    var(--page-mark-len) var(--page-mark-thick),
+    var(--page-mark-thick) var(--page-mark-len);
+  background-position:
+    /* TL 가로 — 트림 상단(= bleed)에, 왼쪽 끝에서 mark-len 만큼 */
+    0 var(--page-bleed),
+    /* TL 세로 — 트림 좌측(= bleed)에, 상단에서 mark-len 만큼 */
+    var(--page-bleed) 0,
+    /* TR 가로 */
+    100% var(--page-bleed),
+    /* TR 세로 */
+    calc(100% - var(--page-bleed)) 0,
+    /* BL 가로 */
+    0 calc(100% - var(--page-bleed)),
+    /* BL 세로 */
+    var(--page-bleed) 100%,
+    /* BR 가로 */
+    100% calc(100% - var(--page-bleed)),
+    /* BR 세로 */
+    calc(100% - var(--page-bleed)) 100%;
+}
+body.show-crop-marks .page::before{ display:block; }
+
+/* 도련(bleed) 영역 시각화 — 트림 외곽에 점선 프레임.
+   body.show-bleed-guide 가 켜졌을 때 표시. */
+.page::after{
+  content:"";
+  position:absolute;
+  pointer-events:none;
+  z-index:3;
+  display:none;
+  top:calc(-1 * var(--page-bleed));
+  right:calc(-1 * var(--page-bleed));
+  bottom:calc(-1 * var(--page-bleed));
+  left:calc(-1 * var(--page-bleed));
+  border:0.2mm dashed rgba(220, 50, 50, .55);
+  box-sizing:border-box;
+}
+body.show-bleed-guide .page::after{ display:block; }
 /* (legacy .page.live style removed — editor is now in #edit-pane) */
 .page-head,.page-foot{
   position:absolute;left:0;right:0;
@@ -916,8 +993,9 @@ ul.toc-list > li::before{
    Print / PDF export
    ============================================================ */
 @media print{
+  /* @page = 트림 + 2×도련. 도련이 0 이면 트림과 동일. */
   @page{
-    size:var(--page-w) var(--page-h);
+    size:calc(var(--page-w) + 2 * var(--page-bleed)) calc(var(--page-h) + 2 * var(--page-bleed));
     margin:0;
   }
   html,body{background:#fff !important;margin:0 !important;padding:0 !important;height:auto !important;overflow:visible !important}
@@ -939,11 +1017,18 @@ ul.toc-list > li::before{
     box-shadow:none !important;background:#fff !important;
     page-break-after:always !important;break-after:page !important;
     page-break-inside:avoid !important;
-    overflow:hidden !important;
+    /* 페이지 외곽으로 재단선이 뻗기 때문에 visible 유지.
+       실제 잘림은 내부 .page-clip 이 담당. */
+    overflow:visible !important;
     display:block !important;position:relative !important;
-    margin:0 !important;
+    /* 페이지를 @page 중앙에 배치하여 사방 도련 확보. */
+    margin:var(--page-bleed) !important;
   }
   .page:last-child{page-break-after:auto !important;break-after:auto !important}
+  /* 인쇄 시에도 재단선/도련 가이드는 body 클래스에 의존. */
+  body.show-crop-marks .page::before{ display:block !important; }
+  /* 도련 가이드 점선은 인쇄에는 제외 (실제 인쇄물엔 불필요). */
+  body.show-bleed-guide .page::after{ display:none !important; }
   .page-inner{
     padding:var(--page-mt) var(--page-mr) var(--page-mb) var(--page-ml) !important;
     height:100% !important;width:100% !important;
@@ -1059,6 +1144,20 @@ ul.toc-list > li::before{
           <label>좌·우</label>
           <input type="number" id="m-left" value="20" min="0" max="60" step="1">
           <input type="number" id="m-right" value="20" min="0" max="60" step="1">
+        </div>
+        <div class="row">
+          <label>도련(mm)</label>
+          <input type="number" id="in-bleed" value="3" min="0" max="10" step="0.5" title="재단 시 잘려나가는 여분(일반적으로 3mm)">
+          <label style="min-width:72px;margin-left:4px;font-size:11.5px;color:var(--meta)">bleed</label>
+        </div>
+        <div class="row">
+          <label>재단선</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer">
+            <input type="checkbox" id="chk-crop-marks" checked> 표시
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer;margin-left:8px">
+            <input type="checkbox" id="chk-bleed-guide"> 도련 가이드
+          </label>
         </div>
       </div>
 
@@ -2749,6 +2848,11 @@ function applyPaper(key){
   const p = PAPERS[key] || PAPERS.B5;
   root.style.setProperty('--page-w', `${p.w}mm`);
   root.style.setProperty('--page-h', `${p.h}mm`);
+  /* 용지 프리셋이 고유 bleed 값을 지정하면 그에 맞춰 입력도 동기화 */
+  if (typeof p.bleed === 'number'){
+    const b = $('#in-bleed'); if (b){ b.value = p.bleed; }
+    applyBleed();
+  }
   scheduleReflow();
 }
 $('#sel-paper').addEventListener('change', e=>applyPaper(e.target.value));
@@ -2763,6 +2867,27 @@ function applyMargins(){
 ['#m-top','#m-right','#m-bot','#m-left'].forEach(sel=>{
   $(sel).addEventListener('input', applyMargins);
 });
+
+/* ============================================================
+   재단선(crop marks) · 도련(bleed) — 프리뷰·PDF 공용
+   ============================================================ */
+function applyBleed(){
+  const inp = $('#in-bleed');
+  const v = inp ? Math.max(0, parseFloat(inp.value || '0') || 0) : 3;
+  root.style.setProperty('--page-bleed', `${v}mm`);
+  scheduleReflow();
+}
+function applyCropMarksToggle(){
+  const on = !!($('#chk-crop-marks') && $('#chk-crop-marks').checked);
+  document.body.classList.toggle('show-crop-marks', on);
+}
+function applyBleedGuideToggle(){
+  const on = !!($('#chk-bleed-guide') && $('#chk-bleed-guide').checked);
+  document.body.classList.toggle('show-bleed-guide', on);
+}
+const _inBleed = $('#in-bleed'); if (_inBleed) _inBleed.addEventListener('input', applyBleed);
+const _ckCrop = $('#chk-crop-marks'); if (_ckCrop) _ckCrop.addEventListener('change', applyCropMarksToggle);
+const _ckBleed = $('#chk-bleed-guide'); if (_ckBleed) _ckBleed.addEventListener('change', applyBleedGuideToggle);
 
 $('#seg-columns').addEventListener('click', e=>{
   const b = e.target.closest('button[data-val]'); if (!b) return;
@@ -3320,6 +3445,9 @@ window.addEventListener('keydown', e=>{
 
 applyPaper('B5');
 applyMargins();
+applyBleed();
+applyCropMarksToggle();
+applyBleedGuideToggle();
 applyHeaderFooter();
 
 /* Automatic reflow triggers — catch paste, image load, resize, DOM mutations.
