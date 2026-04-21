@@ -44,7 +44,16 @@
   --body-tracking: 0em;
   --body-para-gap: 0pt;
   --body-indent: 0pt;
+  --body-weight: 400;
   --columns: 1;
+}
+
+/* 본문 굵기 — 책 뷰 / 편집기 공통 적용 */
+.page-content p, .page-content li, .page-content blockquote,
+.ProseMirror p, .ProseMirror li, .ProseMirror blockquote,
+#editor .ProseMirror, .measurer-host .measurer,
+.fw-edit p, .fw-edit li, .fw-edit blockquote{
+  font-weight: var(--body-weight, 400);
 }
 
 *{box-sizing:border-box}
@@ -721,9 +730,15 @@ ul.toc-list > li::before{
   margin:-4px 0 10px;
   opacity:.75;
 }
-/* 인쇄/PDF에도 동일하게 적용 */
+/* 인쇄/PDF에도 동일하게 적용 — ul.toc-list 는 ::before counter 로만 번호를 매긴다 */
 @media print{
-  .toc-list,ol.toc-list,ul.toc-list{ list-style:decimal outside !important; }
+  ol.toc-list{ list-style:decimal outside !important; }
+  ul.toc-list{ list-style:none !important; }
+  ul.toc-list > li{ counter-increment:toc-counter; position:relative; }
+  ul.toc-list > li::before{
+    content:counter(toc-counter)". ";
+    position:absolute; left:-1.5em; color:var(--ink,#222); font-weight:500;
+  }
 }
 
 /* 툴바를 #edit-pane 안으로 이동 (에디터 영역 전용) */
@@ -964,6 +979,20 @@ ul.toc-list > li::before{
     <input type="text" class="doc-title" id="doc-title" placeholder="원고 제목 (도곽 머리말에 표시)" value="원고 제목">
     <div class="grow"></div>
     <button class="btn" id="btn-new" title="새 문서"><i class="ph ph-file-plus"></i> 새 문서</button>
+    <button class="btn" id="btn-save" title="임시저장 (Ctrl+S)"><i class="ph ph-floppy-disk"></i> 임시저장</button>
+    <div class="menu-wrap">
+      <button class="btn" id="btn-archive" title="아카이브 열기"><i class="ph ph-archive"></i> 아카이브 <i class="ph ph-caret-down"></i></button>
+      <div class="menu" id="menu-archive" style="min-width:280px;max-height:320px;overflow:auto">
+        <div style="padding:6px 10px;font-size:11.5px;color:var(--mute);border-bottom:1px solid var(--line)">
+          자동저장: <span id="autosave-stat">대기</span>
+        </div>
+        <div id="archive-list" style="display:flex;flex-direction:column"></div>
+        <div style="padding:6px 10px;border-top:1px solid var(--line);display:flex;gap:6px">
+          <button id="btn-archive-new" class="btn" style="flex:1;font-size:11.5px">현재 상태로 스냅샷</button>
+          <button id="btn-archive-clear" class="btn" style="font-size:11.5px">전체 비우기</button>
+        </div>
+      </div>
+    </div>
     <div class="menu-wrap">
       <button class="btn primary" id="btn-export"><i class="ph ph-export"></i> 내보내기 <i class="ph ph-caret-down"></i></button>
       <div class="menu" id="menu-export">
@@ -985,7 +1014,7 @@ ul.toc-list > li::before{
         <div class="upload-zone" id="upload-zone">
           <span class="big"><i class="ph ph-upload-simple"></i></span>
           <div class="t">파일 업로드 / 드롭</div>
-          <div class="s">HWPX · DOCX · PPTX · HTML · MD · TXT · IDML</div>
+          <div class="s">HWPX · DOCX · PPTX · PDF · HTML · MD · TXT · IDML · XML</div>
           <div class="s" style="margin-top:8px;color:var(--warn);font-size:10.5px;line-height:1.45">
             ※ <b>HWP (바이너리)는 지원되지 않습니다</b><br>
             한글 → <i>다른 이름으로 저장</i> → <b>.hwpx</b>로 저장 후 업로드하세요.
@@ -1044,6 +1073,24 @@ ul.toc-list > li::before{
             <option value='"Nanum Gothic","Malgun Gothic",sans-serif'>나눔고딕</option>
             <option value='"Pretendard Variable","Pretendard","Apple SD Gothic Neo",sans-serif'>Pretendard</option>
           </select>
+        </div>
+        <div class="row">
+          <label>굵기</label>
+          <select id="sel-font-weight">
+            <option value="300">Light (300)</option>
+            <option value="400" selected>Regular (400)</option>
+            <option value="500">Medium (500)</option>
+            <option value="600">Semibold (600)</option>
+            <option value="700">Bold (700)</option>
+            <option value="800">Extrabold (800)</option>
+            <option value="900">Black (900)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label style="flex:1">시스템 폰트</label>
+          <button class="btn" id="btn-load-system-fonts" style="font-size:11.5px" title="내 컴퓨터에 설치된 폰트 전체를 목록에 추가합니다 (권한 필요)">
+            <i class="ph ph-arrows-down-up"></i> 불러오기
+          </button>
         </div>
         <div class="row">
           <label>크기</label>
@@ -1225,16 +1272,21 @@ ul.toc-list > li::before{
 <!-- AI auto-style modal -->
 <div class="modal" id="ai-modal">
   <div class="card ai-card">
-    <h4><i class="ph ph-sparkle"></i> Claude AI 자동 스타일</h4>
-    <p class="ai-desc">본문을 분석해 제목·소제목·목차·저자소개 등 역할별로 페이지를 구성하고 스타일을 적용합니다.
-      <b style="color:var(--warn)">본문 내용은 절대 수정되지 않습니다</b> — 태그와 페이지 구성만 변경됩니다.</p>
+    <h4><i class="ph ph-sparkle"></i> Claude AI 자동 스타일 (검증용)</h4>
+    <p class="ai-desc">키워드 자동분류는 <b>이미 붙여넣기·업로드 시 자동으로 실행</b>됩니다. 이 도구는 AI로
+      누락·오분류가 있는지 <b>검증용으로만</b> 동작하도록 구성되어 있습니다.
+      <b style="color:var(--warn)">본문 내용은 절대 수정되지 않습니다</b>.</p>
     <div class="ai-quick" style="background:#F5EFE4;border:1px solid #D4C09A;border-radius:6px;padding:10px 12px;margin:8px 0 14px;display:flex;gap:10px;align-items:center">
       <span style="font-size:22px">✨</span>
       <div style="flex:1">
         <div style="font-weight:700;color:#5A4A2A;margin-bottom:2px">키워드 기반 즉시 분류 (API 불필요)</div>
         <div style="font-size:11px;color:#6B5A3A">'저자 소개/목차/참고문헌' → 제목1, 숫자·알파벳 시작 → 제목2, '그림 N' → 소제목. <b>상단 2행·하단 1행 자동 간격</b>.</div>
       </div>
-      <button class="btn primary" id="btn-ai-quick" type="button">즉시 분류</button>
+      <button class="btn primary" id="btn-ai-quick" type="button">다시 분류</button>
+    </div>
+    <div style="background:#EFF6EF;border:1px solid #BFD6BF;border-radius:6px;padding:8px 12px;margin:0 0 14px;font-size:11.5px;color:#2E5A2E">
+      <b>검증 모드</b>: 하단 <b>분석 & 적용</b>은 키워드 분류 결과에 대한 <b>검증</b>만 수행하며,
+      차이점을 요약한 리포트를 띄웁니다. 본문·태그는 변경되지 않습니다.
     </div>
     <div class="ai-row">
       <label>API 키</label>
@@ -1274,7 +1326,7 @@ ul.toc-list > li::before{
     <div class="ai-diff-warn" id="ai-diff-warn" style="display:none"></div>
     <div class="foot">
       <button class="btn" id="ai-cancel">취소</button>
-      <button class="btn primary" id="ai-apply">분석 & 적용</button>
+      <button class="btn primary" id="ai-apply">검증 실행</button>
     </div>
   </div>
 </div>
@@ -1718,11 +1770,16 @@ async function handleUploadedFile(file){
 
     stepActive('editor');
     editor.commands.setContent(html, false);
+    // 업로드 후 자동 분류(키워드 룰) — 붙여넣기와 동일한 경로로 태그를 정돈한다
+    try {
+      const newDoc = applyKeywordRules(editor.getJSON());
+      if (newDoc) editor.commands.setContent(newDoc, false);
+    } catch(e){ console.warn('auto-classify on upload:', e); }
     setTimeout(()=>{ rescanEditorImages(); scheduleReflow(); }, 50);
     stepDone('editor');
     pipelineHide();
     setStatus(`완료: ${name}`, 'ok');
-    toast(`${name} 불러오기 완료`, 'ok');
+    toast(`${name} 불러오기 · 자동 분류 완료`, 'ok');
   }catch(err){
     console.error(err);
     setStatus('오류: ' + err.message, 'err');
@@ -1812,7 +1869,7 @@ const editor = window.editor = new Editor({
     <h2>3. WYSIWYG 조판</h2>
     <p>용지 크기, 여백, 단 구성, 본문 서체·크기·행간, 도곽 머리말/꼬리말 — 왼쪽 사이드바에서 조정하면 에디터 영역에 즉시 반영됩니다. "내보내기 → PDF"를 누르면 같은 모습으로 출력됩니다.</p>
   `,
-  onUpdate({ editor }){ updateStatus(editor); scheduleReflow(); scheduleTocHyperlinks(); scheduleSidebarFromCursor(); },
+  onUpdate({ editor }){ updateStatus(editor); scheduleReflow(); scheduleTocHyperlinks(); scheduleSidebarFromCursor(); try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch(_){} },
   onSelectionUpdate({ editor }){ updateToolbar(editor); scheduleSidebarFromCursor(); }
 });
 
@@ -2107,31 +2164,35 @@ function paginate(){
   const spreadsNeeded = pages.length / 2;
   syncSpreads(spreadsNeeded);
 
+  /* 페이지별로 DocumentFragment 에 먼저 조립한 뒤 한 번에 교체 — innerHTML 비우고
+     다시 채우는 과정에서 프리뷰가 순간적으로 깜빡이는 현상을 방지. */
   pages.forEach((bucket, pageIdx)=>{
     const page = document.querySelector(`.page[data-page-idx="${pageIdx}"]`);
     if (!page) return;
     const content = page.querySelector('.page-content');
     if (!content) return;
-    content.innerHTML = '';
+    const frag = document.createDocumentFragment();
     let currentFront = null;
-    let host = content;
-    content.classList.remove('is-front-matter');
+    let host = frag;
+    let isFrontMatter = false;
     for (const item of bucket){
       if (item.inFront){
         if (currentFront !== item.frontClass){
           currentFront = item.frontClass;
           const sec = document.createElement('section');
           sec.className = currentFront;
-          content.appendChild(sec);
+          frag.appendChild(sec);
           host = sec;
-          content.classList.add('is-front-matter');
+          isFrontMatter = true;
         }
       } else {
         currentFront = null;
-        host = content;
+        host = frag;
       }
       host.appendChild(item.el.cloneNode(true));
     }
+    content.classList.toggle('is-front-matter', isFrontMatter);
+    content.replaceChildren(frag);
   });
 
   applyHeaderFooter();
@@ -2715,6 +2776,97 @@ $('#sel-font').addEventListener('change', e=>{
   root.style.setProperty('--body-family', e.target.value);
   scheduleReflow();
 });
+/* 본문 굵기 — CSS var 로 적용해 .page-content 와 .ProseMirror 에 공통 반영 */
+const _selFontWeight = document.getElementById('sel-font-weight');
+if (_selFontWeight){
+  _selFontWeight.addEventListener('change', e=>{
+    root.style.setProperty('--body-weight', e.target.value);
+    scheduleReflow();
+  });
+}
+/* 시스템 폰트 불러오기 — Local Font Access API (Chrome 103+) */
+const _btnLoadSysFonts = document.getElementById('btn-load-system-fonts');
+if (_btnLoadSysFonts){
+  _btnLoadSysFonts.addEventListener('click', async ()=>{
+    if (typeof window.queryLocalFonts !== 'function'){
+      alert('이 브라우저는 시스템 폰트 목록을 지원하지 않습니다.\nChrome 또는 Edge 최신 버전에서 사용해주세요.\n(HTTPS 환경 · 권한 허용 필요)');
+      return;
+    }
+    try {
+      const fonts = await window.queryLocalFonts();
+      if (!fonts || !fonts.length){ toast('설치된 폰트를 찾지 못했습니다', 'err'); return; }
+      /* postscriptName 이 같은 패밀리로 묶고, family 단위로 중복 제거 */
+      const map = new Map();  // family → { family, weights: Set<number> }
+      for (const f of fonts){
+        const fam = f.family || '';
+        if (!fam) continue;
+        if (!map.has(fam)) map.set(fam, { family: fam, weights: new Set() });
+        const m = map.get(fam);
+        const ps = (f.postscriptName || '').toLowerCase();
+        /* weight 추정 */
+        if (/thin|hairline/.test(ps)) m.weights.add(100);
+        else if (/extralight|ultralight/.test(ps)) m.weights.add(200);
+        else if (/light/.test(ps)) m.weights.add(300);
+        else if (/medium/.test(ps)) m.weights.add(500);
+        else if (/semibold|demibold/.test(ps)) m.weights.add(600);
+        else if (/extrabold|ultrabold/.test(ps)) m.weights.add(800);
+        else if (/black|heavy/.test(ps)) m.weights.add(900);
+        else if (/bold/.test(ps)) m.weights.add(700);
+        else m.weights.add(400);
+      }
+      const sel = document.getElementById('sel-font');
+      /* 기존 옵션 아래에 '— 시스템 폰트 —' 구분선 추가 */
+      if (!sel.querySelector('[data-sep="sys"]')){
+        const sep = document.createElement('option');
+        sep.disabled = true;
+        sep.dataset.sep = 'sys';
+        sep.textContent = '— 시스템 폰트 —';
+        sel.appendChild(sep);
+      }
+      const sorted = Array.from(map.values()).sort((a,b)=>a.family.localeCompare(b.family,'ko'));
+      for (const it of sorted){
+        if (sel.querySelector(`option[data-sys-family="${CSS.escape(it.family)}"]`)) continue;
+        const opt = document.createElement('option');
+        opt.dataset.sysFamily = it.family;
+        opt.value = `"${it.family.replace(/"/g,'')}"`;
+        opt.textContent = it.family;
+        opt.dataset.weights = Array.from(it.weights).sort((a,b)=>a-b).join(',');
+        sel.appendChild(opt);
+      }
+      toast(`시스템 폰트 ${sorted.length}개 로드 완료`, 'ok');
+
+      /* 선택 변경 시 해당 폰트가 지원하는 weight 만 보이도록 필터 */
+      sel.addEventListener('change', ()=>{
+        const opt = sel.selectedOptions[0]; if (!opt) return;
+        const weights = opt.dataset.weights ? opt.dataset.weights.split(',').map(Number) : null;
+        const wSel = document.getElementById('sel-font-weight'); if (!wSel) return;
+        const prev = wSel.value;
+        if (weights && weights.length){
+          Array.from(wSel.options).forEach(o=>{
+            o.hidden = !weights.includes(parseInt(o.value,10));
+          });
+          /* 현재 선택된 weight 가 hidden 이면 가장 가까운 weight 로 교체 */
+          if (wSel.selectedOptions[0]?.hidden){
+            const target = parseInt(prev,10) || 400;
+            const nearest = weights.slice().sort((a,b)=>Math.abs(a-target)-Math.abs(b-target))[0];
+            wSel.value = String(nearest);
+            root.style.setProperty('--body-weight', String(nearest));
+            scheduleReflow();
+          }
+        } else {
+          Array.from(wSel.options).forEach(o=>o.hidden = false);
+        }
+      });
+    } catch(err){
+      console.warn('queryLocalFonts:', err);
+      if (err && err.name === 'NotAllowedError'){
+        alert('폰트 접근이 거부되었습니다. 주소창의 자물쇠 아이콘에서 "로컬 폰트" 권한을 허용해주세요.');
+      } else {
+        toast('시스템 폰트 로드 실패: ' + (err?.message || err), 'err');
+      }
+    }
+  });
+}
 $('#in-size').addEventListener('input', e=>{
   root.style.setProperty('--body-size', `${e.target.value}pt`);
   scheduleReflow();
@@ -2805,18 +2957,179 @@ $('#btn-new').addEventListener('click', ()=>{
    ============================================================ */
 const exportBtn = $('#btn-export');
 const exportMenu = $('#menu-export');
+const archiveBtn = $('#btn-archive');
+const archiveMenu = $('#menu-archive');
 exportBtn.addEventListener('click', e=>{
   e.stopPropagation();
+  archiveMenu && archiveMenu.classList.remove('show');
   exportMenu.classList.toggle('show');
 });
+archiveBtn && archiveBtn.addEventListener('click', e=>{
+  e.stopPropagation();
+  exportMenu.classList.remove('show');
+  archiveMenu.classList.toggle('show');
+  renderArchiveList();
+});
 document.addEventListener('click', e=>{
-  if (!e.target.closest('.menu-wrap')) exportMenu.classList.remove('show');
+  if (!e.target.closest('.menu-wrap')){
+    exportMenu.classList.remove('show');
+    archiveMenu && archiveMenu.classList.remove('show');
+  }
 });
 exportMenu.addEventListener('click', async e=>{
   const b = e.target.closest('button[data-kind]'); if (!b) return;
   exportMenu.classList.remove('show');
   await runExport(b.dataset.kind);
 });
+
+/* ============================================================
+   임시저장 / 자동저장 / 아카이브
+   - localStorage 에 저장 (문서 JSON + 제목 + 메타)
+   - 자동저장: 편집 후 15초 유휴 혹은 60초 경과 중 먼저 도래 시
+   - 아카이브: 수동 스냅샷 + 자동 스냅샷 (최근 20개 롤링)
+   ============================================================ */
+const AUTOSAVE_KEY = 'hcg_pub_autosave_v1';
+const ARCHIVE_KEY  = 'hcg_pub_archive_v1';
+const ARCHIVE_MAX  = 20;
+let _autosaveDirty = false;
+let _autosaveIdleT = null;
+let _autosaveMaxT  = null;
+let _lastArchiveAt = 0;
+
+function _autosaveStatEl(){ return document.getElementById('autosave-stat'); }
+function _setAutosaveStat(txt){
+  const el = _autosaveStatEl(); if (!el) return;
+  el.textContent = txt;
+}
+function _snapshot(){
+  try {
+    return {
+      title: ($('#doc-title')?.value || '').trim(),
+      doc: editor.getJSON(),
+      html: document.querySelector('#editor .ProseMirror')?.innerHTML || '',
+      ts: Date.now(),
+    };
+  } catch(e){ return null; }
+}
+function saveDraft(silent){
+  const snap = _snapshot(); if (!snap) return false;
+  try {
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(snap));
+    _autosaveDirty = false;
+    const t = new Date(snap.ts);
+    const hh = String(t.getHours()).padStart(2,'0');
+    const mm = String(t.getMinutes()).padStart(2,'0');
+    _setAutosaveStat(`${hh}:${mm} 저장됨`);
+    if (!silent) toast('임시저장 완료', 'ok');
+    return true;
+  } catch(e){
+    console.warn('autosave:', e);
+    if (!silent) toast('저장 공간이 부족합니다', 'err');
+    return false;
+  }
+}
+function loadDraft(){
+  try {
+    const raw = localStorage.getItem(AUTOSAVE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e){ return null; }
+}
+function restoreDraftIfAny(){
+  const d = loadDraft();
+  if (!d || !d.doc) return;
+  const ok = confirm('이전 편집 중이던 초안이 있습니다. 불러올까요?\n(취소 시 새 문서로 시작합니다)');
+  if (!ok) return;
+  try {
+    if ($('#doc-title') && d.title) $('#doc-title').value = d.title;
+    editor.commands.setContent(d.doc, false);
+    setTimeout(()=>scheduleReflow(), 30);
+    setStatus('초안 복구 완료', 'ok');
+  } catch(e){ console.warn('restoreDraft:', e); }
+}
+function scheduleAutosave(){
+  _autosaveDirty = true;
+  _setAutosaveStat('편집 중…');
+  clearTimeout(_autosaveIdleT);
+  _autosaveIdleT = setTimeout(()=>{ if (_autosaveDirty) saveDraft(true); }, 15000);
+  if (!_autosaveMaxT){
+    _autosaveMaxT = setTimeout(()=>{
+      _autosaveMaxT = null;
+      if (_autosaveDirty) saveDraft(true);
+    }, 60000);
+  }
+}
+function archiveList(){
+  try { return JSON.parse(localStorage.getItem(ARCHIVE_KEY) || '[]') || []; }
+  catch(e){ return []; }
+}
+function pushArchive(snap, reason){
+  if (!snap) return;
+  const list = archiveList();
+  list.unshift({ ...snap, reason: reason || 'manual' });
+  while (list.length > ARCHIVE_MAX) list.pop();
+  try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(list)); }
+  catch(e){ console.warn('archive write:', e); }
+}
+function renderArchiveList(){
+  const wrap = document.getElementById('archive-list'); if (!wrap) return;
+  const list = archiveList();
+  if (!list.length){
+    wrap.innerHTML = '<div style="padding:10px;color:var(--mute);font-size:12px">아카이브가 비어있습니다.</div>';
+    return;
+  }
+  wrap.innerHTML = list.map((s,i)=>{
+    const t = new Date(s.ts);
+    const label = `${t.getMonth()+1}/${t.getDate()} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+    const title = (s.title || '(제목 없음)').replace(/[<>]/g,'');
+    const tag = s.reason === 'auto' ? '자동' : '수동';
+    return `<button data-idx="${i}" style="text-align:left;display:flex;justify-content:space-between;gap:8px;padding:8px 10px;border:0;background:transparent;cursor:pointer;border-bottom:1px solid var(--line)">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</span>
+      <span style="color:var(--mute);font-size:11px">${label} · ${tag}</span>
+    </button>`;
+  }).join('');
+  wrap.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = parseInt(btn.dataset.idx, 10);
+      const snap = archiveList()[i];
+      if (!snap) return;
+      if (!confirm('이 스냅샷으로 되돌릴까요?\n(현재 내용은 자동으로 아카이브됩니다)')) return;
+      pushArchive(_snapshot(), 'auto');
+      try {
+        if ($('#doc-title') && snap.title) $('#doc-title').value = snap.title;
+        editor.commands.setContent(snap.doc, false);
+        setTimeout(()=>scheduleReflow(), 30);
+        archiveMenu.classList.remove('show');
+        toast('아카이브 복원 완료', 'ok');
+      } catch(e){ console.warn('restore archive:', e); toast('복원 실패', 'err'); }
+    });
+  });
+}
+document.getElementById('btn-save')?.addEventListener('click', ()=>{
+  pushArchive(_snapshot(), 'auto');
+  saveDraft(false);
+});
+document.getElementById('btn-archive-new')?.addEventListener('click', ()=>{
+  pushArchive(_snapshot(), 'manual');
+  renderArchiveList();
+  toast('현재 상태가 아카이브에 저장되었습니다', 'ok');
+});
+document.getElementById('btn-archive-clear')?.addEventListener('click', ()=>{
+  if (!confirm('아카이브 전체를 비울까요? 되돌릴 수 없습니다.')) return;
+  try { localStorage.removeItem(ARCHIVE_KEY); } catch(e){}
+  renderArchiveList();
+});
+/* Ctrl/Cmd + S 단축키 */
+window.addEventListener('keydown', e=>{
+  if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')){
+    e.preventDefault();
+    saveDraft(false);
+  }
+});
+/* 창 닫기 전 마지막 자동저장 */
+window.addEventListener('beforeunload', ()=>{ if (_autosaveDirty) saveDraft(true); });
+/* 로드 후 초안 복구 제안 */
+window.addEventListener('load', ()=>{ setTimeout(restoreDraftIfAny, 500); });
 
 function safeFilename(){
   const title = ($('#doc-title').value || 'hcg-pub-document').trim();
@@ -3184,7 +3497,7 @@ function openFloatPopup(){
   .fw-toolbar .auto-classify{padding:0 10px;background:linear-gradient(180deg,#F5EFE4,#E8DDC4);border-color:#D4C09A;color:#5A4A2A;font-weight:600}
   .fw-toolbar .auto-classify:hover{background:linear-gradient(180deg,#E8DDC4,#D4C09A);border-color:#8B6E3E}
   /* ─── 에디트 영역 — 메인과 동일한 본문 타이포 ─── */
-  .fw-body{padding:22px 32px;max-width:820px;margin:0 auto}
+  .fw-body{padding:22px 32px;max-width:820px;margin:0 auto;position:relative}
   .fw-edit{background:#fff;border:1px solid var(--line);border-radius:6px;min-height:calc(100vh - 220px);padding:28px 36px;outline:none;font-family:var(--body-family);font-size:11pt;line-height:1.75;letter-spacing:0;box-shadow:0 4px 14px rgba(0,0,0,.04)}
   .fw-edit:focus{border-color:var(--accent)}
   /* 요구: h1/h2/h3 — 상단 2행 / 하단 1행 */
@@ -3258,6 +3571,31 @@ function openFloatPopup(){
   </div>
   <div class="grp">
     <button data-cmd="auto-classify" class="auto-classify" title="키워드 규칙으로 자동 분류"><i class="ph ph-magic-wand"></i> 자동 분류</button>
+  </div>
+  <div class="grp" style="margin-left:auto">
+    <label style="font-size:11px;color:var(--mute);display:inline-flex;align-items:center;gap:4px">
+      <i class="ph ph-text-aa"></i>
+      <select id="fw-font" style="height:24px;font-size:11px;min-width:120px">
+        <option value='"Noto Serif KR",serif' selected>Noto Serif</option>
+        <option value='"Noto Sans KR",sans-serif'>Noto Sans</option>
+        <option value='"Nanum Myeongjo",serif'>나눔명조</option>
+        <option value='"Nanum Gothic",sans-serif'>나눔고딕</option>
+        <option value='"Pretendard",sans-serif'>Pretendard</option>
+      </select>
+    </label>
+    <label style="font-size:11px;color:var(--mute);display:inline-flex;align-items:center;gap:4px">
+      <i class="ph ph-text-t"></i>
+      <select id="fw-weight" style="height:24px;font-size:11px">
+        <option value="300">Light</option>
+        <option value="400" selected>Regular</option>
+        <option value="500">Medium</option>
+        <option value="600">Semibold</option>
+        <option value="700">Bold</option>
+      </select>
+    </label>
+    <label style="font-size:11px;color:var(--mute);display:inline-flex;align-items:center;gap:4px">
+      <input type="number" id="fw-size" value="11" min="7" max="24" step="0.5" style="width:54px;height:24px;font-size:11px"> pt
+    </label>
   </div>
   <input type="file" id="fw-img-input" accept="image/*" multiple style="display:none">
 </div>
@@ -3359,10 +3697,11 @@ function openFloatPopup(){
   }
   function positionOvl(){
     if (!selImg) return;
-    const er = edit.getBoundingClientRect();
+    const parent = ovl.offsetParent || document.body;
+    const pr = parent.getBoundingClientRect();
     const r = selImg.getBoundingClientRect();
-    ovl.style.left = (r.left - er.left + edit.scrollLeft) + 'px';
-    ovl.style.top  = (r.top  - er.top  + edit.scrollTop)  + 'px';
+    ovl.style.left = (r.left - pr.left) + 'px';
+    ovl.style.top  = (r.top  - pr.top)  + 'px';
     ovl.style.width = r.width + 'px';
     ovl.style.height = r.height + 'px';
   }
@@ -3408,6 +3747,8 @@ function openFloatPopup(){
   });
   window.addEventListener('mouseup', ()=>{ if (resizing){ resizing = null; sendUp(); } });
   edit.addEventListener('scroll', ()=>{ if (selImg) positionOvl(); });
+  window.addEventListener('scroll', ()=>{ if (selImg) positionOvl(); }, true);
+  window.addEventListener('resize', ()=>{ if (selImg) positionOvl(); });
 
   /* File picker — multiple 이미지 삽입 */
   fileInput.addEventListener('change', e => {
@@ -3449,6 +3790,20 @@ function openFloatPopup(){
     if (edit.innerHTML !== html) edit.innerHTML = html;
     updateCount();
   };
+
+  /* 서체 · 굵기 · 크기 즉시 반영 (편집창 전용) */
+  const fwFont   = document.getElementById('fw-font');
+  const fwWeight = document.getElementById('fw-weight');
+  const fwSize   = document.getElementById('fw-size');
+  function applyTypo(){
+    if (fwFont)   edit.style.fontFamily = fwFont.value;
+    if (fwWeight) edit.style.fontWeight = fwWeight.value;
+    if (fwSize)   edit.style.fontSize   = fwSize.value + 'pt';
+  }
+  fwFont   && fwFont.addEventListener('change', applyTypo);
+  fwWeight && fwWeight.addEventListener('change', applyTypo);
+  fwSize   && fwSize.addEventListener('input', applyTypo);
+  applyTypo();
   /* Notify parent on close */
   window.addEventListener('beforeunload', ()=>{
     try { if (window.opener && !window.opener.closed) window.opener.__hcgFloatClosed(); } catch(e){}
@@ -3783,11 +4138,14 @@ editorEl.addEventListener('paste', e=>{
       scheduleReflow();
       return;
     }
-    /* 정렬 클래스 */
+    /* 정렬 클래스 — 이미지에 적용하는 동안 리플로우를 잠시 유예해 프리뷰 깜빡임 제거 */
+    setReflowSuspended(true);
     selImg.classList.remove('center','float-left','float-right');
     selImg.classList.add(pos);
-    setTimeout(positionOvl, 0);
-    scheduleReflow();
+    requestAnimationFrame(()=>{
+      positionOvl();
+      setReflowSuspended(false);   // 단일 리플로우 1회만 예약
+    });
   });
   /* 리사이즈 핸들 드래그 */
   ovl.querySelectorAll('.handle').forEach(h=>{
@@ -4070,34 +4428,51 @@ $('#ai-apply').addEventListener('click', async ()=>{
       throw new Error('Claude가 예상된 JSON 형식으로 답하지 않았습니다.');
     }
 
-    /* 4) 원본 노드를 재사용해 새 문서 조립 — 본문 텍스트는 건드리지 않음 */
+    /* 4) 검증 모드 — 현재 태그 vs AI 제안 태그 비교 (문서는 변경하지 않음) */
     aiProgressPhase('apply');
-    const newDoc = applyTagPatches(snapshot, patchResponse, {
-      addToc: aiAddToc.checked,
-      splitFront: aiSplitFront.checked,
+
+    /* 현재 에디터 블록별 태그 추출 */
+    const currentTags = (snapshot.content || []).map((n, i) => ({
+      idx: i,
+      tag: n.type === 'heading' ? ('h' + (n.attrs?.level || 1)) : n.type,
+      text: (function peek(node){
+        if (!node) return '';
+        if (node.text) return node.text;
+        return (node.content || []).map(peek).join('');
+      })(n).slice(0, 50),
+    }));
+    const aiMap = new Map();
+    (patchResponse.patches || []).forEach(p => {
+      if (typeof p.idx === 'number') aiMap.set(p.idx, p.tag || p.role || p.type);
     });
 
-    /* 5) 적용 후 본문 보존 검증 — 블록 단위 샘플링 (목차 추가로 인한 길이 증가는 OK) */
-    editor.commands.setContent(newDoc, false);
-    const plainAfter = editor.getText().trim();
-    const verify = verifyBodyBlocksPreserved(snapshot, newDoc);
-    if (!verify.ok){
-      editor.commands.setContent(snapshot, false);
-      throw new Error(`본문 블록 손실 감지: "${verify.missing}…" 를 새 문서에서 찾을 수 없습니다. 원상 복구했습니다.`);
+    const diffs = [];
+    for (const b of currentTags){
+      const aiTag = aiMap.get(b.idx);
+      if (!aiTag) continue;
+      const normalize = t => String(t || '').toLowerCase().replace(/heading/, 'h');
+      if (normalize(aiTag) !== normalize(b.tag)){
+        diffs.push({ idx: b.idx, current: b.tag, suggested: aiTag, text: b.text });
+      }
     }
 
-    setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 40);
     const nPatch = patchResponse.patches.length;
-    const nFront = ['preface','author','dedication','foreword'].reduce(
-      (s,k)=> s + (patchResponse.frontMatter?.[k]?.length || 0), 0);
+    const report = diffs.length === 0
+      ? `<div style="color:#2E7D32"><b>✔ 검증 완료</b> — AI 제안과 현재 태그가 100% 일치합니다. 키워드 자동분류가 잘 적용되어 있습니다. (${dt}초, ${nPatch}개 블록 검토)</div>`
+      : `<div><b>⚠ ${diffs.length}개 블록에서 AI 제안이 다릅니다</b> (${dt}초, ${nPatch}개 검토)<br>
+           <small style="color:var(--mute)">본문은 변경되지 않았습니다. 필요 시 수동으로 해당 블록의 태그를 조정하세요.</small>
+           <ul style="max-height:180px;overflow:auto;margin-top:6px;padding-left:18px;font-size:12px">` +
+        diffs.slice(0, 30).map(d =>
+          `<li>[${d.idx}] 현재 <b>${d.current}</b> → 제안 <b>${d.suggested}</b>: “${(d.text||'').replace(/[<>]/g,'')}”</li>`
+        ).join('') +
+        (diffs.length > 30 ? `<li>… 외 ${diffs.length - 30}개</li>` : '') +
+        `</ul></div>`;
+    aiShowDiffWarn(report);
+
     aiProgressFinish('ok',
-      `완료 (${dt}초) — 태그 ${nPatch}건, 프론트매터 ${nFront}개 이동. ` +
-      `본문 ${plainBefore.length.toLocaleString()}자 **한 글자도 변경되지 않았습니다**.`);
-    toast('AI 자동 스타일 적용 완료', 'ok');
-    setTimeout(()=>{
-      aiModal.classList.remove('show');
-      aiProgressHide();
-    }, 1400);
+      `검증 완료 (${dt}초) — ${diffs.length === 0 ? '불일치 없음' : diffs.length + '건 불일치'} · 본문 ${plainBefore.length.toLocaleString()}자 그대로 유지됨.`);
+    toast(diffs.length === 0 ? 'AI 검증: 일치' : `AI 검증: ${diffs.length}건 차이`, 'ok');
+    /* 모달은 자동 닫지 않음 — 사용자가 리포트를 확인할 수 있도록 */
   } catch(err){
     console.error(err);
     try { editor.commands.setContent(snapshot, false); } catch(e){}
