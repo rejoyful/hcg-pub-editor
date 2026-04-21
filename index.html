@@ -2013,7 +2013,7 @@ function escapeHtml(s){
 /* ============================================================
    Unified entry
    ============================================================ */
-async function handleUploadedFile(file){
+async function handleUploadedFile(file, sourceHint='upload'){
   const name = file.name;
   const ext = (name.split('.').pop() || '').toLowerCase();
   setStatus(`처리 중: ${name}`, 'work');
@@ -2068,12 +2068,9 @@ async function handleUploadedFile(file){
     stepDone('style');
 
     stepActive('editor');
-    editor.commands.setContent(html, false);
-    // 업로드 후 자동 분류(키워드 룰) — 붙여넣기와 동일한 경로로 태그를 정돈한다
-    try {
-      const newDoc = applyKeywordRules(editor.getJSON());
-      if (newDoc) editor.commands.setContent(newDoc, false);
-    } catch(e){ console.warn('auto-classify on upload:', e); }
+    // 업로드/샘플 경로 공통 진입점 — paste 훅과 동일한 HTML 전처리 + JSON 보강을 수행.
+    // 각 단계 실패는 헬퍼 내부에서 console.error + toast로 가시화된다.
+    commitHtmlToEditor(html, sourceHint);
     setTimeout(()=>{ rescanEditorImages(); scheduleReflow(); }, 50);
     stepDone('editor');
     pipelineHide();
@@ -3806,7 +3803,7 @@ window.addEventListener('drop', async e=>{
 $('#btn-sample').addEventListener('click', async ()=>{
   const blob = new Blob([SAMPLE_HWPX_XML], { type: 'application/xml' });
   const file = new File([blob], 'sample.xml', { type: 'application/xml' });
-  await handleUploadedFile(file);
+  await handleUploadedFile(file, 'sample');
 });
 
 $('#btn-new').addEventListener('click', ()=>{
