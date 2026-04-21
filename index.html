@@ -435,6 +435,67 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
   font-variant:small-caps; letter-spacing:.5pt;
 }
 
+/* 앞부속 본문 단락 타이포 — 첫 단락 들여쓰기 제거, 적절한 줄간 */
+.front-matter.author p,
+.front-matter.preface p,
+.front-matter.foreword p{
+  text-indent:0;
+  margin:0 0 10pt;
+  line-height:1.7;
+  text-align:justify;
+}
+.front-matter.author p + p,
+.front-matter.preface p + p,
+.front-matter.foreword p + p{
+  text-indent:var(--body-indent);
+}
+/* 앞부속 내부 H2/H3 — 본문 헤딩과 다른 절제된 스타일 */
+.front-matter.author h2,
+.front-matter.preface h2,
+.front-matter.foreword h2{
+  font-size:13pt; font-weight:600; margin:16pt 0 8pt; color:#333;
+}
+.front-matter.author h3,
+.front-matter.preface h3,
+.front-matter.foreword h3{
+  font-size:11pt; font-weight:600; margin:12pt 0 6pt; color:#555;
+}
+/* 판권 페이지 내부 H2 (부제/슬로건 등) */
+.front-matter.colophon h2{
+  font-size:10pt; font-weight:400; font-style:italic; color:#666;
+  margin:6pt 0 14pt; letter-spacing:.3px;
+}
+/* 자동분류 키워드 규칙이 삽입한 빈 단락(상하 여백용) — 최소 높이 보장 */
+.page-content p[data-kw-pad],
+.ProseMirror p[data-kw-pad]{
+  min-height:0.9em; margin:0; padding:0;
+}
+/* 책제목 페이지(half_title / cover_design) — 가운데 정렬, 여백 크게 */
+.front-matter.half_title,
+.front-matter.cover_design{
+  text-align:center; padding-top:25%; color:#222;
+}
+.front-matter.half_title h1,
+.front-matter.cover_design h1{
+  font-size:26pt; font-weight:700; margin:0 0 10pt; letter-spacing:2pt;
+  background:transparent; color:#222; padding:0; display:block;
+}
+.front-matter.half_title p,
+.front-matter.cover_design p{
+  text-indent:0; font-size:12pt; color:#555; margin:4pt 0; text-align:center;
+}
+/* 장 표지(chapter_opener) — 큰 장 번호 + 장 제목 오른쪽 페이지 전용 */
+.front-matter.chapter_opener{
+  text-align:left; padding-top:35%;
+}
+.front-matter.chapter_opener h1{
+  font-size:28pt; font-weight:700; margin:0 0 18pt; letter-spacing:1pt;
+}
+.front-matter.chapter_opener .chap-num{
+  display:block; font-size:48pt; font-weight:300; color:#AAA;
+  line-height:1; margin-bottom:10pt;
+}
+
 /* Editor drop-hint overlay */
 .ProseMirror.drop-active{outline:3px dashed var(--accent);outline-offset:-8px;background:var(--accent-soft)}
 
@@ -1121,6 +1182,7 @@ ul.toc-list > li::before{
         </div>
       </div>
     </div>
+    <button class="btn" id="btn-classify-report" title="3영역·페이지 유형 분류 리포트"><i class="ph ph-list-magnifying-glass"></i> 구조 진단</button>
     <div class="menu-wrap">
       <button class="btn primary" id="btn-export"><i class="ph ph-export"></i> 내보내기 <i class="ph ph-caret-down"></i></button>
       <div class="menu" id="menu-export">
@@ -1494,6 +1556,79 @@ ul.toc-list > li::before{
     </div>
   </div>
 </div>
+
+<!-- 페이지 구조 진단 리포트 모달 — 앞부속/본문/뒷부속 + 페이지 유형 판별 -->
+<div class="modal" id="classify-modal">
+  <div class="card" style="max-width:980px;width:96vw">
+    <h4><i class="ph ph-list-magnifying-glass"></i> 페이지 구조 진단 리포트</h4>
+    <p style="font-size:12px;color:var(--mute);margin:4px 0 12px;line-height:1.55">
+      앞부속 · 본문 · 뒷부속 3영역으로 구분하고, 각 페이지 유형을 규칙 기반으로 판정합니다.
+      <b style="color:var(--warn)">본문·태그는 변경하지 않습니다</b> — 진단 리포트만 출력.
+    </p>
+    <div class="classify-summary" id="classify-summary" style="
+      display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px;
+      font-size:11.5px;color:#333;
+    "></div>
+    <div class="classify-tabs" style="display:flex;gap:6px;margin:0 0 8px">
+      <button class="btn ghost classify-tab active" data-filter="all" style="font-size:11.5px">전체</button>
+      <button class="btn ghost classify-tab" data-filter="front" style="font-size:11.5px">앞부속</button>
+      <button class="btn ghost classify-tab" data-filter="body" style="font-size:11.5px">본문</button>
+      <button class="btn ghost classify-tab" data-filter="back" style="font-size:11.5px">뒷부속</button>
+      <button class="btn ghost classify-tab" data-filter="mismatch" style="font-size:11.5px;color:var(--warn)">검증 필요</button>
+      <button class="btn ghost classify-tab" data-filter="unknown" style="font-size:11.5px">unknown</button>
+    </div>
+    <div class="classify-table-wrap" style="
+      max-height:52vh;overflow:auto;border:1px solid var(--line);border-radius:4px;
+    ">
+      <table class="classify-table" id="classify-table" style="
+        width:100%;border-collapse:collapse;font-size:11.5px;
+      ">
+        <thead style="position:sticky;top:0;background:#F5F5F2;z-index:1">
+          <tr>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)">#</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)">쪽번호</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)">영역</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)">유형(예상)</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)">기존 분류</th>
+            <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--line)">신뢰도</th>
+            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)">근거 신호</th>
+            <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--line)">일치?</th>
+          </tr>
+        </thead>
+        <tbody id="classify-tbody"></tbody>
+      </table>
+    </div>
+    <div class="foot">
+      <button class="btn" id="classify-export-json" type="button"><i class="ph ph-download-simple"></i> JSON 저장</button>
+      <button class="btn" id="classify-copy-md" type="button"><i class="ph ph-clipboard"></i> Markdown 복사</button>
+      <div style="flex:1"></div>
+      <button class="btn primary" id="classify-close">닫기</button>
+    </div>
+  </div>
+</div>
+<style>
+/* 페이지 구조 진단 리포트 — 행/배지 스타일 */
+.classify-table tbody tr{border-bottom:1px solid #EEE}
+.classify-table tbody tr:hover{background:#FAFAF6}
+.classify-table td{padding:6px 8px;vertical-align:top;line-height:1.45}
+.classify-tab.active{background:#2A6FD6;color:#fff;border-color:#2A6FD6}
+.classify-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10.5px;
+  font-weight:600;letter-spacing:.2px;color:#333;background:#E5E5E0;line-height:1.6}
+.classify-badge.front{background:#DDE7F5;color:#1F4E79}
+.classify-badge.body{background:#E2F0DB;color:#2A5E2A}
+.classify-badge.back{background:#F3DFEA;color:#6D2A5A}
+.classify-badge.unknown{background:#F4F2E8;color:#6A4A0A;border:1px dashed #C7A64A}
+.classify-badge.mismatch{background:#FBE4E4;color:#8B1A1A;border:1px solid #DC6060}
+.classify-conf{display:inline-block;width:44px;text-align:center;padding:1px 0;border-radius:3px;
+  font-weight:700;font-variant-numeric:tabular-nums}
+.classify-conf.hi{background:#D7EFD7;color:#1E5A1E}
+.classify-conf.md{background:#FFF0C0;color:#755B00}
+.classify-conf.lo{background:#F7D8D8;color:#7A2A2A}
+.classify-signals{font-size:10.5px;color:#555;line-height:1.5}
+.classify-summary .kv{background:#F5F5F2;border:1px solid var(--line);border-radius:4px;
+  padding:6px 10px;display:flex;gap:6px;align-items:baseline}
+.classify-summary .kv b{font-size:13.5px;color:#222}
+</style>
 
 <script type="module">
 /* ============================================================
@@ -2493,6 +2628,412 @@ function markTocListsInPreview(){
     }
   }
 }
+
+/* ============================================================
+   Round 6: 페이지 구조 진단 리포트 (본문 변경 없음)
+   ------------------------------------------------------------
+   쪽번호 체계 + 페이지 상단 키워드 + 이미지 비중 등 복수 신호를
+   종합해 각 페이지를 {region, type, confidence, signals} 로 판정.
+   본문·DOM·태그는 일체 변경하지 않는다 — 리포트만 생성한다.
+   ============================================================ */
+const PAGE_TYPE_LABEL = {
+  half_title:    '속표지',
+  copyright:     '판권지',
+  cover_design:  '커버(디자인)',
+  author_bio:    '저자 소개',
+  preface:       '머리말',
+  toc:           '목차',
+  chapter_opener:'장 표지',
+  body_text:     '본문',
+  references:    '참고문헌',
+  index:         '색인',
+  epilogue:      '에필로그',
+  blank:         '백면',
+  unknown:       'unknown',
+};
+const REGION_LABEL = { front:'앞부속', body:'본문', back:'뒷부속', unknown:'?' };
+
+/* 쪽번호 체계 판별 — 로마(i, ii, iii…) vs 아라비아(1, 2, 3…). */
+function parsePageNumSystem(raw){
+  const t = (raw || '').replace(/[\s\-–—.,()[\]<>]/g, '').toLowerCase();
+  if (!t) return { system:'none', value:null };
+  if (/^[ivxlcdm]+$/.test(t)){
+    const map = { i:1, v:5, x:10, l:50, c:100, d:500, m:1000 };
+    let v = 0, prev = 0;
+    for (const ch of [...t].reverse()){
+      const val = map[ch] || 0;
+      if (val < prev) v -= val; else v += val;
+      prev = val;
+    }
+    return { system:'roman', value:v };
+  }
+  if (/^\d+$/.test(t)) return { system:'arabic', value:parseInt(t,10) };
+  return { system:'other', value:null };
+}
+
+/* 페이지 1장의 구조적 요약 수집 — 분류 입력용 */
+function gatherPageFacts(pageEl){
+  const content = pageEl.querySelector('.page-content');
+  const pageNum = (pageEl.querySelector('.pagenum')?.textContent || '').trim();
+  const frontSection = content?.querySelector(':scope > section[class*="front-matter"]');
+  const existingClass = (() => {
+    if (!frontSection) return null;
+    const cls = frontSection.className || '';
+    const m = cls.match(/front-matter\s+(\w+)/);
+    return m ? m[1] : null;
+  })();
+  const blocks = content
+    ? Array.from(content.querySelectorAll(':scope > *, :scope > section > *'))
+    : [];
+  /* 첫 번째 헤딩 텍스트 (존재 시) */
+  const firstHeading = (() => {
+    for (const b of blocks){
+      if (/^H[1-3]$/.test(b.tagName)) return (b.textContent || '').trim();
+    }
+    return null;
+  })();
+  const textAll = (content?.textContent || '').replace(/\s+/g, ' ').trim();
+  const textLen = textAll.length;
+  const imgs = content ? content.querySelectorAll('img') : [];
+  const hasImage = imgs.length > 0;
+  const imagePixelRatio = (() => {
+    if (!hasImage || !pageEl) return 0;
+    const pageRect = pageEl.getBoundingClientRect();
+    if (pageRect.width <= 0 || pageRect.height <= 0) return 0;
+    const pageArea = pageRect.width * pageRect.height;
+    let imgArea = 0;
+    imgs.forEach(im => {
+      const r = im.getBoundingClientRect();
+      imgArea += Math.max(0, r.width * r.height);
+    });
+    return imgArea / pageArea;
+  })();
+  return {
+    pageNum, pageNumSystem: parsePageNumSystem(pageNum),
+    existingClass, firstHeading,
+    textAll, textLen, hasImage, imagePixelRatio,
+    blockTags: blocks.map(b => b.tagName).join(','),
+    blockCount: blocks.length,
+  };
+}
+
+/* 단일 페이지 유형 판정 — 규칙별 가중치 기반. 우선순위:
+   쪽번호 체계 → 명시적 front-matter 클래스 → 키워드 → 구조/비중 */
+function classifyPageType(facts, pageCtx){
+  const signals = [];
+  let type = 'unknown';
+  let confidence = 0;
+
+  const t  = (facts.textAll || '');
+  const fh = (facts.firstHeading || '').replace(/\s+/g, ' ').trim();
+  const blockTags = facts.blockTags || '';
+
+  /* 기존 분류 클래스가 있으면 강한 기본선 */
+  const xmap = {
+    colophon:'copyright', author:'author_bio', preface:'preface',
+    foreword:'preface',  toc:'toc', dedication:'half_title',
+    references:'references', index:'index', epilogue:'epilogue',
+    half_title:'half_title', cover_design:'cover_design',
+    chapter_opener:'chapter_opener',
+  };
+  if (facts.existingClass && xmap[facts.existingClass]){
+    type = xmap[facts.existingClass];
+    confidence = Math.max(confidence, 0.6);
+    signals.push(`기존 분류 클래스: ${facts.existingClass}`);
+  }
+
+  /* 빈 페이지(백면) */
+  if (facts.textLen === 0 && !facts.hasImage){
+    return { type:'blank', confidence:0.99, signals:['페이지 컨텐츠 없음'] };
+  }
+
+  /* 판권지(copyright) — 3개 이상 토큰 */
+  const coloTokens = COLO_TOKENS.filter(k => t.includes(k));
+  if (coloTokens.length >= 3){
+    signals.push(`판권 토큰 ${coloTokens.length}개: ${coloTokens.slice(0,4).join(', ')}`);
+    type = 'copyright';
+    confidence = Math.min(0.98, 0.55 + 0.08 * coloTokens.length);
+  } else if (coloTokens.length >= 2){
+    signals.push(`판권 토큰 ${coloTokens.length}개(부족): ${coloTokens.join(', ')}`);
+    if (confidence < 0.7){ type = 'copyright'; confidence = 0.55; }
+  }
+
+  /* 커버(이미지 비중) */
+  if (facts.imagePixelRatio >= 0.5){
+    signals.push(`이미지 점유율 ${(facts.imagePixelRatio*100|0)}%`);
+    type = 'cover_design';
+    confidence = Math.max(confidence, 0.75);
+  }
+
+  /* 키워드 기반 유형 — 첫 헤딩 매칭 */
+  const HEAD_MAP = [
+    ['author_bio',     /^(저자\s*소개|저자\s*약력|역자\s*소개|역자\s*약력|지은이\s*소개|옮긴이\s*소개)$/],
+    ['preface',        /^(머리말|머릿말|서문|프롤로그|Preface|Prologue|들어가며)$/i],
+    ['toc',            /^(목차|차례|Contents|Table of Contents)$/i],
+    ['references',     /^(참고\s*문헌|인용\s*문헌|참고\s*자료|References|Bibliography)$/i],
+    ['index',          /^(찾아보기|색인|인덱스|Index)$/i],
+    ['epilogue',       /^(에필로그|결론|후기|맺음말|나오며)$/i],
+  ];
+  if (fh){
+    for (const [ty, re] of HEAD_MAP){
+      if (re.test(fh)){
+        signals.push(`첫 헤딩 "${fh}" → ${ty}`);
+        type = ty;
+        confidence = Math.max(confidence, 0.92);
+        break;
+      }
+    }
+  }
+
+  /* 장 표지(chapter_opener) — 큰 숫자/장 번호 + 짧은 제목 */
+  const chapHeadPatterns = [
+    /^(제\s*\d+\s*(장|부|편|절))\s*(.*)$/,
+    /^Chapter\s+\d+/i,
+    /^Part\s+\d+/i,
+    /^\d+\s+[^\s].{0,30}$/, /* "1 서문" / "2 환자 대하기의 원칙" */
+  ];
+  if (fh && facts.textLen <= 140 && chapHeadPatterns.some(re => re.test(fh))){
+    signals.push(`장 시작 헤딩 "${fh}"`);
+    type = 'chapter_opener';
+    confidence = Math.max(confidence, 0.85);
+  }
+
+  /* 목차(toc) — 헤딩 매칭을 통과하지 못해도 토큰 패턴으로 보강:
+     "장 번호 + 제목 + 쪽번호" 리스트형태 탐지 */
+  if (type !== 'toc' && /(\d+\s*\.?\s*\S+\s*[·…\.]{2,}\s*\d+)/.test(t) && facts.textLen < 1500){
+    signals.push('목차형 리스트 패턴(번호·점선·쪽수)');
+    if (confidence < 0.7){ type = 'toc'; confidence = 0.7; }
+  }
+
+  /* 속표지 — 짧은 텍스트 + 이미지 없음 + 쪽번호 체계가 front일 때만 */
+  if (type === 'unknown' && facts.textLen <= 60 && !facts.hasImage
+      && pageCtx.region !== 'body' && pageCtx.region !== 'back'){
+    signals.push(`텍스트 ${facts.textLen}자 + 이미지 없음(속표지 후보)`);
+    type = 'half_title';
+    confidence = 0.55;
+  }
+
+  /* 본문(body_text) — 영역이 body 이면서 다른 유형 미확정 */
+  if (type === 'unknown' && pageCtx.region === 'body'){
+    type = 'body_text';
+    confidence = 0.6;
+    signals.push('본문 영역 기본값');
+  }
+  /* 뒷부속에 유형 미확정이면 body_text 기본값이 아닌 unknown 유지 */
+  if (type === 'unknown' && pageCtx.region === 'back'){
+    /* 참고문헌/색인/에필로그 키워드 매칭이 안 된 상태 → 사람 확인 필요 */
+    signals.push('뒷부속 영역이나 키워드 미매칭 — 사람 확인 권장');
+  }
+
+  return { type, confidence, signals };
+}
+
+/* 전체 페이지 분류 리포트 생성 */
+function classifyPagesForReport(){
+  const pages = Array.from(document.querySelectorAll('#book .page'));
+  if (!pages.length) return { pages:[], summary:{}, mismatches:[] };
+
+  /* 1차 패스: 팩트 수집 */
+  const factList = pages.map(p => ({ el:p, facts: gatherPageFacts(p) }));
+
+  /* 영역 결정 —
+     (a) 쪽번호 체계: roman → front, arabic → body, 뒷쪽 뒷부속 키워드 → back
+     (b) 체계가 없으면 front-matter 클래스/키워드로 보조,
+     (c) 그래도 애매하면 앞쪽은 front, 중반 이후는 body, 말미는 back */
+  let bodyStartIdx = -1; /* 최초 arabic=1 페이지 인덱스 */
+  let backStartIdx = -1; /* 최초 뒷부속 유형 등장 인덱스 */
+  factList.forEach((f, i) => {
+    const sys = f.facts.pageNumSystem;
+    if (sys.system === 'arabic' && sys.value === 1 && bodyStartIdx < 0){
+      bodyStartIdx = i;
+    }
+    const fh = (f.facts.firstHeading || '');
+    if (/^(참고\s*문헌|인용\s*문헌|참고\s*자료|찾아보기|색인|인덱스|에필로그|결론|후기|맺음말|References|Bibliography|Index)/i.test(fh) && backStartIdx < 0){
+      backStartIdx = i;
+    }
+  });
+  /* 쪽번호로 bodyStartIdx를 못 찾았다면 본문 키워드로 추정:
+     첫 "제N장" / "Chapter N" / "1 서문" 헤딩 위치 */
+  if (bodyStartIdx < 0){
+    for (let i = 0; i < factList.length; i++){
+      const fh = factList[i].facts.firstHeading || '';
+      if (/^(제\s*\d+\s*(장|부|편))|^Chapter\s+\d+|^\d+\s+\S/.test(fh)){
+        bodyStartIdx = i; break;
+      }
+    }
+  }
+  /* 그래도 없으면 fallback: 전체 길이의 30% 지점 */
+  if (bodyStartIdx < 0) bodyStartIdx = Math.min(pages.length - 1, Math.floor(pages.length * 0.3));
+
+  /* 2차 패스: 페이지별 유형 판정 */
+  const results = factList.map((f, i) => {
+    let region = 'unknown';
+    const sys = f.facts.pageNumSystem.system;
+    if (sys === 'roman') region = 'front';
+    else if (sys === 'arabic'){
+      if (backStartIdx >= 0 && i >= backStartIdx) region = 'back';
+      else region = 'body';
+    } else {
+      if (backStartIdx >= 0 && i >= backStartIdx) region = 'back';
+      else if (i < bodyStartIdx) region = 'front';
+      else region = 'body';
+    }
+    const classification = classifyPageType(f.facts, { region, index:i });
+    return {
+      index: i + 1,
+      pageNum: f.facts.pageNum || '',
+      region,
+      type: classification.type,
+      confidence: classification.confidence,
+      signals: classification.signals,
+      existing: f.facts.existingClass || '',
+      firstHeading: f.facts.firstHeading || '',
+      textLen: f.facts.textLen,
+      imageRatio: f.facts.imagePixelRatio,
+    };
+  });
+
+  /* 기존 분류와의 불일치(검증 필요) 계산 */
+  const existingToType = {
+    colophon:'copyright', author:'author_bio', preface:'preface', foreword:'preface',
+    toc:'toc', dedication:'half_title', references:'references', index:'index',
+    epilogue:'epilogue', half_title:'half_title', cover_design:'cover_design',
+    chapter_opener:'chapter_opener',
+  };
+  const mismatches = [];
+  results.forEach(r => {
+    const mapped = existingToType[r.existing] || null;
+    r.match = !r.existing ? 'no-existing'
+           : (mapped === r.type ? 'match' : 'mismatch');
+    if (r.match === 'mismatch') mismatches.push(r);
+  });
+
+  /* 요약 */
+  const summary = {
+    totalPages: results.length,
+    front: results.filter(r => r.region === 'front').length,
+    body:  results.filter(r => r.region === 'body').length,
+    back:  results.filter(r => r.region === 'back').length,
+    unknown: results.filter(r => r.type === 'unknown').length,
+    needVerify: mismatches.length,
+    bodyStartIdx: bodyStartIdx + 1,
+    backStartIdx: backStartIdx < 0 ? null : backStartIdx + 1,
+  };
+  return { pages: results, summary, mismatches };
+}
+
+/* 리포트를 모달에 렌더링 */
+function renderClassificationReport(){
+  const modal = document.getElementById('classify-modal');
+  if (!modal) return;
+  const report = classifyPagesForReport();
+  if (!report.pages.length){
+    toast('페이지가 비어있습니다', 'warn');
+    return;
+  }
+  const sumEl = document.getElementById('classify-summary');
+  const tbody = document.getElementById('classify-tbody');
+  if (!sumEl || !tbody) return;
+  const s = report.summary;
+  sumEl.innerHTML = `
+    <div class="kv"><span>총 페이지</span><b>${s.totalPages}</b></div>
+    <div class="kv"><span>앞부속</span><b>${s.front}</b></div>
+    <div class="kv"><span>본문</span><b>${s.body}</b></div>
+    <div class="kv"><span>뒷부속</span><b>${s.back}</b></div>
+    <div class="kv"><span style="color:var(--warn)">unknown</span><b>${s.unknown}</b></div>
+    <div class="kv"><span style="color:var(--warn)">검증 필요</span><b>${s.needVerify}</b></div>
+    <div class="kv" style="font-size:10.5px;color:#666">본문 시작 페이지: ${s.bodyStartIdx}${s.backStartIdx ? ` · 뒷부속 시작: ${s.backStartIdx}` : ''}</div>
+  `;
+  tbody.innerHTML = report.pages.map(r => {
+    const confCls = r.confidence >= 0.8 ? 'hi' : r.confidence >= 0.6 ? 'md' : 'lo';
+    const confPct = (r.confidence * 100).toFixed(0) + '%';
+    const matchIco = r.match === 'match' ? '✔' : r.match === 'mismatch' ? '⚠' : '–';
+    const typeLabel = PAGE_TYPE_LABEL[r.type] || r.type;
+    return `<tr data-region="${r.region}" data-match="${r.match}" data-type="${r.type}">
+      <td>${r.index}</td>
+      <td>${r.pageNum ? escapeHtml(r.pageNum) : '<span style="color:#AAA">—</span>'}</td>
+      <td><span class="classify-badge ${r.region}">${REGION_LABEL[r.region] || r.region}</span></td>
+      <td><span class="classify-badge ${r.type === 'unknown' ? 'unknown' : ''}">${escapeHtml(typeLabel)}</span></td>
+      <td style="color:${r.existing ? '#333' : '#AAA'}">${r.existing ? escapeHtml(r.existing) : '—'}</td>
+      <td style="text-align:center"><span class="classify-conf ${confCls}">${confPct}</span></td>
+      <td class="classify-signals">${r.signals.map(escapeHtml).join('<br>') || '<span style="color:#AAA">—</span>'}</td>
+      <td style="text-align:center;${r.match === 'mismatch' ? 'color:var(--warn);font-weight:700' : ''}">${matchIco}</td>
+    </tr>`;
+  }).join('');
+  /* 탭 필터 */
+  const tabs = modal.querySelectorAll('.classify-tab');
+  const filterRows = (f) => {
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.filter === f));
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const show = (
+        f === 'all' ||
+        (f === 'front' && tr.dataset.region === 'front') ||
+        (f === 'body'  && tr.dataset.region === 'body') ||
+        (f === 'back'  && tr.dataset.region === 'back') ||
+        (f === 'unknown'  && tr.dataset.type === 'unknown') ||
+        (f === 'mismatch' && tr.dataset.match === 'mismatch')
+      );
+      tr.style.display = show ? '' : 'none';
+    });
+  };
+  tabs.forEach(t => { t.onclick = () => filterRows(t.dataset.filter); });
+  filterRows('all');
+
+  /* 저장/복사 버튼 */
+  const exportBtn = document.getElementById('classify-export-json');
+  if (exportBtn){
+    exportBtn.onclick = () => {
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type:'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `page-classify-${Date.now()}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast('JSON 리포트 저장됨', 'ok');
+    };
+  }
+  const copyBtn = document.getElementById('classify-copy-md');
+  if (copyBtn){
+    copyBtn.onclick = () => {
+      const md = [
+        `# 페이지 구조 진단 리포트`,
+        ``,
+        `- 총 페이지: ${s.totalPages}`,
+        `- 앞부속/본문/뒷부속: ${s.front} / ${s.body} / ${s.back}`,
+        `- 본문 시작 페이지: ${s.bodyStartIdx}${s.backStartIdx ? ` / 뒷부속 시작: ${s.backStartIdx}` : ''}`,
+        `- unknown: ${s.unknown} · 검증 필요: ${s.needVerify}`,
+        ``,
+        `| # | 쪽번호 | 영역 | 유형 | 기존 | 신뢰도 | 일치 |`,
+        `|---|---|---|---|---|---|---|`,
+        ...report.pages.map(r => `| ${r.index} | ${r.pageNum || '—'} | ${REGION_LABEL[r.region]} | ${PAGE_TYPE_LABEL[r.type] || r.type} | ${r.existing || '—'} | ${(r.confidence*100|0)}% | ${r.match === 'mismatch' ? '⚠' : (r.match === 'match' ? '✔' : '–')} |`),
+      ].join('\n');
+      try { navigator.clipboard.writeText(md); toast('Markdown 리포트 복사됨', 'ok'); }
+      catch(e){ console.warn('clipboard:', e); toast('복사 실패', 'err'); }
+    };
+  }
+  modal.classList.add('show');
+}
+
+/* 모달 닫기 + 버튼 바인딩 */
+(function bindClassifyReportUI(){
+  const modal = document.getElementById('classify-modal');
+  const closeBtn = document.getElementById('classify-close');
+  const openBtn = document.getElementById('btn-classify-report');
+  if (openBtn){
+    openBtn.addEventListener('click', () => {
+      try { renderClassificationReport(); }
+      catch(e){ console.error('classify report:', e); toast('리포트 생성 실패: ' + e.message, 'err'); }
+    });
+  }
+  if (closeBtn){
+    closeBtn.addEventListener('click', () => modal?.classList.remove('show'));
+  }
+  if (modal){
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.remove('show');
+    });
+  }
+})();
 
 /* Heuristic: a block is "splittable" if it's a paragraph, a list item,
    or a UL/OL container. Lists are split per-item to prevent TOC items
@@ -5125,6 +5666,13 @@ function applyKeywordRulesToHtml(html){
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
   const topNodes = Array.from(tmp.children);
+  /* 빈 단락 — JSON 버전의 emptyPara() 와 동형 출력 */
+  const mkEmpty = () => {
+    const p = document.createElement('p');
+    p.setAttribute('data-kw-pad', '1');
+    return p;
+  };
+  const isEmptyP = (n) => !!n && n.tagName === 'P' && !(n.textContent || '').trim() && !n.querySelector('img,table');
   topNodes.forEach(node => {
     const tn = node.tagName;
     if (!/^(P|DIV|SPAN)$/i.test(tn)) return;
@@ -5137,14 +5685,30 @@ function applyKeywordRulesToHtml(html){
       while (node.firstChild) h.appendChild(node.firstChild);
       node.replaceWith(h);
     } else if (tag === 'fig'){
+      /* JSON 버전과 동형: 앞에 빈 단락 + 📷 라벨 + 굵은 캡션 */
+      const frag = document.createDocumentFragment();
+      const prev = node.previousElementSibling;
+      if (!isEmptyP(prev)) frag.appendChild(mkEmpty());
       const label = document.createElement('p');
       label.innerHTML = '<em><mark data-color="' + CLF_BLUE + '" style="background:' + CLF_BLUE + '">📷 이미지 첨부</mark></em>';
       const p = document.createElement('p');
       const b = document.createElement('strong');
       while (node.firstChild) b.appendChild(node.firstChild);
       p.appendChild(b);
-      node.replaceWith(label, p);
+      frag.appendChild(label);
+      frag.appendChild(p);
+      node.replaceWith(frag);
     } else if (tag === 'callout'){
+      /* JSON 버전과 동형: 앞에 빈 단락 2개(이미 있으면 중복 방지) + callout + 뒤 빈 단락 1개 */
+      const frag = document.createDocumentFragment();
+      const prev = node.previousElementSibling;
+      if (!isEmptyP(prev)){
+        frag.appendChild(mkEmpty());
+        frag.appendChild(mkEmpty());
+      } else {
+        const prev2 = prev && prev.previousElementSibling;
+        if (!isEmptyP(prev2)) frag.appendChild(mkEmpty());
+      }
       const p = document.createElement('p');
       const b = document.createElement('strong');
       const mk = document.createElement('mark');
@@ -5153,7 +5717,9 @@ function applyKeywordRulesToHtml(html){
       while (node.firstChild) mk.appendChild(node.firstChild);
       b.appendChild(mk);
       p.appendChild(b);
-      node.replaceWith(p);
+      frag.appendChild(p);
+      frag.appendChild(mkEmpty());
+      node.replaceWith(frag);
     }
   });
   return tmp.innerHTML;
