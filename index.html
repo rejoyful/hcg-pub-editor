@@ -2133,6 +2133,45 @@ function normalizePastedHtml(html){
   return tmp.innerHTML;
 }
 
+/* HTML 단계 전처리 — (a) normalize + (b) 키워드 자동분류.
+   paste 훅과 업로드/샘플 경로가 공유한다. 순수 변환: 호출자가 에디터 적용은 직접.
+   각 단계 실패는 console.error. toast는 source !== 'paste'일 때만(조용한 paste 규약 유지). */
+function preprocessHtml(html, source){
+  let normalized = html;
+  try { normalized = normalizePastedHtml(html); }
+  catch(e){
+    console.error('[preprocess] normalize failed (' + source + '):', e);
+    if (source !== 'paste') toast('HTML 정규화 실패: ' + (e?.message || e), 'err');
+  }
+  try { return applyKeywordRulesToHtml(normalized); }
+  catch(e){
+    console.error('[preprocess] html-classify failed (' + source + '):', e);
+    if (source !== 'paste') toast('자동 분류(HTML) 실패: ' + (e?.message || e), 'err');
+    return normalized;
+  }
+}
+
+/* 공통 진입점: paste 외 모든 HTML 수렴 경로(업로드/샘플)에서 이 함수만 호출.
+   내부 순서:
+     a. normalizePastedHtml     ─┐ 두 단계 합쳐 preprocessHtml
+     b. applyKeywordRulesToHtml ─┘
+     c. editor.setContent(processed)
+     d. applyKeywordRules(JSON)     ← JSON 단계 보강
+     e. editor.setContent(newDoc)
+   b단계는 idempotent — 이미 <h1>/<h2> 등으로 분류된 노드는 applyKeywordRulesToHtml이
+   최상위 P/DIV/SPAN만 건드리므로(index.html:5678) 중복 호출해도 변환 누적 없음. */
+function commitHtmlToEditor(html, source){
+  const processed = preprocessHtml(html, source);
+  editor.commands.setContent(processed, false);
+  try {
+    const newDoc = applyKeywordRules(editor.getJSON());
+    if (newDoc) editor.commands.setContent(newDoc, false);
+  } catch(e){
+    console.error('[commit] json-classify failed (' + source + '):', e);
+    toast('자동 분류(JSON) 실패: ' + (e?.message || e), 'err');
+  }
+}
+
 const editor = window.editor = new Editor({
   element: $('#editor'),
   extensions: [
@@ -2151,10 +2190,10 @@ const editor = window.editor = new Editor({
   ],
   editorProps: {
     transformPastedHTML(html){
-      /* 붙여넣을 때 HTML을 한 번 정규화한 뒤, 블록별 자동 분류를 한번 더 적용 */
-      const normalized = normalizePastedHtml(html);
-      try { return applyKeywordRulesToHtml(normalized); }
-      catch(e){ return normalized; }
+      /* 붙여넣을 때 HTML 정규화 + 블록별 자동 분류를 HTML 문자열 단계에서 적용.
+         업로드/샘플 경로와 동일한 preprocessHtml을 공유한다.
+         transformPastedHTML 훅 규약상 여기는 HTML 문자열만 반환 — setContent은 호출하지 않음. */
+      return preprocessHtml(html, 'paste');
     }
   },
   content: `
