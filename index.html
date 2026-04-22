@@ -1646,7 +1646,26 @@ import TextAlign from 'https://esm.sh/@tiptap/extension-text-align@2.6.6';
 import TextStyle from 'https://esm.sh/@tiptap/extension-text-style@2.6.6';
 import { Color } from 'https://esm.sh/@tiptap/extension-color@2.6.6';
 import Highlight from 'https://esm.sh/@tiptap/extension-highlight@2.6.6';
+import Paragraph from 'https://esm.sh/@tiptap/extension-paragraph@2.6.6';
 import JSZip from 'https://esm.sh/jszip@3.10.1';
+
+/* Paragraph 확장 — 빈 paragraph 의 data-section-break 속성을 schema
+   정식 attribute 로 등록해 setContent → getJSON → setContent 왕복에도
+   보존되도록 한다. 영역 경계 힌트(원고의 여러 빈 줄)를 남기는 용도. */
+const PubParagraph = Paragraph.extend({
+  addAttributes(){
+    return {
+      ...(this.parent?.() || {}),
+      sectionBreak: {
+        default: null,
+        parseHTML: el => el.getAttribute('data-section-break') || null,
+        renderHTML: attrs => attrs.sectionBreak
+          ? { 'data-section-break': String(attrs.sectionBreak) }
+          : {},
+      },
+    };
+  },
+});
 /* pdfjs-dist — lazy-loaded on first PDF upload (see importPdfFile) */
 let __pdfjsLoader = null;
 async function loadPdfJs(){
@@ -1770,16 +1789,16 @@ function parseHwpxXmlToHtml(xmlText){
   if (perr) throw new Error('HWPX XML 파싱 실패');
   const paras = xml.querySelectorAll('p, hp\\:p');
   const out = [];
+  // 모든 단락은 <p>로만 내보낸다. 태그 승격(h1/h2/h3 구분)은 공통 경로
+  // (commitHtmlToEditor → applyKeywordRulesToHtml + applyKeywordRules)에
+  // 일원화돼 있다. 파서 자체 heuristic으로 먼저 heading을 만들면 공통 규칙의
+  // P/DIV/SPAN 가드에 걸려 재분류가 막혀 misalign을 영속화한다.
   paras.forEach(p=>{
     const runs = p.querySelectorAll('t, hp\\:t');
     let text = '';
     runs.forEach(t=>{ text += (t.textContent || ''); });
     text = text.trim();
     if (!text) return;
-    const isHeading = /^(\d+(\.\d+)*\.?\s+)/.test(text) && text.length < 80;
-    if (isHeading){ out.push(`<h2>${escapeHtml(text)}</h2>`); return; }
-    const isTitleMaybe = out.length === 0 && text.length < 40;
-    if (isTitleMaybe){ out.push(`<h1>${escapeHtml(text)}</h1>`); return; }
     out.push(`<p>${escapeHtml(text)}</p>`);
   });
   return out.join('\n');
@@ -1854,6 +1873,10 @@ async function parsePptxFile(file){
     }
   }
 
+  // 태그 승격(h2/h3)은 공통 경로에 일원화. 슬라이드 경계·섹션 경계는 빈 <p>로
+  // 표기해 커밋 3의 섹션 경계 힌트 감지와 일관된 정책을 유지한다.
+  // "슬라이드 N"·"첨부 이미지" 라벨은 텍스트 <p>로만 남기고 heading 태그는
+  // 붙이지 않는다(공통 규칙이 필요 시 승격).
   const parts = [];
   const parser = new DOMParser();
   for (let i=0; i<slidePaths.length; i++){
@@ -1862,14 +1885,13 @@ async function parsePptxFile(file){
     const xml = parser.parseFromString(xmlText, 'application/xml');
     const texts = Array.from(xml.getElementsByTagName('a:t'))
       .map(el=>el.textContent.trim()).filter(Boolean);
-    parts.push(`<h2>슬라이드 ${i+1}</h2>`);
-    if (texts.length){
-      parts.push(`<h3>${escapeHtml(texts[0])}</h3>`);
-      for (let j=1; j<texts.length; j++) parts.push(`<p>${escapeHtml(texts[j])}</p>`);
-    }
+    if (i > 0) parts.push('<p></p>', '<p></p>'); // 슬라이드 경계(2줄 → 섹션 힌트 후보)
+    parts.push(`<p>슬라이드 ${i+1}</p>`);
+    for (const t of texts) parts.push(`<p>${escapeHtml(t)}</p>`);
   }
   if (Object.keys(images).length){
-    parts.push('<h2>첨부 이미지</h2>');
+    parts.push('<p></p>', '<p></p>'); // 첨부 이미지 섹션 경계
+    parts.push('<p>첨부 이미지</p>');
     Object.values(images).forEach(src=>{
       parts.push(`<p><img src="${src}" class="center" alt=""></p>`);
     });
@@ -1891,17 +1913,17 @@ async function parseIdmlFile(file){
     const xmlText = await zip.file(p).async('string');
     const xml = parser.parseFromString(xmlText, 'application/xml');
     const psrs = xml.getElementsByTagName('ParagraphStyleRange');
+    // 태그 승격은 공통 경로에 일원화. IDML의 AppliedParagraphStyle이 영문
+    // "Heading 1" 등일 때만 h1~h3로 올리던 기존 heuristic은 한글 스타일명
+    // (예: "제목 1/본문 1")에는 무력하고, 공통 규칙과 충돌하여 misalign을
+    // 고착시킬 수 있어 제거한다. 모든 단락은 <p>로만 출력.
     for (const psr of psrs){
-      const style = (psr.getAttribute('AppliedParagraphStyle')||'').toLowerCase();
       const contents = psr.getElementsByTagName('Content');
       let text = '';
       for (const c of contents) text += c.textContent;
       text = text.trim();
       if (!text) continue;
-      if (/heading\s*1|h1|title/.test(style)){ parts.push(`<h1>${escapeHtml(text)}</h1>`); }
-      else if (/heading\s*2|h2/.test(style)){ parts.push(`<h2>${escapeHtml(text)}</h2>`); }
-      else if (/heading\s*3|h3/.test(style)){ parts.push(`<h3>${escapeHtml(text)}</h3>`); }
-      else { parts.push(`<p>${escapeHtml(text)}</p>`); }
+      parts.push(`<p>${escapeHtml(text)}</p>`);
     }
   }
   return parts.join('\n');
@@ -1994,15 +2016,23 @@ async function parseMarkdown(md){
 }
 
 function parseTxt(text){
-  const blocks = text.split(/\n\s*\n/);
-  return blocks.map(b=>{
-    const t = b.trim();
-    if (!t) return '';
-    if (t.length < 50 && /^[#]|^\d+\.\s|^제\d+[장절]|^[A-Z\uAC00-\uD7A3][^.!?]*$/.test(t)){
-      return `<h2>${escapeHtml(t)}</h2>`;
-    }
-    return `<p>${escapeHtml(t)}</p>`;
-  }).filter(Boolean).join('\n');
+  // 태그 승격(h1/h2/h3)은 공통 경로에 일원화. parseTxt는 순수 <p> 시퀀스만
+  // 내보낸다. 연속 non-empty 줄은 공백 join으로 한 <p>에 합치고(워드랩 보호),
+  // 각 빈 줄은 빈 <p> 하나로 유지해 커밋 3 섹션 경계 감지가 힌트를 얻을
+  // 수 있도록 한다.
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  let buf = [];
+  const flush = () => {
+    if (buf.length){ out.push(`<p>${escapeHtml(buf.join(' '))}</p>`); buf = []; }
+  };
+  for (const line of lines){
+    const t = line.trim();
+    if (t){ buf.push(t); }
+    else { flush(); out.push('<p></p>'); }
+  }
+  flush();
+  return out.join('\n');
 }
 
 function escapeHtml(s){
@@ -2126,10 +2156,37 @@ function normalizePastedHtml(html){
       n.removeAttribute('class');
     }
   });
-  // Collapse totally-empty paragraphs that HWP uses for spacing
-  tmp.querySelectorAll('p').forEach(p=>{
-    if (!p.textContent.trim() && !p.querySelector('img,br,hr,table')) p.remove();
-  });
+  // Collapse totally-empty paragraphs, but preserve section-break hints.
+  //   - 연속 2개 이상 빈 p → 첫 개만 <p data-section-break="1"></p>로 유지,
+  //     나머지 제거. 이후 영역 감지(classifyPageType 등)가 원고의 실제
+  //     빈 줄 위치(저자 소개→목차, 목차→본문 같은 영역 경계)를 재구성할 수
+  //     있도록 신호를 남긴다.
+  //   - 단발 빈 p → 제거(기존 거동 유지).
+  //   - img/br/hr/table을 품은 p는 건드리지 않는다.
+  // 최상위 자식만 대상으로 한다. 중첩된 p의 정책은 기존 단순 제거 유지.
+  {
+    const isEmptyP = (el) => el && el.tagName === 'P'
+      && !el.textContent.trim()
+      && !el.querySelector('img,br,hr,table');
+    const tops = Array.from(tmp.children);
+    for (let i = 0; i < tops.length; ){
+      if (!isEmptyP(tops[i])){ i++; continue; }
+      let j = i;
+      while (j < tops.length && isEmptyP(tops[j])) j++;
+      const run = j - i;
+      if (run >= 2){
+        tops[i].setAttribute('data-section-break', '1');
+        for (let k = i + 1; k < j; k++) tops[k].remove();
+      } else {
+        tops[i].remove();
+      }
+      i = j;
+    }
+    // 중첩된(최상위 아닌) 빈 p는 기존과 같이 단순 제거
+    tmp.querySelectorAll(':scope p p').forEach(p=>{
+      if (!p.textContent.trim() && !p.querySelector('img,br,hr,table')) p.remove();
+    });
+  }
   // Hoist single-child div wrappers up to paragraphs
   tmp.querySelectorAll('div').forEach(d=>{
     if (d.children.length === 0 && d.textContent.trim()){
@@ -2220,7 +2277,9 @@ const editor = window.editor = new Editor({
     StarterKit.configure({
       heading: { levels: [1,2,3] },
       codeBlock: false,
+      paragraph: false, // PubParagraph로 교체(data-section-break 속성 보존)
     }),
+    PubParagraph,
     Underline,
     Image.configure({ inline: false, allowBase64: true, HTMLAttributes: { class: 'center' }}),
     Table.configure({ resizable: true }),
@@ -5573,16 +5632,22 @@ const CLF_BLUE   = '#DDEBF7';   /* "이미지 첨부" 라벨 */
 function classifyByKeyword(raw){
   const t = (raw || '').replace(/\s+/g,' ').trim();
   if (!t) return null;
+
+  /* FIG: 도판 캡션 — 140자 가드보다 먼저 판정하여 긴 캡션(최대 300자)도 인정.
+     fig 정규식은 블록 시작을 "그림/표/Figure..." + 숫자로 강하게 앵커하므로
+     본문 문장이 우연히 매칭될 가능성이 매우 낮다. 실제 책 캡션은 서브라벨
+     (A:/B:/C:)과 긴 설명이 붙어 100자를 초과하는 경우가 다수(화타 원고 그림
+     9/12/15). 이전 순서: 140자 가드 → H1 → fig(100자). 현재: fig(300자)만
+     선행, 나머지 규칙은 140자 가드 아래에서 종전과 동일. */
+  if (t.length <= 300 && /^[<\[\(〈【]?\s*(그림|표|사진|도표|도|Figure|Fig\.?|Table|Photo)\s*[0-9IVXLCMⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/i.test(t)){
+    return 'fig';
+  }
+
   if (t.length > 140) return null; // 긴 블록은 본문으로 유지
 
   /* H1: 주요 섹션 이름 (정확 일치 또는 그 단어로 시작) */
   if (H1_EXACT.has(t)) return 'h1';
   if (H1_PREFIX.some(w => t === w || t.startsWith(w + ' ') || t.startsWith(w + ':') || t.startsWith(w + '—') || t.startsWith(w + '-'))) return 'h1';
-
-  /* FIG: 도판 캡션 — heading이 아닌 본문 굵게. 위에 라벨 자동 추가 */
-  if (t.length <= 100 && /^[<\[\(〈【]?\s*(그림|표|사진|도표|도|Figure|Fig\.?|Table|Photo)\s*[0-9IVXLCMⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/i.test(t)){
-    return 'fig';
-  }
 
   if (t.length <= 100){
     /* H2: 숫자 접두 */

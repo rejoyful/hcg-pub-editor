@@ -1,0 +1,13 @@
+{
+  "name": "hcg-pub-editor-tests-node",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Node-side regression harness for hcg-pub-editor classify pipeline.",
+  "scripts": {
+    "test": "node classify-regression.mjs"
+  },
+  "dependencies": {
+    "jsdom": "^24.0.0"
+  }
+}
