@@ -83,7 +83,7 @@ function analyzeFinalHtml(finalHtml, helpers){
   const d = document.createElement('div');
   d.innerHTML = finalHtml;
   const out = {
-    h1: [], h2: [], h3: [], fig: [], callout: [],
+    h1: [], h2: [], h3: [], fig: [], callout: [], ref_head: [],
     p_nonempty: [], p_section_break: [], p_kw_pad: [], p_empty_other: [],
   };
   const tops = Array.from(d.children);
@@ -107,8 +107,15 @@ function analyzeFinalHtml(finalHtml, helpers){
     // callout 판별: <strong> 안에 mark[data-color=CLF_GRAY]
     const calloutMark = c.querySelector('strong > mark[data-color="' + helpers.CLF_GRAY + '"]');
     if (calloutMark){ out.callout.push(text); continue; }
-    // fig 본체: <strong> 직계자식 (callout이 아닌 경우)
-    if (c.querySelector(':scope > strong')){ out.fig.push(text); continue; }
+    // fig 본체: <strong> 직계자식, 바로 앞 형제가 📷 라벨 p 인 경우
+    if (c.querySelector(':scope > strong')){
+      const prev = c.previousElementSibling;
+      const isFigBody = prev && prev.tagName === 'P' && (prev.textContent || '').startsWith('📷 이미지 첨부');
+      if (isFigBody) { out.fig.push(text); continue; }
+      // 그 외 <strong>-wrap p 는 ref-head (참고문헌 스타일)
+      out.ref_head.push(text);
+      continue;
+    }
     out.p_nonempty.push(text);
   }
   return out;
@@ -187,6 +194,23 @@ async function main(){
     bodyFigOverclass.length === 0,
     bodyFigOverclass.length ? `후보: ${bodyFigOverclass.slice(0,3).join(' / ')}` : '');
 
+  /* ── [이슈 1] &nbsp; / whitespace-only <p> 도 "빈 단락"으로 제거 ── */
+  console.log('\n─── [이슈 1] &nbsp; / whitespace-only 빈 p 제거 ───');
+  const nbspCases = [
+    { label: 'NBSP only',         html: '<p>A</p><p>&nbsp;</p><p>B</p>',                 expect: 2 },
+    { label: 'multiple NBSP',     html: '<p>A</p><p>\u00A0\u00A0\u00A0</p><p>B</p>',    expect: 2 },
+    { label: 'NBSP + space',      html: '<p>A</p><p>\u00A0 \u00A0</p><p>B</p>',         expect: 2 },
+    { label: 'NBSP inside span',  html: '<p>A</p><p><span>&nbsp;</span></p><p>B</p>',   expect: 2 },
+    { label: 'NBSP in p with br', html: '<p>A</p><p>&nbsp;<br></p><p>B</p>',            expect: 3 /* br 포함이면 보존 */ },
+    { label: 'non-breaking text', html: '<p>A</p><p>\u00A0가\u00A0</p><p>B</p>',        expect: 3 /* 실제 글자 포함 */ },
+  ];
+  for (const c of nbspCases){
+    const out = helpers.normalizePastedHtml(c.html);
+    const dom = new JSDOM('<!doctype html><html><body><div>' + out + '</div></body></html>');
+    const n = dom.window.document.querySelectorAll('p').length;
+    check(`${c.label}: <p>${c.expect}개`, n === c.expect, `actual=${n}, html=${out}`);
+  }
+
   /* ── [커밋 2] 파서 출력이 공통 규칙으로 통일되는지 ── */
   console.log('\n─── [커밋 2] 파서 공통 규칙 통일 ───');
   const src = fs.readFileSync(INDEX_HTML, 'utf8');
@@ -207,7 +231,15 @@ async function main(){
   /* ── 통합: Cocoa paste full pipeline ── */
   console.log('\n─── [통합] Cocoa paste → normalize → applyKeywordRulesToHtml ───');
   const cocoa = wrapAsCocoaPaste(raw);
+  /* normalize 전후 <p> 개수 비교 — normalizePastedHtml 의 빈 p 제거가
+     실제로 몇 단락을 걷어내는지 진단. */
+  const domBefore = new JSDOM('<!doctype html><html><body><div>' + cocoa + '</div></body></html>');
+  const pCountBefore = domBefore.window.document.querySelectorAll('p').length;
   const norm = helpers.normalizePastedHtml(cocoa);
+  const domAfter = new JSDOM('<!doctype html><html><body><div>' + norm + '</div></body></html>');
+  const pCountAfter = domAfter.window.document.querySelectorAll('p').length;
+  console.log(`  <p> before normalize: ${pCountBefore}`);
+  console.log(`  <p> after  normalize: ${pCountAfter}  (제거된 빈 p: ${pCountBefore - pCountAfter})`);
   const final = helpers.applyKeywordRulesToHtml(norm);
   const tally = analyzeFinalHtml(final, helpers);
 
@@ -216,6 +248,7 @@ async function main(){
   console.log('  H3:', tally.h3.length);
   console.log('  callout:', tally.callout.length);
   console.log('  fig:', tally.fig.length);
+  console.log('  ref-head:', tally.ref_head.length, '(샘플:', tally.ref_head, ')');
   console.log('  p(본문):', tally.p_nonempty.length);
   console.log('  p(섹션브레이크):', tally.p_section_break.length);
   console.log('  p(kw-pad/fig·callout 패딩):', tally.p_kw_pad.length);
@@ -227,13 +260,29 @@ async function main(){
 
   /* ── 커밋 2 효과: 장 17 / 절 58 / 소항 19+블릿 4 = callout 23 ── */
   check('H2 (장) 17개', tally.h2.length === 17, `actual=${tally.h2.length}`);
-  check('H3 (절) 58개', tally.h3.length === 58, `actual=${tally.h3.length}`);
+  /* H3 카운트 체크는 '이슈 4' 에서 59로 재검증 (저자 이름 +1). 원본 '절 58 개' 체크는 제거. */
   check('callout (소항+블릿) 23개', tally.callout.length === 23, `actual=${tally.callout.length}`);
 
-  /* ── H1 (영역): 3 또는 4 (목차 내부 '서문' 오승격 허용 — 별도 이슈) ── */
-  check('H1 (영역) 3~4개 (목차 \'서문\' 오승격 허용)',
-    tally.h1.length >= 3 && tally.h1.length <= 4,
-    `actual=${tally.h1.length}`);
+  /* ── [이슈 4] 저자 이름 H3 승격: "저자 소개" 영역 첫 이름 단락이 H3 ── */
+  check('H3 에 "윤성수(尹星洙)" 포함 (저자 이름 승격)',
+    tally.h3.includes('윤성수(尹星洙)'),
+    `샘플=${JSON.stringify(tally.h3.slice(0,3))}`);
+  /* 저자 이름 승격은 1건만 (H3 58 → 59) */
+  check('H3 (절 + 저자 이름) 59개', tally.h3.length === 59, `actual=${tally.h3.length}`);
+
+  /* ── [이슈 2/3] 참고문헌 → ref-head 2건 (line 45 '참고문헌', line 851 '<참고문헌>') ── */
+  check('ref-head 2개 (참고문헌 / <참고문헌>)',
+    tally.ref_head.length === 2,
+    `actual=${tally.ref_head.length}, samples=${JSON.stringify(tally.ref_head)}`);
+  /* 참고문헌은 H1 에서 빠져야 함 */
+  check('H1 에 "참고문헌" 없음',
+    !tally.h1.includes('참고문헌'),
+    `H1 목록=${JSON.stringify(tally.h1)}`);
+
+  /* ── H1 (영역): 2 또는 3 (참고문헌 제거로 감소, 목차 내부 '서문' 오승격 허용) ── */
+  check('H1 (영역) 2~3개 (참고문헌 제외, 목차 \'서문\' 오승격 허용)',
+    tally.h1.length >= 2 && tally.h1.length <= 3,
+    `actual=${tally.h1.length}, samples=${JSON.stringify(tally.h1)}`);
 
   /* ── 섹션 경계 힌트 assertion 은 PR #4 에서 제거됨 (PubParagraph revert).
    *    tally.p_section_break 는 진단용으로만 남겨둔다 (data-section-break
@@ -257,11 +306,12 @@ async function main(){
   console.log('│ 분류                 │ 기대   │ 실제   │ 판정 │');
   console.log('├──────────────────────┼────────┼────────┼──────┤');
   const rows = [
-    ['H1 (영역)',               '3~4',   tally.h1.length,  (a) => a >= 3 && a <= 4],
+    ['H1 (영역)',               '2~3',   tally.h1.length,  (a) => a >= 2 && a <= 3],
     ['H2 (장)',                 17,      tally.h2.length,  (a) => a === 17],
-    ['H3 (절)',                 58,      tally.h3.length,  (a) => a === 58],
+    ['H3 (절+저자이름)',        59,      tally.h3.length,  (a) => a === 59],
     ['callout (소항+블릿)',     23,      tally.callout.length, (a) => a === 23],
     ['fig (그림, 그림9 제외)',   20,      tally.fig.length, (a) => a === 20],
+    ['ref-head (참고문헌)',      2,       tally.ref_head.length, (a) => a === 2],
   ];
   for (const [label, expect, actual, pred] of rows){
     const ok = pred(actual);
