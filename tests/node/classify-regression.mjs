@@ -83,7 +83,7 @@ function analyzeFinalHtml(finalHtml, helpers){
   const d = document.createElement('div');
   d.innerHTML = finalHtml;
   const out = {
-    h1: [], h2: [], h3: [], fig: [], callout: [],
+    h1: [], h2: [], h3: [], fig: [], callout: [], ref_head: [],
     p_nonempty: [], p_section_break: [], p_kw_pad: [], p_empty_other: [],
   };
   const tops = Array.from(d.children);
@@ -107,8 +107,15 @@ function analyzeFinalHtml(finalHtml, helpers){
     // callout 판별: <strong> 안에 mark[data-color=CLF_GRAY]
     const calloutMark = c.querySelector('strong > mark[data-color="' + helpers.CLF_GRAY + '"]');
     if (calloutMark){ out.callout.push(text); continue; }
-    // fig 본체: <strong> 직계자식 (callout이 아닌 경우)
-    if (c.querySelector(':scope > strong')){ out.fig.push(text); continue; }
+    // fig 본체: <strong> 직계자식, 바로 앞 형제가 📷 라벨 p 인 경우
+    if (c.querySelector(':scope > strong')){
+      const prev = c.previousElementSibling;
+      const isFigBody = prev && prev.tagName === 'P' && (prev.textContent || '').startsWith('📷 이미지 첨부');
+      if (isFigBody) { out.fig.push(text); continue; }
+      // 그 외 <strong>-wrap p 는 ref-head (참고문헌 스타일)
+      out.ref_head.push(text);
+      continue;
+    }
     out.p_nonempty.push(text);
   }
   return out;
@@ -241,6 +248,7 @@ async function main(){
   console.log('  H3:', tally.h3.length);
   console.log('  callout:', tally.callout.length);
   console.log('  fig:', tally.fig.length);
+  console.log('  ref-head:', tally.ref_head.length, '(샘플:', tally.ref_head, ')');
   console.log('  p(본문):', tally.p_nonempty.length);
   console.log('  p(섹션브레이크):', tally.p_section_break.length);
   console.log('  p(kw-pad/fig·callout 패딩):', tally.p_kw_pad.length);
@@ -255,10 +263,19 @@ async function main(){
   check('H3 (절) 58개', tally.h3.length === 58, `actual=${tally.h3.length}`);
   check('callout (소항+블릿) 23개', tally.callout.length === 23, `actual=${tally.callout.length}`);
 
-  /* ── H1 (영역): 3 또는 4 (목차 내부 '서문' 오승격 허용 — 별도 이슈) ── */
-  check('H1 (영역) 3~4개 (목차 \'서문\' 오승격 허용)',
-    tally.h1.length >= 3 && tally.h1.length <= 4,
-    `actual=${tally.h1.length}`);
+  /* ── [이슈 2/3] 참고문헌 → ref-head 2건 (line 45 '참고문헌', line 851 '<참고문헌>') ── */
+  check('ref-head 2개 (참고문헌 / <참고문헌>)',
+    tally.ref_head.length === 2,
+    `actual=${tally.ref_head.length}, samples=${JSON.stringify(tally.ref_head)}`);
+  /* 참고문헌은 H1 에서 빠져야 함 */
+  check('H1 에 "참고문헌" 없음',
+    !tally.h1.includes('참고문헌'),
+    `H1 목록=${JSON.stringify(tally.h1)}`);
+
+  /* ── H1 (영역): 2 또는 3 (참고문헌 제거로 감소, 목차 내부 '서문' 오승격 허용) ── */
+  check('H1 (영역) 2~3개 (참고문헌 제외, 목차 \'서문\' 오승격 허용)',
+    tally.h1.length >= 2 && tally.h1.length <= 3,
+    `actual=${tally.h1.length}, samples=${JSON.stringify(tally.h1)}`);
 
   /* ── 섹션 경계 힌트 assertion 은 PR #4 에서 제거됨 (PubParagraph revert).
    *    tally.p_section_break 는 진단용으로만 남겨둔다 (data-section-break
@@ -282,11 +299,12 @@ async function main(){
   console.log('│ 분류                 │ 기대   │ 실제   │ 판정 │');
   console.log('├──────────────────────┼────────┼────────┼──────┤');
   const rows = [
-    ['H1 (영역)',               '3~4',   tally.h1.length,  (a) => a >= 3 && a <= 4],
+    ['H1 (영역)',               '2~3',   tally.h1.length,  (a) => a >= 2 && a <= 3],
     ['H2 (장)',                 17,      tally.h2.length,  (a) => a === 17],
     ['H3 (절)',                 58,      tally.h3.length,  (a) => a === 58],
     ['callout (소항+블릿)',     23,      tally.callout.length, (a) => a === 23],
     ['fig (그림, 그림9 제외)',   20,      tally.fig.length, (a) => a === 20],
+    ['ref-head (참고문헌)',      2,       tally.ref_head.length, (a) => a === 2],
   ];
   for (const [label, expect, actual, pred] of rows){
     const ok = pred(actual);

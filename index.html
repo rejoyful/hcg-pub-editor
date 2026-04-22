@@ -5572,7 +5572,8 @@ function extractPlainText(node){
 const H1_EXACT = new Set([
   '저자 소개','저자소개','저자 약력','저자약력','역자 소개','역자소개',
   '목차','차례',
-  '참고문헌','인용문헌','참고자료',
+  /* '참고문헌' 은 ref-head 로 별도 처리(본문 굵게 + 위 여백). 인용문헌/참고자료는 기존대로 H1. */
+  '인용문헌','참고자료',
   '머리말','머릿말','서문','들어가며','프롤로그',
   '헌사',
   '추천사','추천의 글','추천의글','인사말',
@@ -5606,6 +5607,11 @@ function classifyByKeyword(raw){
   /* H1: 주요 섹션 이름 (정확 일치 또는 그 단어로 시작) */
   if (H1_EXACT.has(t)) return 'h1';
   if (H1_PREFIX.some(w => t === w || t.startsWith(w + ' ') || t.startsWith(w + ':') || t.startsWith(w + '—') || t.startsWith(w + '-'))) return 'h1';
+
+  /* 참고문헌 — H1 대신 "본문 굵게 + 위 여백" 으로 약하게 처리.
+     화타 원고 기준, 저자가 원하는 비주얼은 H1 만큼 강한 분리가 아닌
+     소절 구분 정도. '<참고문헌>' 처럼 꺾쇠괄호로 감싸는 변형도 수용. */
+  if (/^<?참고문헌>?$/.test(t)) return 'ref-head';
 
   if (t.length <= 100){
     /* H2: 숫자 접두 */
@@ -5748,7 +5754,7 @@ function applyKeywordRules(docJson){
            → 목차 종료 + 해당 블록을 H1로 처리.
       */
       const TOC_EXIT_BACKMATTER = new Set([
-        '참고문헌','참고 문헌','색인','찾아보기','부록','감사의 글','판권','저작권'
+        '참고문헌','<참고문헌>','참고 문헌','색인','찾아보기','부록','감사의 글','판권','저작권'
       ]);
       const isLongBody = text.length > 80;
       const isNumberedH2 = tag === 'h2';
@@ -5776,6 +5782,15 @@ function applyKeywordRules(docJson){
       const level = tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3;
       out.push({ type:'heading', attrs:{ level }, content: inline });
       /* H1이 새로 나타나면 목차 가능성은 사라진 상태 */
+    }
+    else if (tag === 'ref-head'){
+      /* 참고문헌 — 위에 빈 단락 1개 + 본문 굵게. HTML 버전과 동형. */
+      const lastOut = out[out.length - 1];
+      if (!isEmptyPara(lastOut)) out.push(emptyPara());
+      out.push({
+        type:'paragraph',
+        content: markAllInline(inline, [{ type:'bold' }]),
+      });
     }
     else if (tag === 'fig'){
       /* 앞에 "이미지 첨부" 라벨 + 본문 크기 굵게 */
@@ -5834,6 +5849,20 @@ function applyKeywordRulesToHtml(html){
       const h = document.createElement(tag);
       while (node.firstChild) h.appendChild(node.firstChild);
       node.replaceWith(h);
+    } else if (tag === 'ref-head'){
+      /* 참고문헌 — 앞에 빈 단락 1개(기존에 빈 단락 있으면 중복 방지) + 본문 굵게.
+         TipTap 기본 Paragraph 스키마는 data-* 커스텀 속성을 보존하지 않으므로
+         (PR #3 revert 의 교훈), data-reference-head 속성 대신 schema-safe 한
+         <strong> mark + kw-pad 빈 단락 조합으로 같은 비주얼을 얻는다. */
+      const frag = document.createDocumentFragment();
+      const prev = node.previousElementSibling;
+      if (!isEmptyP(prev)) frag.appendChild(mkEmpty());
+      const p = document.createElement('p');
+      const b = document.createElement('strong');
+      while (node.firstChild) b.appendChild(node.firstChild);
+      p.appendChild(b);
+      frag.appendChild(p);
+      node.replaceWith(frag);
     } else if (tag === 'fig'){
       /* JSON 버전과 동형: 앞에 빈 단락 + 📷 라벨 + 굵은 캡션 */
       const frag = document.createDocumentFragment();
