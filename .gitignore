@@ -8,6 +8,24 @@ dist/
 build/
 .env
 .env.local
+.env.*
+
+# Secrets / credentials — 절대 커밋 금지.
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+credentials.json
+
+# Local-only scratch / backups — 실수 커밋 방지.
+_bak/
+_backup/
+_scratch/
+_tmp/
+*.bak
+*.orig
+*.swp
 
 # Local test fixtures — 저작권 자료(실제 원고)는 커밋하지 않는다.
 # 디렉토리 통째로 ignore 하면 negation 이 먹지 않으므로 내부 파일만 ignore 한다.
