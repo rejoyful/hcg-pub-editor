@@ -2268,8 +2268,8 @@ const editor = window.editor = new Editor({
     <h2>3. WYSIWYG 조판</h2>
     <p>용지 크기, 여백, 단 구성, 본문 서체·크기·행간, 도곽 머리말/꼬리말 — 왼쪽 사이드바에서 조정하면 에디터 영역에 즉시 반영됩니다. "내보내기 → PDF"를 누르면 같은 모습으로 출력됩니다.</p>
   `,
-  onUpdate({ editor }){ updateStatus(editor); scheduleReflow(); scheduleTocHyperlinks(); scheduleSidebarFromCursor(); try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch(_){} },
-  onSelectionUpdate({ editor }){ updateToolbar(editor); scheduleSidebarFromCursor(); }
+  onUpdate({ editor }){ updateStatus(editor); scheduleReflow(); scheduleTocHyperlinks(); scheduleSidebarFromCursor(); schedulePreviewSyncFromCursor(); try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch(_){} },
+  onSelectionUpdate({ editor }){ updateToolbar(editor); scheduleSidebarFromCursor(); schedulePreviewSyncFromCursor(); }
 });
 
 /* 에디터 업데이트가 빈번하므로 debounce */
@@ -2558,6 +2558,9 @@ function paginate(){
      자동 섹션 감지 포함. 책 앞부속(책제목/판권/저자소개/머리말/목차 등)이
      별도 페이지로 나뉘고 .front-matter.<type> 클래스가 자동 부여된다. */
   const rawBlocks = Array.from(pm.children).filter(n => n.nodeType === 1);
+  /* 에디터→프리뷰 스크롤 동기화용: 원본 블록의 순번을 Map으로 보관 */
+  const rawIdxMap = new Map();
+  rawBlocks.forEach((b, i) => rawIdxMap.set(b, i));
   const expanded = expandBlocksWithFrontMatterSections(rawBlocks);
 
   /* 단일 블록이 한 페이지보다 큰 경우(긴 단락/긴 목차) 미리 쪼갠다. */
@@ -2565,11 +2568,14 @@ function paginate(){
   for (const item of expanded){
     if (item.kind === 'break'){ flattened.push({ break:true }); continue; }
     const b = item.el;
+    const srcIdx = rawIdxMap.has(b) ? rawIdxMap.get(b) : -1;
     const h = measureBlockHeight(b);
     const meta = item.inFront ? { inFront:true, frontClass:item.frontClass } : {};
+    meta.srcIdx = srcIdx;
     if (h <= pageInnerH || !canSplitBlock(b)){
       flattened.push({ el: b, ...meta });
     } else {
+      /* split pieces 는 모두 같은 srcIdx를 공유 — 스크롤 동기화 시 첫 조각으로 이동 */
       for (const piece of splitTextBlock(b, pageInnerH)){
         flattened.push({ el: piece, ...meta });
       }
@@ -2682,7 +2688,12 @@ function paginate(){
         currentFront = null;
         host = frag;
       }
-      host.appendChild(item.el.cloneNode(true));
+      const clone = item.el.cloneNode(true);
+      /* 에디터→프리뷰 스크롤 동기화 매핑 */
+      if (typeof item.srcIdx === 'number' && item.srcIdx >= 0){
+        clone.setAttribute('data-src-idx', String(item.srcIdx));
+      }
+      host.appendChild(clone);
     }
     content.classList.toggle('is-front-matter', isFrontMatter);
     content.replaceChildren(frag);
@@ -2691,6 +2702,9 @@ function paginate(){
   applyHeaderFooter();
   updateStatus(editor);
   try { markTocListsInPreview(); } catch(e){ console.warn('markTocListsInPreview:', e); }
+  /* 새 레이아웃이 반영된 뒤에 스크롤 동기화를 갱신 — onUpdate 경로에서 paginate
+     보다 먼저 sync가 실행되면 신규 블록이 아직 프리뷰에 없어 매칭이 실패한다. */
+  try { schedulePreviewSyncFromCursor(); } catch(_){}
 }
 
 /* 뷰어의 모든 .page-content를 돌며 "목차" 헤딩 뒤에 오는 UL/OL(다른 페이지로
@@ -3379,6 +3393,80 @@ function scheduleSidebarFromCursor(){
     catch(e){ console.warn('updateSidebarFromCursor:', e); }
   }, 60);
 }
+
+/* ============================================================
+   에디터 ↔ 프리뷰 스크롤 동기화
+   - 편집 중인 블록을 프리뷰(.stage) 뷰포트 안에 가져오기 위해 도입.
+   - paginate() 가 각 프리뷰 클론에 data-src-idx 를 부여하므로, 에디터 커서의
+     최상위 블록 순번과 매칭해 .stage 를 스크롤한다.
+   - 프리뷰 포커스를 빼앗지 않도록(입력 커서를 따라가면 텍스트 선택이 깨짐)
+     scrollTo 만 사용하고 element.scrollIntoView() 는 쓰지 않는다.
+   - 스크롤이 이미 대상 블록을 뷰포트에 담고 있으면 no-op (사용자가 살짝만
+     커서를 움직여도 매번 뷰포트가 점프하는 산만함 방지).
+   ============================================================ */
+let __previewSyncT = 0;
+let __previewSyncUserScrollLockUntil = 0;
+let __previewSyncProgrammaticUntil = 0;
+function markPreviewUserScrolled(){
+  /* 사용자가 프리뷰를 직접 스크롤하면 1.2초 동안 자동 동기화 억제.
+     키보드 편집 도중에는 이 락이 금방 풀리도록 너무 길지 않게. */
+  __previewSyncUserScrollLockUntil = Date.now() + 1200;
+}
+function schedulePreviewSyncFromCursor(){
+  clearTimeout(__previewSyncT);
+  __previewSyncT = setTimeout(() => {
+    try { syncPreviewToEditorCursor(); }
+    catch(e){ console.warn('syncPreviewToEditorCursor:', e); }
+  }, 80);
+}
+function syncPreviewToEditorCursor(){
+  if (Date.now() < __previewSyncUserScrollLockUntil) return;
+  if (typeof editor === 'undefined' || !editor || !editor.view) return;
+  const pm = document.querySelector('#editor .ProseMirror');
+  if (!pm) return;
+  /* 커서가 속한 최상위(pm 의 직계자식) 블록 찾기 */
+  let node = _getCursorDomNode(editor);
+  if (!node) return;
+  let top = node;
+  while (top && top.parentElement && top.parentElement !== pm){
+    top = top.parentElement;
+  }
+  if (!top || top.parentElement !== pm) return;
+  const kids = Array.from(pm.children).filter(n => n.nodeType === 1);
+  const srcIdx = kids.indexOf(top);
+  if (srcIdx < 0) return;
+  /* 프리뷰에서 대응 클론 찾기 — split 조각은 복수 존재 가능하므로 첫 매치 사용 */
+  const match = document.querySelector(`.page-content [data-src-idx="${srcIdx}"]`);
+  if (!match) return;
+  const stage = document.querySelector('#stage');
+  if (!stage) return;
+  const stageRect = stage.getBoundingClientRect();
+  const matchRect = match.getBoundingClientRect();
+  /* 이미 뷰포트에 충분히 들어와 있으면 스크롤하지 않음 (10% 여유). */
+  const margin = stageRect.height * 0.1;
+  const visibleTop = stageRect.top + margin;
+  const visibleBottom = stageRect.bottom - margin;
+  if (matchRect.top >= visibleTop && matchRect.bottom <= visibleBottom) return;
+  /* 대상을 뷰포트 중앙에 오도록 조정. smooth 스크롤은 관성 이벤트가 연속 발생
+     하므로, 관성이 끝날 때까지(~800ms) 프로그램적 스크롤임을 표시해 scroll
+     핸들러가 사용자 스크롤로 오인하지 않게 한다. */
+  const delta = matchRect.top - stageRect.top - (stageRect.height / 2) + (matchRect.height / 2);
+  __previewSyncProgrammaticUntil = Date.now() + 800;
+  stage.scrollBy({ top: delta, behavior: 'smooth' });
+}
+/* 프리뷰를 직접 스크롤(휠/트랙패드/드래그)하면 동기화를 잠시 멈춘다.
+   DOMContentLoaded 이후 #stage 가 반드시 존재하는 환경이므로 직후에 바로 부착. */
+setTimeout(() => {
+  const stage = document.querySelector('#stage');
+  if (!stage) return;
+  stage.addEventListener('wheel', markPreviewUserScrolled, { passive:true });
+  stage.addEventListener('touchmove', markPreviewUserScrolled, { passive:true });
+  /* scroll 이벤트는 프로그램적 scrollBy 로도 발생하므로, 그 구간은 무시한다. */
+  stage.addEventListener('scroll', () => {
+    if (Date.now() < __previewSyncProgrammaticUntil) return;
+    markPreviewUserScrolled();
+  }, { passive:true });
+}, 300);
 function _getCursorDomNode(ed){
   try{
     const sel = window.getSelection();
@@ -5703,6 +5791,29 @@ function applyKeywordRules(docJson){
     const parts = splitParagraphOnHardBreak(n);
     for (const p of parts) expanded.push(p);
   }
+  /* fig/callout 멱등성 판별 헬퍼 — HTML 단계(applyKeywordRulesToHtml)가 이미
+     라벨/패딩을 붙여 놓았으면 JSON 단계가 중복으로 붙이지 않는다. */
+  const isFigLabelPara = (n) => {
+    if (!n || n.type !== 'paragraph' || !Array.isArray(n.content)) return false;
+    const s = n.content.map(x => (x && typeof x.text === 'string') ? x.text : '').join('');
+    return s.trim().startsWith('📷 이미지 첨부');
+  };
+  const hasMarkType = (inline, typeName) => {
+    if (!Array.isArray(inline)) return false;
+    /* 텍스트 노드가 있고, 모든 텍스트 노드에 해당 mark 가 붙어 있어야 "전부 처리됨"으로 본다 */
+    const texts = inline.filter(c => c && c.type === 'text' && String(c.text || '').length);
+    if (texts.length === 0) return false;
+    return texts.every(c => Array.isArray(c.marks) && c.marks.some(m => m && m.type === typeName));
+  };
+  const isCalloutStyled = (inline) => {
+    /* bold + highlight 둘 다 이미 덧칠되어 있으면 HTML 단계에서 callout 처리 완료 */
+    if (!hasMarkType(inline, 'bold')) return false;
+    if (!Array.isArray(inline)) return false;
+    const texts = inline.filter(c => c && c.type === 'text' && String(c.text || '').length);
+    return texts.every(c => Array.isArray(c.marks) && c.marks.some(m =>
+      m && m.type === 'highlight' && m.attrs && m.attrs.color === CLF_GRAY
+    ));
+  };
   const out = [];
   let inTocRegion = false;
   let tocItems = []; /* 수집된 listItem들 */
@@ -5813,38 +5924,65 @@ function applyKeywordRules(docJson){
       }
     }
     else if (tag === 'ref-head'){
-      /* 참고문헌 — 위에 빈 단락 1개 + 본문 굵게. HTML 버전과 동형. */
+      /* 참고문헌 — 위에 빈 단락 1개 + 본문 굵게. HTML 버전과 동형.
+         멱등성: inline이 이미 전부 bold 면 mark 재도포 없이 그대로 푸시. */
       const lastOut = out[out.length - 1];
       if (!isEmptyPara(lastOut)) out.push(emptyPara());
       out.push({
         type:'paragraph',
-        content: markAllInline(inline, [{ type:'bold' }]),
+        content: hasMarkType(inline, 'bold')
+          ? inline
+          : markAllInline(inline, [{ type:'bold' }]),
       });
     }
     else if (tag === 'fig'){
-      /* 앞에 "이미지 첨부" 라벨 + 본문 크기 굵게 */
+      /* 앞에 "이미지 첨부" 라벨 + 본문 크기 굵게.
+         멱등성: HTML 단계가 이미 📷 라벨을 바로 앞에 붙여놓았으면 라벨 재삽입 없이
+         본문 굵게만 보강한다. 라벨 중복("📷 이미지 첨부"가 두 번 찍히는 현상) 방지. */
       const lastOut = out[out.length - 1];
-      if (!isEmptyPara(lastOut)) out.push(emptyPara());
-      out.push(figLabel());
-      out.push({
-        type:'paragraph',
-        content: markAllInline(inline, [{ type:'bold' }]),
-      });
+      if (isFigLabelPara(lastOut)){
+        out.push({
+          type:'paragraph',
+          content: markAllInline(inline, [{ type:'bold' }]),
+        });
+      } else {
+        if (!isEmptyPara(lastOut)) out.push(emptyPara());
+        out.push(figLabel());
+        out.push({
+          type:'paragraph',
+          content: markAllInline(inline, [{ type:'bold' }]),
+        });
+      }
     }
     else if (tag === 'callout'){
-      /* 상단 여백 2행(이미 빈 행이면 생략) + 회색 음영 + 볼드 + 하단 1행 */
+      /* 상단 여백 2행(이미 빈 행이면 생략) + 회색 음영 + 볼드 + 하단 1행.
+         멱등성:
+          - 상단: 이미 앞 두 항목이 빈 단락이면 추가로 푸시하지 않는다 (HTML 단계가
+            `[kwPad, kwPad, callout]` 를 이미 만들어 둔 케이스).
+          - 하단: 다음 expanded 항목이 이미 빈 단락이면 추가 패딩을 푸시하지 않는다
+            (HTML 단계의 trailing kwPad 와 중복되는 현상 차단).
+         이 두 가지가 누락돼 있으면 목차 이후 본문 블록에서 "이유 없는 빈 줄"이
+         누적된다 (화타 원고 실측). */
       const lastOut = out[out.length - 1];
-      if (!isEmptyPara(lastOut)){
+      const secondLastOut = out[out.length - 2];
+      const alreadyPadded = isEmptyPara(lastOut) && isEmptyPara(secondLastOut);
+      if (!isEmptyPara(lastOut) && !alreadyPadded){
         out.push(emptyPara(), emptyPara());
+      } else if (isEmptyPara(lastOut) && !isEmptyPara(secondLastOut)){
+        /* 빈 단락 1개만 있는 케이스 — 상단 패딩 1행을 보강해 총 2행 맞춤 */
+        out.push(emptyPara());
       }
       out.push({
         type:'paragraph',
-        content: markAllInline(inline, [
-          { type:'bold' },
-          { type:'highlight', attrs:{ color: CLF_GRAY }},
-        ]),
+        content: isCalloutStyled(inline)
+          ? inline
+          : markAllInline(inline, [
+              { type:'bold' },
+              { type:'highlight', attrs:{ color: CLF_GRAY }},
+            ]),
       });
-      out.push(emptyPara());
+      const next = expanded[i + 1];
+      if (!isEmptyPara(next)) out.push(emptyPara());
     }
   }
   flushToc();
@@ -5973,6 +6111,69 @@ function applyKeywordRulesToHtml(html){
     n.replaceWith(h3);
     authorPromoted = true;
   }
+
+  /* Pass 3 — 작은따옴표('…') 강조: 본문에 등장하는 "작은따옴표로 감싼 구간"을
+     자동으로 <strong> 처리. 저자가 개념·인용을 강조하려 사용한 따옴표라,
+     조판 시 기본적으로 굵게 보여야 한다 (화타 원고 기준 89회 등장).
+     - 대상 문자: 유니코드 curly ‘…’ (U+2018/U+2019). ASCII '…' 는 측정 실험
+       결과 화타 원고에 0회, 오탐 위험(아포스트로피 don't, 영문 소유격 등)이
+       크므로 제외한다.
+     - 텍스트 노드 단위로만 변환. 마크가 섞인 인용(‘…<em>…</em>…’)은 보수적으로
+       건너뛴다 — 단일 텍스트 노드에 완전히 담긴 인용이 99% 케이스.
+     - 이미 <strong>/<b> 조상 아래에 있으면 스킵(중복 bold 무의미). */
+  const QUOTE_RE = /[\u2018\u2019\u201C\u201D]/; /* open/close 판별용 */
+  const QUOTE_PAIR_RE = /\u2018([^\u2018\u2019]{1,200})\u2019/g;
+  const hasBoldAncestor = (el) => {
+    for (let p = el && el.parentNode; p && p !== tmp; p = p.parentNode){
+      if (p.nodeType !== 1) continue;
+      const tg = p.tagName;
+      if (tg === 'STRONG' || tg === 'B') return true;
+    }
+    return false;
+  };
+  const walkTextNodesIn = (root, cb) => {
+    const stack = [root];
+    while (stack.length){
+      const cur = stack.pop();
+      const kids = Array.from(cur.childNodes);
+      for (const k of kids){
+        if (k.nodeType === 3) cb(k);
+        else if (k.nodeType === 1) stack.push(k);
+      }
+    }
+  };
+  const wrapQuotesInTextNode = (tn) => {
+    const s = tn.nodeValue || '';
+    if (!QUOTE_RE.test(s)) return;
+    if (hasBoldAncestor(tn)) return;
+    QUOTE_PAIR_RE.lastIndex = 0;
+    let m, cursor = 0, any = false;
+    const frag = document.createDocumentFragment();
+    while ((m = QUOTE_PAIR_RE.exec(s))){
+      any = true;
+      if (m.index > cursor){
+        frag.appendChild(document.createTextNode(s.slice(cursor, m.index)));
+      }
+      const strong = document.createElement('strong');
+      strong.textContent = m[0]; /* 따옴표 문자도 함께 굵게 */
+      frag.appendChild(strong);
+      cursor = m.index + m[0].length;
+    }
+    if (!any) return;
+    if (cursor < s.length){
+      frag.appendChild(document.createTextNode(s.slice(cursor)));
+    }
+    tn.parentNode && tn.parentNode.replaceChild(frag, tn);
+  };
+  /* 본문/헤딩 등 블록을 순회하며 텍스트 노드에 적용. fig 라벨('📷 이미지 첨부')만 제외. */
+  for (const blk of Array.from(tmp.children)){
+    const tg = (blk.tagName || '').toLowerCase();
+    if (!/^(p|h1|h2|h3|li|blockquote|div)$/.test(tg)) continue;
+    const tx = (blk.textContent || '').trim();
+    if (tx.startsWith('📷 이미지 첨부')) continue;
+    walkTextNodesIn(blk, wrapQuotesInTextNode);
+  }
+
   return tmp.innerHTML;
 }
 

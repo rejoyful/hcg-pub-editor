@@ -60,7 +60,15 @@ function loadIndexHelpers(){
   pieces.push(extractConstBlock(src, 'H1_PREFIX'));
   pieces.push(extractConstBlock(src, 'CLF_GRAY'));
   pieces.push(extractConstBlock(src, 'CLF_BLUE'));
+  pieces.push(extractConstBlock(src, 'TOC_ENTRY_TEXTS'));
+  pieces.push(extractConstBlock(src, 'BLOCK_CONTAINERS_FOR_TEXT'));
   pieces.push(extractBlock(src, /^function classifyByKeyword\(/m));
+  pieces.push(extractBlock(src, /^function extractPlainText\(/m));
+  pieces.push(extractBlock(src, /^function mergeMark\(/m));
+  pieces.push(extractBlock(src, /^function markAllInline\(/m));
+  pieces.push(extractBlock(src, /^function isEmptyPara\(/m));
+  pieces.push(extractBlock(src, /^function splitParagraphOnHardBreak\(/m));
+  pieces.push(extractBlock(src, /^function applyKeywordRules\(/m));
   pieces.push(extractBlock(src, /^function normalizePastedHtml\(/m));
   pieces.push(extractBlock(src, /^function applyKeywordRulesToHtml\(/m));
 
@@ -68,6 +76,7 @@ function loadIndexHelpers(){
     return {
       H1_EXACT, H1_PREFIX, CLF_GRAY, CLF_BLUE,
       classifyByKeyword, normalizePastedHtml, applyKeywordRulesToHtml,
+      applyKeywordRules,
     };
   `;
   // eslint-disable-next-line no-new-func
@@ -194,6 +203,47 @@ async function main(){
     bodyFigOverclass.length === 0,
     bodyFigOverclass.length ? `후보: ${bodyFigOverclass.slice(0,3).join(' / ')}` : '');
 
+  /* ── [커밋 3] 작은따옴표(‘…’) 자동 볼드 ── */
+  console.log('\n─── [커밋 3] 작은따옴표 ‘…’ 자동 볼드 ───');
+  const quoteCases = [
+    {
+      label: '단일 따옴표 구간',
+      html: '<p>저자가 ‘환자가 스승이다’라고 말했다.</p>',
+      contains: '<strong>‘환자가 스승이다’</strong>',
+    },
+    {
+      label: '같은 단락 내 여러 번',
+      html: '<p>‘죄를 지은 사람을 미워하지 말고 죄를 미워하라’ 와 ‘괜찮다’ 둘 다.</p>',
+      matches: 2,
+    },
+    {
+      label: '이미 <strong> 안쪽이면 중복 감싸지 않음',
+      html: '<p><strong>바깥 ‘안쪽’ 굵게</strong></p>',
+      notContains: '<strong>‘',
+    },
+    {
+      label: '헤딩 안 따옴표도 볼드 적용(시맨틱 유지)',
+      html: '<h3>‘환자가 스승이다’</h3>',
+      contains: '<strong>‘환자가 스승이다’</strong>',
+    },
+    {
+      label: 'ASCII 아포스트로피는 건드리지 않음',
+      html: "<p>don't touch this apostrophe</p>",
+      notContains: '<strong>',
+    },
+  ];
+  for (const c of quoteCases){
+    const out = helpers.applyKeywordRulesToHtml(c.html);
+    if (c.contains !== undefined){
+      check(`${c.label}`, out.includes(c.contains), `out=${out}`);
+    } else if (c.notContains !== undefined){
+      check(`${c.label}`, !out.includes(c.notContains), `out=${out}`);
+    } else if (c.matches !== undefined){
+      const n = (out.match(/<strong>‘[^<]*’<\/strong>/g) || []).length;
+      check(`${c.label}: ${c.matches}개`, n === c.matches, `out=${out}`);
+    }
+  }
+
   /* ── [이슈 1] &nbsp; / whitespace-only <p> 도 "빈 단락"으로 제거 ── */
   console.log('\n─── [이슈 1] &nbsp; / whitespace-only 빈 p 제거 ───');
   const nbspCases = [
@@ -209,6 +259,90 @@ async function main(){
     const dom = new JSDOM('<!doctype html><html><body><div>' + out + '</div></body></html>');
     const n = dom.window.document.querySelectorAll('p').length;
     check(`${c.label}: <p>${c.expect}개`, n === c.expect, `actual=${n}, html=${out}`);
+  }
+
+  /* ── [이슈 2] JSON 단계 멱등성 — HTML 단계가 이미 붙인 fig 라벨/callout 패딩이
+       JSON 단계에서 중복되지 않아야 함. 화타 실측에서 "목차 이후 이유 없는 빈 줄"
+       의 원인으로 지목된 버그. ── */
+  console.log('\n─── [이슈 2] applyKeywordRules JSON 단계 멱등성 ───');
+  const text = (s) => ({ type:'text', text:s });
+  const P = (inline) => ({ type:'paragraph', content: inline });
+  const emptyP = () => ({ type:'paragraph', content: [] });
+  const bold = { type:'bold' };
+  const highlightGray = { type:'highlight', attrs:{ color: helpers.CLF_GRAY }};
+  const italic = { type:'italic' };
+  const highlightBlue = { type:'highlight', attrs:{ color: helpers.CLF_BLUE }};
+  const figLabelInline = { type:'text', text:'📷 이미지 첨부', marks:[italic, highlightBlue] };
+
+  /* (a) fig 중복 라벨 방지 — HTML 단계가 만든 [emptyP, figLabel, body-bold] 가
+         JSON 단계에서 재처리될 때 label 이 두 번 찍히면 안 된다. */
+  {
+    const figBodyText = '그림 9. 혼동하기 쉬운 영지버섯과 붉은사슴뿔버섯';
+    const docIn = { type:'doc', content: [
+      emptyP(),
+      P([ figLabelInline ]),
+      P([{ type:'text', text: figBodyText, marks:[bold] }]),
+    ]};
+    const docOut = helpers.applyKeywordRules(docIn);
+    const labelCount = docOut.content.filter(n =>
+      n.type === 'paragraph' && Array.isArray(n.content) &&
+      n.content.some(c => c && c.type === 'text' && String(c.text || '').startsWith('📷 이미지 첨부'))
+    ).length;
+    check('fig 라벨이 중복되지 않음 (HTML→JSON 순차 처리 시 1회)',
+      labelCount === 1, `라벨 개수=${labelCount}, out=${JSON.stringify(docOut.content.map(n => n.type))}`);
+  }
+
+  /* (b) callout 하단 패딩 중복 방지 — HTML 단계가 이미 trailing emptyP 를 붙여뒀다면
+         JSON 단계에서 또 하나를 붙이면 안 된다. */
+  {
+    const docIn = { type:'doc', content: [
+      emptyP(), emptyP(),
+      P([{ type:'text', text:'· 블릿 소항', marks:[bold, highlightGray] }]),
+      emptyP(),
+      P([ text('다음 본문 단락') ]),
+    ]};
+    const docOut = helpers.applyKeywordRules(docIn);
+    /* callout 이후 연속 빈 단락 개수가 딱 1이어야 한다 */
+    const idx = docOut.content.findIndex(n =>
+      n.type === 'paragraph' && Array.isArray(n.content) &&
+      n.content.some(c => c && c.type === 'text' && String(c.text || '').startsWith('· 블릿'))
+    );
+    let trailingEmpties = 0;
+    for (let k = idx + 1; k < docOut.content.length; k++){
+      const nn = docOut.content[k];
+      const isEmpty = nn && nn.type === 'paragraph' && (!Array.isArray(nn.content) || nn.content.length === 0);
+      if (isEmpty) trailingEmpties++;
+      else break;
+    }
+    check('callout 하단 빈 단락이 중복되지 않음 (1개 유지)',
+      trailingEmpties === 1, `trailingEmpties=${trailingEmpties}`);
+  }
+
+  /* (c) callout 상단 패딩 중복 방지 — HTML 단계가 이미 [emptyP, emptyP, callout] 를 만들었으면
+         JSON 단계에서 추가 빈 단락을 넣지 않는다. */
+  {
+    const docIn = { type:'doc', content: [
+      P([ text('앞 본문') ]),
+      emptyP(), emptyP(),
+      P([{ type:'text', text:'· 블릿 소항', marks:[bold, highlightGray] }]),
+      emptyP(),
+    ]};
+    const docOut = helpers.applyKeywordRules(docIn);
+    /* callout 위치 찾기 */
+    const idx = docOut.content.findIndex(n =>
+      n.type === 'paragraph' && Array.isArray(n.content) &&
+      n.content.some(c => c && c.type === 'text' && String(c.text || '').startsWith('· 블릿'))
+    );
+    /* callout 앞 연속 빈 단락 개수 */
+    let leadingEmpties = 0;
+    for (let k = idx - 1; k >= 0; k--){
+      const nn = docOut.content[k];
+      const isEmpty = nn && nn.type === 'paragraph' && (!Array.isArray(nn.content) || nn.content.length === 0);
+      if (isEmpty) leadingEmpties++;
+      else break;
+    }
+    check('callout 상단 빈 단락이 중복되지 않음 (정확히 2개)',
+      leadingEmpties === 2, `leadingEmpties=${leadingEmpties}`);
   }
 
   /* ── [커밋 2] 파서 출력이 공통 규칙으로 통일되는지 ── */
