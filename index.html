@@ -1221,6 +1221,22 @@ ul.toc-list > li::before{
         </div>
       </div>
 
+      <h3 data-sec="preset"><span><i class="ph ph-bookmark-simple ic"></i><span class="title-text">스타일 프리셋</span></span></h3>
+      <div class="sec">
+        <div class="row">
+          <label>프리셋</label>
+          <select id="sel-style-preset">
+            <option value="Shinkook" selected>신국판 (기본)</option>
+          </select>
+          <button class="btn" id="btn-apply-preset" style="font-size:11.5px;margin-left:4px" title="선택한 프리셋의 값(용지·단·여백·도련·본문 조판·머리말/꼬리말)을 모두 적용합니다">
+            <i class="ph ph-check"></i> 적용
+          </button>
+        </div>
+        <div class="row" style="font-size:11px;color:var(--meta);line-height:1.5">
+          <span>용지·단·여백·도련·본문 조판·머리말/꼬리말을 한 번에 적용합니다.</span>
+        </div>
+      </div>
+
       <h3 data-sec="paper"><span><i class="ph ph-file ic"></i><span class="title-text">용지 · 여백</span></span></h3>
       <div class="sec">
         <div class="row">
@@ -2635,16 +2651,64 @@ function paginate(){
     }
   };
 
+  /* 본문 블록이 현재 페이지에 통째로 안 들어갈 때,
+     - 분할 가능하고(canSplitBlock)
+     - 현재 페이지의 남은 공간이 유의미하면(≥ MIN_SPLIT_REMAINING_PX)
+     블록을 남은 공간 기준으로 나눠 첫 조각을 현재 페이지, 나머지를 새 페이지로
+     이월한다. 페이지 하단에 불필요하게 비어 있는 "orphan" 공백을 없애는 것이
+     주 목적 (실측 사례: "이 책을 쓰게 되었다" 문단 다음에 페이지가 텅 비고
+     내용이 다음 쪽에서 이어지던 버그). 너무 작은 잔여공간(≤ 4줄) 은 1~2줄만
+     남는 widow 현상을 만들기 쉬우므로 분할하지 않고 통째로 이월한다.
+     columns 레이아웃에서는 clip 의 높이가 컬럼 흐름에 의해 결정되므로, 여기서
+     말하는 '남은 공간'은 pageCapH (전체 페이지 용량) - bucketHeight (이미
+     배치된 누적 높이) 로 근사한다. */
+  const MIN_SPLIT_REMAINING_PX = 80;
   for (const item of flattened){
     if (item.break){
       if (pages[pages.length - 1].length > 0) startNewPage();
       continue;
     }
+    const heightBefore = bucketHeight();
     const clone = appendToBucket(item);
     const h = bucketHeight();
     if (h > pageCapH && pages[pages.length - 1].length > 0){
-      /* 현재 페이지를 넘어선다 → 방금 넣은 블록을 빼고 새 페이지로 이월 */
+      /* 현재 페이지를 넘어선다. 먼저 롤백. */
       popLastFromBucket(clone);
+      const remainingSpace = pageCapH - heightBefore;
+      /* 시도: 남은 공간만큼만 앞조각을 잘라 현재 페이지에 채우고, 뒷조각들을
+         새 페이지(들)로 이월. splitTextBlockVariable 가 firstMaxH=remaining,
+         restMaxH=pageInnerH 로 가변 분할을 해 준다. */
+      let pieces = null;
+      if (canSplitBlock(item.el) && remainingSpace >= MIN_SPLIT_REMAINING_PX){
+        try {
+          pieces = splitTextBlockVariable(item.el, remainingSpace, pageInnerH);
+        } catch(e){ pieces = null; }
+        /* 분할 실패(원본 그대로 반환) 또는 단일조각이면 null 로 처리 */
+        if (!pieces || pieces.length < 2 || pieces[0] === item.el) pieces = null;
+      }
+      if (pieces){
+        /* 첫 조각 → 현재 페이지 (실제로 용량 내인지 한 번 더 검증) */
+        const headItem = { ...item, el: pieces[0] };
+        const headClone = appendToBucket(headItem);
+        if (bucketHeight() > pageCapH){
+          /* 측정오차 등으로 여전히 넘치면: 안전하게 통째 이월 (orphan 감수) */
+          popLastFromBucket(headClone);
+          startNewPage();
+          appendToBucket(item);
+          pages[pages.length - 1].push(item);
+          continue;
+        }
+        pages[pages.length - 1].push(headItem);
+        /* 나머지 조각을 새 페이지(들) 로 */
+        for (let pi = 1; pi < pieces.length; pi++){
+          startNewPage();
+          const tailItem = { ...item, el: pieces[pi] };
+          appendToBucket(tailItem);
+          pages[pages.length - 1].push(tailItem);
+        }
+        continue;
+      }
+      /* 분할 불가 → 통째 이월 */
       startNewPage();
       appendToBucket(item);
     }
@@ -3212,14 +3276,28 @@ function splitListBlock(el, maxH){
 /* Split a paragraph-like block into multiple <p>s whose heights each fit
    within `maxH`. Binary-halves text runs to land just under the limit. */
 function splitTextBlock(el, maxH){
+  return splitTextBlockVariable(el, maxH, maxH);
+}
+
+/* splitTextBlock 의 일반화 버전 — 첫 조각과 나머지 조각에 서로 다른 최대 높이를
+   적용할 수 있다. 목적: "orphan" 페이지 제거.
+   paginate() 의 루프가 현재 페이지의 남은 공간(remaining) 을 알고 있을 때,
+   첫 조각을 remaining 에 맞추고 이어지는 조각들은 pageInnerH 까지 채워
+   페이지 하단 공백을 없앤다.
+   firstMaxH === restMaxH 면 기존 splitTextBlock 과 동일 동작. */
+function splitTextBlockVariable(el, firstMaxH, restMaxH){
   if (el.tagName === 'UL' || el.tagName === 'OL'){
-    return splitListBlock(el, maxH);
+    /* 리스트는 per-item 분할이라 가변 높이 지원이 어렵다 — restMaxH 로 폴백
+       (첫 페이지의 잔여공간이 한 개 li 크기보다 작으면 어차피 분할해도
+       시각적 이득 없음). */
+    return splitListBlock(el, restMaxH);
   }
   const text = el.textContent;
   if (!text || text.length < 20) return [el];
   const words = text.split(/(\s+)/);   /* keep whitespace */
   const pieces = [];
   let buf = '';
+  let currentMax = firstMaxH;
   const m = getMeasurer();
 
   function flushBuf(){
@@ -3228,6 +3306,8 @@ function splitTextBlock(el, maxH){
     p.textContent = buf;
     pieces.push(p);
     buf = '';
+    /* 한 조각을 확정한 다음부터는 제한을 restMaxH 로 전환 */
+    currentMax = restMaxH;
   }
 
   for (const w of words){
@@ -3238,7 +3318,7 @@ function splitTextBlock(el, maxH){
     m.appendChild(p);
     const h = p.getBoundingClientRect().height;
     m.innerHTML = '';
-    if (h > maxH && buf){
+    if (h > currentMax && buf){
       flushBuf();
       buf = w.trimStart();
     } else {
@@ -3917,6 +3997,102 @@ window.addEventListener('resize', ()=>{
   $(sel).addEventListener('change', applyHeaderFooter);
 });
 applyHeaderFooter();
+
+/* ============================================================
+   스타일 프리셋 — 사이드바의 모든 조판 관련 입력을 한 번에 복원한다.
+   각 프리셋은 용지(종류)·단·여백·도련·재단선/가이드·본문 조판
+   (서체·굵기·크기·행간·자간·단락 간격·들여쓰기)·머리말/꼬리말·시작쪽수를 모두 포함.
+   ============================================================ */
+const STYLE_PRESETS = {
+  /* 신국판: 현재까지의 기본값을 그대로 번들 — 152×225mm, 1단, 20mm 여백,
+     도련 3mm(재단선·가이드 ON), Noto Serif 10pt / 1.75 / 자간 0 /
+     단락 간격 0 / 들여쓰기 0, 머리말 바깥쪽, 쪽번호 가운데, 시작쪽수 1. */
+  Shinkook: {
+    label: '신국판',
+    paper: 'Shinkook',
+    columns: '1',
+    margins: { top: 20, right: 20, bottom: 20, left: 20 },
+    bleed: 3,
+    cropMarks: true,
+    bleedGuide: true,
+    fontFamily: '"Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif',
+    fontWeight: '400',
+    fontSize: 10,
+    leading: 1.75,
+    tracking: 0,
+    paraGap: 0,
+    indent: 0,
+    headPos: 'outer',
+    footPos: 'center',
+    startPage: 1,
+  },
+};
+
+function applyStylePreset(name){
+  const p = STYLE_PRESETS[name];
+  if (!p){ toast(`알 수 없는 프리셋: ${name}`, 'err'); return; }
+
+  /* 용지 */
+  const selPaper = $('#sel-paper');
+  if (selPaper){ selPaper.value = p.paper; applyPaper(p.paper); }
+
+  /* 단 */
+  const segCols = document.getElementById('seg-columns');
+  if (segCols){
+    $$('#seg-columns button').forEach(x=>x.classList.toggle('active', x.dataset.val === String(p.columns)));
+    root.style.setProperty('--columns', String(p.columns));
+  }
+
+  /* 여백 */
+  const mt = $('#m-top'), mr = $('#m-right'), mb = $('#m-bot'), ml = $('#m-left');
+  if (mt) mt.value = p.margins.top;
+  if (mr) mr.value = p.margins.right;
+  if (mb) mb.value = p.margins.bottom;
+  if (ml) ml.value = p.margins.left;
+  applyMargins();
+
+  /* 도련 · 재단선 · 도련 가이드 */
+  const inBleed = $('#in-bleed'); if (inBleed) inBleed.value = p.bleed;
+  applyBleed();
+  const ckCrop = $('#chk-crop-marks'); if (ckCrop) ckCrop.checked = !!p.cropMarks;
+  applyCropMarksToggle();
+  const ckBleed = $('#chk-bleed-guide'); if (ckBleed) ckBleed.checked = !!p.bleedGuide;
+  applyBleedGuideToggle();
+
+  /* 본문 조판 */
+  const selFont = $('#sel-font');
+  if (selFont){ selFont.value = p.fontFamily; root.style.setProperty('--body-family', p.fontFamily); }
+  const selW = document.getElementById('sel-font-weight');
+  if (selW){ selW.value = String(p.fontWeight); root.style.setProperty('--body-weight', String(p.fontWeight)); }
+  const inSize = $('#in-size');
+  if (inSize){ inSize.value = p.fontSize; root.style.setProperty('--body-size', `${p.fontSize}pt`); }
+  const inLead = $('#in-lead');
+  if (inLead){ inLead.value = p.leading; root.style.setProperty('--body-leading', String(p.leading)); }
+  const inTr = document.getElementById('in-tracking');
+  if (inTr){ inTr.value = p.tracking; root.style.setProperty('--body-tracking', `${(parseFloat(p.tracking)||0) / 1000}em`); }
+  const inPg = document.getElementById('in-para-gap');
+  if (inPg){ inPg.value = p.paraGap; root.style.setProperty('--body-para-gap', `${parseFloat(p.paraGap)||0}pt`); }
+  const inInd = document.getElementById('in-indent');
+  if (inInd){ inInd.value = p.indent; root.style.setProperty('--body-indent', `${parseFloat(p.indent)||0}pt`); }
+
+  /* 머리말 · 쪽번호 · 시작쪽수 */
+  const selHead = $('#sel-head-pos'); if (selHead) selHead.value = p.headPos;
+  const selFoot = $('#sel-foot-pos'); if (selFoot) selFoot.value = p.footPos;
+  const inStart = $('#in-start-page'); if (inStart) inStart.value = p.startPage;
+  applyHeaderFooter();
+
+  scheduleReflow();
+  toast(`${p.label || name} 프리셋 적용 완료`, 'ok');
+}
+
+const _btnApplyPreset = document.getElementById('btn-apply-preset');
+if (_btnApplyPreset){
+  _btnApplyPreset.addEventListener('click', ()=>{
+    const sel = document.getElementById('sel-style-preset');
+    const name = sel ? sel.value : 'Shinkook';
+    applyStylePreset(name);
+  });
+}
 
 /* ============================================================
    File upload / drag-drop
