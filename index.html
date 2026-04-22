@@ -2225,6 +2225,8 @@ const editor = window.editor = new Editor({
       /* 붙여넣을 때 HTML 정규화 + 블록별 자동 분류를 HTML 문자열 단계에서 적용.
          업로드/샘플 경로와 동일한 preprocessHtml을 공유한다.
          transformPastedHTML 훅 규약상 여기는 HTML 문자열만 반환 — setContent은 호출하지 않음. */
+      // [진단용 · 임시] clipboard가 실제로 어떤 HTML 구조로 오는지 관찰. 확인 후 제거.
+      console.debug('[paste] raw html:', html);
       return preprocessHtml(html, 'paste');
     }
   },
