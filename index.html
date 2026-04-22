@@ -15,8 +15,10 @@
   --bg:#F5F5F2;
   --panel:#FFFFFF;
   --ink:#1A1A1A;
-  --mute:#6A6A68;
-  --meta:#8A8A86;
+  /* secondary text — darkened 2026-04 to meet WCAG AA at small sizes
+     mute(5A5A58) ≈ 7.0:1  ·  meta(6F6F6C) ≈ 4.8:1 on white */
+  --mute:#5A5A58;
+  --meta:#6F6F6C;
   --line:#E6E4DE;
   --soft:#F0EEE7;
   --accent:#2E6B52;
@@ -78,6 +80,12 @@
 html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--ui-family);font-size:14px;-webkit-text-size-adjust:100%}
 button{font-family:inherit}
 input,select{font-family:inherit;font-size:13px}
+
+/* Accessibility — keyboard focus ring.
+   Suppressed on mouse focus (:focus-visible) so visual weight stays light
+   for pointer users but keyboard users always see where focus is. */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+button:focus-visible,.btn:focus-visible{outline-offset:2px}
 
 /* ============================================================
    App layout
@@ -145,17 +153,28 @@ input,select{font-family:inherit;font-size:13px}
   box-sizing:border-box;
 }
 .side h3{
-  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
+  font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
   color:var(--mute);margin:18px 0 8px;
 }
 .side h3:first-child{margin-top:0}
 .side .row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.side label{font-size:12px;color:var(--ink);min-width:78px;flex-shrink:0}
+/* Main row label: fixed column so longer Korean labels (e.g. "안·바깥(mm)",
+   "시작쪽수") render in full. 90px covers up to ~6 Korean chars at 12px.
+   Scoped to first-child + no inline style so suffix labels (pt/mm/‰) and
+   inline-flex checkbox labels keep their own sizing. */
+.side label{font-size:12.5px;color:var(--ink)}
+.side .row > label:first-child:not([style]){
+  flex:0 0 90px;min-width:90px;
+  white-space:nowrap;overflow:visible;
+}
+/* Inputs/selects: flex-grow, but allow shrinking under 100% basis so
+   two-input rows (e.g. 상·하 · 좌·우 · 안·바깥) don't overflow and clip. */
 .side input[type=text],
 .side input[type=number],
 .side select{
   padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:#fff;
-  width:100%;font-size:12px;color:var(--ink);
+  flex:1 1 0;min-width:0;width:100%;box-sizing:border-box;
+  font-size:12px;color:var(--ink);
 }
 .side input:focus,.side select:focus{outline:none;border-color:var(--accent)}
 .side .seg{display:flex;gap:0;border:1px solid var(--line);border-radius:4px;overflow:hidden;width:100%}
@@ -855,6 +874,16 @@ body.show-printer-marks .page-marks{ display:block; }
 .page-content td,.page-content th{border:1px solid var(--ink);padding:4pt 6pt;vertical-align:top;min-width:40pt;font-size:inherit}
 .page-content th{background:var(--soft);font-weight:700;text-align:center}
 
+/* 분리창(Float)의 캐럿/셀렉션과 연동되는 프리뷰 하이라이트.
+   fade in/out 으로 부드럽게 깜빡이게 해서 사용자의 시선을 유도.
+   2.4초 후 __hcgSyncPreviewFromFloat 가 클래스를 제거한다. */
+.page-content .float-sel{
+  background: linear-gradient(180deg, rgba(255,243,176,.45), rgba(255,243,176,.25));
+  box-shadow: inset 0 0 0 1px rgba(139,110,62,.35);
+  border-radius: 3px;
+  transition: background .25s ease, box-shadow .25s ease;
+}
+
 /* Hidden measurement container — used by the pagination engine to measure
    each block's height at column-width BEFORE placing it on a page. */
 .measurer-host{
@@ -1320,7 +1349,9 @@ ul.toc-list > li::before{
         </div>
       </div>
     </div>
-    <button class="btn" id="btn-classify-report" title="3영역·페이지 유형 분류 리포트"><i class="ph ph-list-magnifying-glass"></i> 구조 진단</button>
+    <button class="btn" id="btn-proof-check" title="교정·교열 — 띄어쓰기 · 문장부호 · 반복 단어 · 따옴표 일관성을 검사하고 사용자가 건건이 적용 여부를 결정합니다"><i class="ph ph-pen-nib"></i> 윤문검수</button>
+    <button class="btn" id="btn-med-check" title="의학용어 검수 — 본문에서 의학용어 후보를 찾아 KMLE 의학검색엔진 링크를 제공합니다. 판·개정 표기 역시 별도로 검사합니다."><i class="ph ph-first-aid-kit"></i> 의학용어</button>
+    <button class="btn" id="btn-classify-report" title="3영역·페이지 유형 분류 리포트 (개발용)"><i class="ph ph-list-magnifying-glass"></i> 페이지 진단</button>
     <div class="menu-wrap">
       <button class="btn primary" id="btn-export"><i class="ph ph-export"></i> 내보내기 <i class="ph ph-caret-down"></i></button>
       <div class="menu" id="menu-export">
@@ -1349,7 +1380,6 @@ ul.toc-list > li::before{
           </div>
         </div>
         <input type="file" id="file-input" accept=".hwpx,.hwp,.docx,.pptx,.pdf,.html,.htm,.md,.markdown,.txt,.idml,.indd,.xml,.zip" style="display:none" multiple>
-        <button class="btn" style="width:100%;margin-top:4px" id="btn-sample">샘플 원고 불러오기</button>
         <div class="pipeline" id="pipeline" style="display:none">
           <div class="step" data-step="unpack"><span class="ic">①</span><span>포맷 인식</span></div>
           <div class="step" data-step="parse"><span class="ic">②</span><span>문서 파싱</span></div>
@@ -1819,7 +1849,128 @@ ul.toc-list > li::before{
 .classify-summary .kv{background:#F5F5F2;border:1px solid var(--line);border-radius:4px;
   padding:6px 10px;display:flex;gap:6px;align-items:baseline}
 .classify-summary .kv b{font-size:13.5px;color:#222}
+
+/* 윤문검수(Proofreading) · 의학용어 모달 공통 스타일 */
+.proof-table{width:100%;border-collapse:collapse;font-size:12px}
+.proof-table thead th{position:sticky;top:0;background:#F5F5F2;z-index:1;
+  padding:8px;text-align:left;border-bottom:1px solid var(--line);font-weight:600;font-size:11px;
+  color:var(--mute);text-transform:uppercase;letter-spacing:.4px}
+.proof-table tbody tr{border-bottom:1px solid #EEE;vertical-align:top}
+.proof-table tbody tr:hover{background:#FAFAF6}
+.proof-table tbody tr.applied{background:#E8F1EC;opacity:.7}
+.proof-table tbody tr.rejected{background:#FAF4F4;opacity:.55}
+.proof-table td{padding:8px;line-height:1.5}
+.proof-rule{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10.5px;
+  font-weight:600;background:#EFECE3;color:#554E3A;letter-spacing:.2px}
+.proof-rule.spacing{background:#E2F0DB;color:#2A5E2A}
+.proof-rule.punct{background:#DDE7F5;color:#1F4E79}
+.proof-rule.repeat{background:#F3DFEA;color:#6D2A5A}
+.proof-rule.quote{background:#F4F2E8;color:#6A4A0A}
+.proof-rule.ellipsis{background:#EFE4F0;color:#5A2A6D}
+.proof-rule.med{background:#FBE8E2;color:#8B3A1A}
+.proof-ctx{font-family:"JetBrains Mono","Menlo",monospace;font-size:11px;line-height:1.6;
+  white-space:pre-wrap;word-break:break-all;color:#333;max-width:380px}
+.proof-ctx .orig{background:#FBE4E4;color:#8B1A1A;padding:0 2px;border-radius:2px;text-decoration:line-through}
+.proof-ctx .sugg{background:#D7EFD7;color:#1E5A1E;padding:0 2px;border-radius:2px;margin-left:4px;font-weight:600}
+.proof-row-actions{display:flex;gap:4px;white-space:nowrap}
+.proof-row-actions button{padding:3px 8px;font-size:11px;border-radius:3px;border:1px solid var(--line);
+  background:#fff;cursor:pointer;color:var(--ink)}
+.proof-row-actions button.accept{background:var(--accent);color:#fff;border-color:var(--accent)}
+.proof-row-actions button.accept:hover{background:#245944}
+.proof-row-actions button.reject:hover{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
+.proof-row-actions button:disabled{opacity:.5;cursor:not-allowed}
+.proof-tabs{display:flex;gap:6px;margin:0 0 10px;flex-wrap:wrap}
+.proof-tab{padding:5px 12px;font-size:11.5px;border:1px solid var(--line);background:#fff;
+  border-radius:4px;cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;gap:4px}
+.proof-tab:hover{background:var(--soft)}
+.proof-tab.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+.proof-tab .cnt{font-size:10.5px;color:inherit;opacity:.75;font-weight:600}
+.proof-summary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px;font-size:11.5px}
+.proof-summary .kv{background:#F5F5F2;border:1px solid var(--line);border-radius:4px;
+  padding:6px 10px;display:flex;gap:6px;align-items:baseline}
+.proof-summary .kv b{font-size:13.5px;color:#222}
+.proof-empty{padding:40px 20px;text-align:center;color:var(--meta);font-size:13px;line-height:1.6}
+.proof-empty .ph{font-size:32px;color:var(--ok);display:block;margin-bottom:8px}
+.med-link{color:var(--accent);text-decoration:none;font-size:11px;white-space:nowrap}
+.med-link:hover{text-decoration:underline}
+.med-link .ph{font-size:11px;margin-left:2px}
 </style>
+
+<!-- 윤문검수(교정·교열) 모달 — 띄어쓰기/문장부호/반복어/따옴표 검사 + 건별 적용 -->
+<div class="modal" id="proof-modal">
+  <div class="card" style="max-width:1080px;width:96vw">
+    <h4><i class="ph ph-pen-nib"></i> 윤문검수 · 교정·교열</h4>
+    <p style="font-size:12px;color:var(--mute);margin:4px 0 12px;line-height:1.55">
+      띄어쓰기 · 문장부호 · 반복 단어 · 따옴표 혼용 · 줄임표 · 대시 등을 규칙 기반으로 찾습니다.
+      <b>각 건별로 "적용" 또는 "무시"를 직접 선택</b>하며, 본문은 승인된 항목만 변경됩니다.
+    </p>
+    <div class="proof-summary" id="proof-summary"></div>
+    <div class="proof-tabs" id="proof-tabs">
+      <button class="proof-tab active" data-filter="all">전체 <span class="cnt" id="proof-cnt-all">0</span></button>
+      <button class="proof-tab" data-filter="spacing">띄어쓰기 <span class="cnt" id="proof-cnt-spacing">0</span></button>
+      <button class="proof-tab" data-filter="punct">문장부호 <span class="cnt" id="proof-cnt-punct">0</span></button>
+      <button class="proof-tab" data-filter="repeat">반복어 <span class="cnt" id="proof-cnt-repeat">0</span></button>
+      <button class="proof-tab" data-filter="quote">따옴표 <span class="cnt" id="proof-cnt-quote">0</span></button>
+      <button class="proof-tab" data-filter="ellipsis">줄임표/대시 <span class="cnt" id="proof-cnt-ellipsis">0</span></button>
+    </div>
+    <div style="max-height:52vh;overflow:auto;border:1px solid var(--line);border-radius:4px">
+      <table class="proof-table">
+        <thead><tr>
+          <th style="width:34px">#</th>
+          <th style="width:90px">유형</th>
+          <th>문맥 · 수정 제안</th>
+          <th style="width:120px;text-align:center">적용</th>
+        </tr></thead>
+        <tbody id="proof-tbody"></tbody>
+      </table>
+    </div>
+    <div class="foot" style="margin-top:12px">
+      <button class="btn" id="proof-rescan" type="button"><i class="ph ph-arrows-clockwise"></i> 다시 검사</button>
+      <button class="btn" id="proof-accept-all" type="button"><i class="ph ph-check-circle"></i> 표시된 항목 일괄 적용</button>
+      <div style="flex:1"></div>
+      <button class="btn primary" id="proof-close">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 의학용어 검수 모달 — 본문에서 의학용어 후보 탐지 + KMLE 링크 + 판/개정 표기 점검 -->
+<div class="modal" id="med-modal">
+  <div class="card" style="max-width:1080px;width:96vw">
+    <h4><i class="ph ph-first-aid-kit"></i> 의학용어 검수</h4>
+    <p style="font-size:12px;color:var(--mute);margin:4px 0 12px;line-height:1.55">
+      본문에서 <b>의학용어 후보</b>(라틴·영문 용어, 약어, 도량형 등)를 탐지하고
+      <a href="https://www.kmle.co.kr/" target="_blank" rel="noopener" style="color:var(--accent)">KMLE 의학검색엔진</a>
+      링크를 제공합니다. "판·쇄·개정" 표기도 별도로 검증합니다.
+      표시된 항목은 사용자가 직접 적용 여부를 결정합니다.
+    </p>
+    <div class="proof-summary" id="med-summary"></div>
+    <div class="proof-tabs" id="med-tabs">
+      <button class="proof-tab active" data-filter="all">전체 <span class="cnt" id="med-cnt-all">0</span></button>
+      <button class="proof-tab" data-filter="term">의학용어 <span class="cnt" id="med-cnt-term">0</span></button>
+      <button class="proof-tab" data-filter="abbr">약어 <span class="cnt" id="med-cnt-abbr">0</span></button>
+      <button class="proof-tab" data-filter="edition">판·쇄·개정 <span class="cnt" id="med-cnt-edition">0</span></button>
+      <button class="proof-tab" data-filter="unit">단위 <span class="cnt" id="med-cnt-unit">0</span></button>
+    </div>
+    <div style="max-height:52vh;overflow:auto;border:1px solid var(--line);border-radius:4px">
+      <table class="proof-table">
+        <thead><tr>
+          <th style="width:34px">#</th>
+          <th style="width:80px">유형</th>
+          <th>검출 용어 / 문맥</th>
+          <th style="width:100px">KMLE</th>
+          <th style="width:140px;text-align:center">편집</th>
+        </tr></thead>
+        <tbody id="med-tbody"></tbody>
+      </table>
+    </div>
+    <div class="foot" style="margin-top:12px">
+      <button class="btn" id="med-rescan" type="button"><i class="ph ph-arrows-clockwise"></i> 다시 검사</button>
+      <div style="flex:1"></div>
+      <button class="btn primary" id="med-close">닫기</button>
+    </div>
+  </div>
+</div>
+
 
 <script type="module">
 /* ============================================================
@@ -1934,21 +2085,6 @@ async function loadDocxWriter(){
   _docxLib = m.default || m;
   return _docxLib;
 }
-
-/* ============================================================
-   Sample HWPX XML
-   ============================================================ */
-const SAMPLE_HWPX_XML = `<?xml version="1.0" encoding="UTF-8"?>
-<hp:sec xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
-  <hp:p><hp:run><hp:t>디지털 출판 자동화</hp:t></hp:run></hp:p>
-  <hp:p><hp:run><hp:t>학지사 조판팀의 새로운 시작입니다. 기존 InDesign 수작업을 걷어내고, 원고 파일 하나만 올리면 책 한 권 분량의 조판을 자동으로 완성합니다.</hp:t></hp:run></hp:p>
-  <hp:p><hp:run><hp:t>1. 파이프라인 개요</hp:t></hp:run></hp:p>
-  <hp:p><hp:run><hp:t>HWPX, DOCX, PPTX, HTML, Markdown, 텍스트, IDML 어떤 포맷이든 업로드하면 5단계 자동 처리 후 편집 가능한 상태로 에디터에 올라옵니다.</hp:t></hp:run></hp:p>
-  <hp:p><hp:run><hp:t>2. 이미지 자동 배치</hp:t></hp:run></hp:p>
-  <hp:p><hp:run><hp:t>원고에 포함된 이미지는 문맥을 분석해 가운데/왼쪽/오른쪽 배치를 자동 결정합니다. 편집 중에도 이미지 클릭으로 배치를 바꿀 수 있습니다.</hp:t></hp:run></hp:p>
-  <hp:p><hp:run><hp:t>3. WYSIWYG 조판</hp:t></hp:run></hp:p>
-  <hp:p><hp:run><hp:t>에디터 영역이 곧 실제 인쇄물입니다. 별도의 프리뷰 없이, 지금 보이는 그대로 PDF로 출력됩니다.</hp:t></hp:run></hp:p>
-</hp:sec>`;
 
 /* ============================================================
    Parsers
@@ -3426,6 +3562,457 @@ function renderClassificationReport(){
   }
 })();
 
+/* ============================================================
+   윤문검수(교정·교열) — 규칙 기반 스캔 + 건별 적용 (2026-04-22)
+   ------------------------------------------------------------
+   본문(#editor .ProseMirror)의 최상위 블록 단위로 텍스트를 뽑아
+   정규식 규칙을 돌린다. 각 findings 는 블록 인덱스 + 원본/제안 문자열을
+   갖고, 사용자는 모달에서 건별 "적용" 또는 "무시"를 선택한다.
+   변경은 DOM 편집 → editor.setContent(pm.innerHTML) 로 되돌린다.
+   ============================================================ */
+
+const PROOF_RULES = [
+  { id:'multi-space', cat:'spacing', label:'중복 공백',
+    scan: (t) => [...t.matchAll(/ {2,}/g)].map(m => ({
+      orig:m[0], sugg:' ', reason:`공백 ${m[0].length}개 → 1개`
+    })) },
+  { id:'space-before-punct', cat:'spacing', label:'부호 앞 공백',
+    scan: (t) => [...t.matchAll(/ +([,.!?;:])/g)].map(m => ({
+      orig:m[0], sugg:m[1], reason:`"${m[1]}" 앞 공백 제거`
+    })) },
+  { id:'space-after-punct', cat:'spacing', label:'부호 뒤 공백 누락',
+    scan: (t) => [...t.matchAll(/([.!?])([가-힣A-Za-z0-9])/g)].map(m => ({
+      orig:m[0], sugg:m[1] + ' ' + m[2], reason:`"${m[1]}" 뒤 공백 삽입`
+    })) },
+  { id:'ellipsis', cat:'ellipsis', label:'줄임표',
+    scan: (t) => [...t.matchAll(/\.{3,}/g)].map(m => ({
+      orig:m[0], sugg:'…', reason:`"${m[0]}" → "…"(U+2026)`
+    })) },
+  { id:'double-dash', cat:'ellipsis', label:'대시',
+    scan: (t) => [...t.matchAll(/--+/g)].map(m => ({
+      orig:m[0], sugg:'—', reason:`"${m[0]}" → "—"(em-dash)`
+    })) },
+  { id:'repeated-word', cat:'repeat', label:'반복 단어',
+    scan: (t) => {
+      const out = [];
+      /* 한글/영문 2자 이상 어절이 공백 하나 사이로 연속 반복. 조사·숫자 제외. */
+      const rx = /([가-힣]{2,}|[A-Za-z]{2,})\s+\1(?=[\s.,!?;:)\]】」』》〉]|$)/g;
+      for (const m of t.matchAll(rx)) out.push({
+        orig:m[0], sugg:m[1], reason:`"${m[1]}" 중복`
+      });
+      return out;
+    } },
+  { id:'multi-bang', cat:'punct', label:'느낌표·물음표 중복',
+    scan: (t) => [...t.matchAll(/[!?]{2,}/g)].map(m => ({
+      orig:m[0], sugg:m[0][0], reason:`"${m[0]}" → "${m[0][0]}"`
+    })) },
+  { id:'straight-quote', cat:'quote', label:'직선 따옴표',
+    scan: (t) => {
+      /* 큰따옴표 쌍 감지: 섞여 있는 "..." → "..."(곡선). 한 줄 안에서만. */
+      const out = [];
+      for (const m of t.matchAll(/"([^"\n]{1,80})"/g)){
+        out.push({
+          orig:m[0], sugg:'\u201C' + m[1] + '\u201D',
+          reason:`직선 → 곡선 따옴표`
+        });
+      }
+      return out;
+    } },
+];
+
+function scanProofIssues(){
+  const pm = document.querySelector('#editor .ProseMirror');
+  if (!pm) return [];
+  const blocks = Array.from(pm.children);
+  const findings = [];
+  blocks.forEach((block, bIdx) => {
+    const text = block.textContent || '';
+    if (!text.trim()) return;
+    for (const rule of PROOF_RULES){
+      const hits = rule.scan(text);
+      for (const h of hits){
+        findings.push({
+          ...h,
+          blockIdx: bIdx,
+          ruleId: rule.id,
+          cat: rule.cat,
+          label: rule.label,
+          /* 문맥: 원문 주변 ±30자 */
+          ctxText: text,
+          state: 'pending',
+        });
+      }
+    }
+  });
+  return findings;
+}
+
+function buildCtxHtml(ctxText, orig, sugg){
+  const i = ctxText.indexOf(orig);
+  if (i < 0) return `<span class="orig">${escapeHtml(orig)}</span><span class="sugg">${escapeHtml(sugg)}</span>`;
+  const pre = ctxText.slice(Math.max(0, i-30), i);
+  const post = ctxText.slice(i + orig.length, i + orig.length + 30);
+  return `${escapeHtml(pre)}<span class="orig">${escapeHtml(orig)}</span><span class="sugg">${escapeHtml(sugg)}</span>${escapeHtml(post)}`;
+}
+
+/* 한 건 적용: 해당 블록의 text node 에서 orig 의 첫 발생을 sugg 로 교체.
+   DOM 을 직접 바꾼 뒤 ProseMirror 에 setContent 으로 되돌려 상태를 맞춘다.
+   (되돌리기(undo) 는 하나의 세션으로 묶이지 않는 제약이 있지만, 본문 전체
+   저장 스냅샷·아카이브가 별도로 남으므로 안전성은 확보된다.) */
+function applyProofFindingDOM(finding){
+  const pm = document.querySelector('#editor .ProseMirror');
+  if (!pm) return false;
+  const block = pm.children[finding.blockIdx];
+  if (!block) return false;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())){
+    const i = node.data.indexOf(finding.orig);
+    if (i >= 0){
+      node.data = node.data.slice(0, i) + finding.sugg + node.data.slice(i + finding.orig.length);
+      return true;
+    }
+  }
+  /* 폴백: 원문이 텍스트 노드 경계에 걸쳐 있는 경우 — 블록 전체 textContent 에서
+     첫 발생을 교체하고 textContent 로 재설정. 인라인 포맷은 손실될 수 있음. */
+  const full = block.textContent || '';
+  const idx = full.indexOf(finding.orig);
+  if (idx < 0) return false;
+  const replaced = full.slice(0, idx) + finding.sugg + full.slice(idx + finding.orig.length);
+  block.textContent = replaced;
+  return true;
+}
+
+let _proofFindings = [];
+let _proofFilter = 'all';
+
+function renderProofFindings(){
+  const tbody = document.getElementById('proof-tbody');
+  const summary = document.getElementById('proof-summary');
+  if (!tbody || !summary) return;
+  /* 필터 적용 */
+  const filtered = _proofFindings.filter(f => _proofFilter === 'all' || f.cat === _proofFilter);
+  /* 카테고리별 카운트 */
+  const cats = { spacing:0, punct:0, repeat:0, quote:0, ellipsis:0 };
+  _proofFindings.forEach(f => { if (cats[f.cat] !== undefined) cats[f.cat]++; });
+  for (const [c, n] of Object.entries(cats)){
+    const el = document.getElementById('proof-cnt-' + c);
+    if (el) el.textContent = String(n);
+  }
+  const allEl = document.getElementById('proof-cnt-all');
+  if (allEl) allEl.textContent = String(_proofFindings.length);
+  /* 요약 */
+  const pending = _proofFindings.filter(f => f.state === 'pending').length;
+  const applied = _proofFindings.filter(f => f.state === 'applied').length;
+  const rejected = _proofFindings.filter(f => f.state === 'rejected').length;
+  summary.innerHTML = `
+    <div class="kv"><b>${_proofFindings.length}</b> <span>전체</span></div>
+    <div class="kv"><b>${pending}</b> <span>대기</span></div>
+    <div class="kv" style="color:#1E5A1E"><b>${applied}</b> <span>적용됨</span></div>
+    <div class="kv" style="color:#8B1A1A"><b>${rejected}</b> <span>무시</span></div>`;
+  /* 테이블 */
+  if (!filtered.length){
+    tbody.innerHTML = `<tr><td colspan="4" class="proof-empty">
+      <i class="ph ph-check-circle"></i>
+      해당 유형의 검사 결과가 없습니다.
+    </td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map((f) => {
+    const realIdx = _proofFindings.indexOf(f);
+    const disabled = f.state !== 'pending';
+    return `<tr class="${f.state === 'applied' ? 'applied' : f.state === 'rejected' ? 'rejected' : ''}">
+      <td>${realIdx + 1}</td>
+      <td><span class="proof-rule ${f.cat}">${escapeHtml(f.label)}</span>
+        <div style="font-size:10px;color:var(--meta);margin-top:3px">블록 #${f.blockIdx + 1}</div></td>
+      <td>
+        <div class="proof-ctx">${buildCtxHtml(f.ctxText, f.orig, f.sugg)}</div>
+        <div style="font-size:10.5px;color:var(--mute);margin-top:4px">${escapeHtml(f.reason || '')}</div>
+      </td>
+      <td>
+        <div class="proof-row-actions" style="justify-content:center">
+          <button class="accept" data-idx="${realIdx}" data-action="accept" ${disabled ? 'disabled' : ''}>적용</button>
+          <button class="reject" data-idx="${realIdx}" data-action="reject" ${disabled ? 'disabled' : ''}>무시</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openProofModal(){
+  try {
+    _proofFindings = scanProofIssues();
+    _proofFilter = 'all';
+    document.querySelectorAll('#proof-tabs .proof-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.filter === 'all');
+    });
+    renderProofFindings();
+    document.getElementById('proof-modal')?.classList.add('show');
+  } catch(e){
+    console.error('openProofModal:', e);
+    toast('윤문검수 실행 실패: ' + (e.message || e), 'err');
+  }
+}
+
+(function bindProofUI(){
+  const modal = document.getElementById('proof-modal');
+  const openBtn = document.getElementById('btn-proof-check');
+  const closeBtn = document.getElementById('proof-close');
+  const rescanBtn = document.getElementById('proof-rescan');
+  const acceptAllBtn = document.getElementById('proof-accept-all');
+  const tabs = document.getElementById('proof-tabs');
+  const tbody = document.getElementById('proof-tbody');
+  if (openBtn) openBtn.addEventListener('click', openProofModal);
+  if (closeBtn) closeBtn.addEventListener('click', () => modal?.classList.remove('show'));
+  if (modal) modal.addEventListener('click', e => {
+    if (e.target === modal) modal.classList.remove('show');
+  });
+  if (rescanBtn) rescanBtn.addEventListener('click', () => {
+    _proofFindings = scanProofIssues();
+    renderProofFindings();
+    toast('재검사 완료', 'ok');
+  });
+  if (acceptAllBtn) acceptAllBtn.addEventListener('click', () => {
+    const pending = _proofFindings.filter(f => f.state === 'pending' && (_proofFilter === 'all' || f.cat === _proofFilter));
+    if (!pending.length){ toast('적용할 항목이 없습니다', 'info'); return; }
+    let ok = 0;
+    /* 블록 단위로 묶어 끝에서부터 적용 — 같은 블록 내 여러 건이면 뒤→앞으로 */
+    pending.sort((a,b) => (a.blockIdx - b.blockIdx)).reverse();
+    for (const f of pending){
+      if (applyProofFindingDOM(f)){ f.state = 'applied'; ok++; }
+      else { f.state = 'rejected'; }
+    }
+    const pm = document.querySelector('#editor .ProseMirror');
+    if (pm && editor) editor.commands.setContent(pm.innerHTML, false);
+    setTimeout(()=>{ scheduleReflow && scheduleReflow(); }, 40);
+    renderProofFindings();
+    toast(`${ok}건 적용`, 'ok');
+  });
+  if (tabs) tabs.addEventListener('click', e => {
+    const b = e.target.closest('.proof-tab'); if (!b) return;
+    tabs.querySelectorAll('.proof-tab').forEach(t => t.classList.toggle('active', t === b));
+    _proofFilter = b.dataset.filter || 'all';
+    renderProofFindings();
+  });
+  if (tbody) tbody.addEventListener('click', e => {
+    const b = e.target.closest('button[data-action]'); if (!b) return;
+    const idx = parseInt(b.dataset.idx, 10);
+    const f = _proofFindings[idx]; if (!f) return;
+    if (f.state !== 'pending') return;
+    if (b.dataset.action === 'accept'){
+      if (applyProofFindingDOM(f)){
+        f.state = 'applied';
+        const pm = document.querySelector('#editor .ProseMirror');
+        if (pm && editor) editor.commands.setContent(pm.innerHTML, false);
+        setTimeout(()=>{ scheduleReflow && scheduleReflow(); }, 40);
+        toast('적용됨', 'ok');
+      } else {
+        f.state = 'rejected';
+        toast('본문에서 대상 텍스트를 찾지 못했습니다', 'err');
+      }
+    } else {
+      f.state = 'rejected';
+    }
+    renderProofFindings();
+  });
+})();
+
+/* ============================================================
+   의학용어 검수 (2026-04-22)
+   ------------------------------------------------------------
+   본문에서 의학용어 후보, 약어, 판/쇄/개정 표기, 단위를 탐지하고
+   KMLE(https://www.kmle.co.kr) 검색 링크를 제공한다. 각 항목은
+   감지·링크만 제공하며, 편집은 사용자가 직접 수행(텍스트 입력 → 적용).
+   ============================================================ */
+
+const KMLE_BASE = 'https://www.kmle.co.kr/search.php?Search=';
+
+const MED_PATTERNS = [
+  { cat:'term',   rx: /\b([A-Z][a-z]{3,}(?:\s+[a-z]+){1,3})\b/g,
+    reason: '라틴학명·영문 병기 용어 후보' },
+  { cat:'abbr',   rx: /\b([A-Z]{2,6})\b/g,
+    reason: '대문자 약어 — KMLE 로 의미 확인 권장' },
+  { cat:'edition',rx: /제\s*(\d+)\s*(판|개정판|개정증보판|증쇄|쇄|개정)/g,
+    reason: '판·쇄·개정 표기 — 정확성 확인 필요' },
+  { cat:'unit',   rx: /(\d+(?:\.\d+)?)\s*(mg|mcg|μg|㎍|g|kg|mL|ml|L|dL|cc|mmHg|bpm|kcal|℃|°C|IU|U)\b/g,
+    reason: '도량형·임상 단위 — 띄어쓰기 및 대소문자 점검' },
+];
+
+/* 의학용어 스톱워드 — 약어 후보가 너무 많아지는 걸 막는다 */
+const MED_ABBR_STOP = new Set([
+  'I','A','AM','PM','AI','UI','UX','OK','NO','YES','CPU','GPU','URL','API','PDF','HTML','XML','JSON','CSS','JS',
+  'KBS','MBC','SBS','EBS','UN','USA','UK','DNA','RNA','ATP','II','III','IV','VI','VII','VIII','IX','XI','XII'
+]);
+
+function scanMedTerms(){
+  const pm = document.querySelector('#editor .ProseMirror');
+  if (!pm) return [];
+  const blocks = Array.from(pm.children);
+  const findings = [];
+  const seen = new Set();
+  blocks.forEach((block, bIdx) => {
+    const text = block.textContent || '';
+    if (!text.trim()) return;
+    for (const pat of MED_PATTERNS){
+      for (const m of text.matchAll(pat.rx)){
+        const term = m[0];
+        if (pat.cat === 'abbr' && MED_ABBR_STOP.has(term)) continue;
+        if (pat.cat === 'abbr' && term.length < 2) continue;
+        /* 중복 억제: 같은 term 은 처음 등장한 블록에서만 표기 */
+        const sig = pat.cat + '|' + term.toLowerCase();
+        if (seen.has(sig)) continue;
+        seen.add(sig);
+        findings.push({
+          blockIdx: bIdx,
+          cat: pat.cat,
+          term,
+          ctxText: text,
+          reason: pat.reason,
+          state: 'pending',
+        });
+      }
+    }
+  });
+  return findings;
+}
+
+let _medFindings = [];
+let _medFilter = 'all';
+
+function renderMedFindings(){
+  const tbody = document.getElementById('med-tbody');
+  const summary = document.getElementById('med-summary');
+  if (!tbody || !summary) return;
+  const filtered = _medFindings.filter(f => _medFilter === 'all' || f.cat === _medFilter);
+  const cats = { term:0, abbr:0, edition:0, unit:0 };
+  _medFindings.forEach(f => { if (cats[f.cat] !== undefined) cats[f.cat]++; });
+  for (const [c, n] of Object.entries(cats)){
+    const el = document.getElementById('med-cnt-' + c);
+    if (el) el.textContent = String(n);
+  }
+  const allEl = document.getElementById('med-cnt-all');
+  if (allEl) allEl.textContent = String(_medFindings.length);
+  summary.innerHTML = `
+    <div class="kv"><b>${_medFindings.length}</b> <span>검출</span></div>
+    <div class="kv"><b>${cats.term}</b> <span>용어</span></div>
+    <div class="kv"><b>${cats.abbr}</b> <span>약어</span></div>
+    <div class="kv"><b>${cats.edition}</b> <span>판·개정</span></div>
+    <div class="kv"><b>${cats.unit}</b> <span>단위</span></div>`;
+  if (!filtered.length){
+    tbody.innerHTML = `<tr><td colspan="5" class="proof-empty">
+      <i class="ph ph-check-circle"></i>
+      해당 유형의 검출 결과가 없습니다.
+    </td></tr>`;
+    return;
+  }
+  const catLabel = { term:'용어', abbr:'약어', edition:'판·개정', unit:'단위' };
+  tbody.innerHTML = filtered.map((f) => {
+    const realIdx = _medFindings.indexOf(f);
+    const ctx = buildCtxHtml(f.ctxText, f.term, f.term);
+    const kmleUrl = KMLE_BASE + encodeURIComponent(f.term);
+    const disabled = f.state === 'applied';
+    return `<tr class="${f.state === 'applied' ? 'applied' : ''}">
+      <td>${realIdx + 1}</td>
+      <td><span class="proof-rule med">${catLabel[f.cat] || f.cat}</span>
+        <div style="font-size:10px;color:var(--meta);margin-top:3px">블록 #${f.blockIdx + 1}</div></td>
+      <td>
+        <div style="font-weight:600;margin-bottom:4px">${escapeHtml(f.term)}</div>
+        <div class="proof-ctx">${ctx}</div>
+        <div style="font-size:10.5px;color:var(--mute);margin-top:4px">${escapeHtml(f.reason || '')}</div>
+      </td>
+      <td>
+        <a class="med-link" href="${kmleUrl}" target="_blank" rel="noopener">
+          KMLE 검색<i class="ph ph-arrow-square-out"></i>
+        </a>
+      </td>
+      <td>
+        <div class="proof-row-actions" style="justify-content:center;flex-direction:column;gap:3px">
+          <input type="text" class="med-replace" data-idx="${realIdx}" placeholder="대체어(선택)"
+            value="${escapeHtml(f.replace || '')}"
+            style="padding:3px 6px;font-size:11px;border:1px solid var(--line);border-radius:3px;width:120px"
+            ${disabled ? 'disabled' : ''}>
+          <div style="display:flex;gap:3px">
+            <button class="accept" data-idx="${realIdx}" data-action="replace" ${disabled ? 'disabled' : ''}>적용</button>
+            <button class="reject" data-idx="${realIdx}" data-action="skip" ${disabled ? 'disabled' : ''}>보류</button>
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openMedModal(){
+  try {
+    _medFindings = scanMedTerms();
+    _medFilter = 'all';
+    document.querySelectorAll('#med-tabs .proof-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.filter === 'all');
+    });
+    renderMedFindings();
+    document.getElementById('med-modal')?.classList.add('show');
+  } catch(e){
+    console.error('openMedModal:', e);
+    toast('의학용어 검수 실행 실패: ' + (e.message || e), 'err');
+  }
+}
+
+(function bindMedUI(){
+  const modal = document.getElementById('med-modal');
+  const openBtn = document.getElementById('btn-med-check');
+  const closeBtn = document.getElementById('med-close');
+  const rescanBtn = document.getElementById('med-rescan');
+  const tabs = document.getElementById('med-tabs');
+  const tbody = document.getElementById('med-tbody');
+  if (openBtn) openBtn.addEventListener('click', openMedModal);
+  if (closeBtn) closeBtn.addEventListener('click', () => modal?.classList.remove('show'));
+  if (modal) modal.addEventListener('click', e => {
+    if (e.target === modal) modal.classList.remove('show');
+  });
+  if (rescanBtn) rescanBtn.addEventListener('click', () => {
+    _medFindings = scanMedTerms();
+    renderMedFindings();
+    toast('재검사 완료', 'ok');
+  });
+  if (tabs) tabs.addEventListener('click', e => {
+    const b = e.target.closest('.proof-tab'); if (!b) return;
+    tabs.querySelectorAll('.proof-tab').forEach(t => t.classList.toggle('active', t === b));
+    _medFilter = b.dataset.filter || 'all';
+    renderMedFindings();
+  });
+  if (tbody){
+    /* 대체어 입력 저장 */
+    tbody.addEventListener('input', e => {
+      const inp = e.target.closest('input.med-replace'); if (!inp) return;
+      const idx = parseInt(inp.dataset.idx, 10);
+      const f = _medFindings[idx]; if (!f) return;
+      f.replace = inp.value;
+    });
+    tbody.addEventListener('click', e => {
+      const b = e.target.closest('button[data-action]'); if (!b) return;
+      const idx = parseInt(b.dataset.idx, 10);
+      const f = _medFindings[idx]; if (!f) return;
+      if (f.state === 'applied') return;
+      if (b.dataset.action === 'replace'){
+        const newText = (f.replace || '').trim();
+        if (!newText){ toast('대체어를 입력하세요', 'err'); return; }
+        const ok = applyProofFindingDOM({ blockIdx:f.blockIdx, orig:f.term, sugg:newText });
+        if (ok){
+          f.state = 'applied';
+          const pm = document.querySelector('#editor .ProseMirror');
+          if (pm && editor) editor.commands.setContent(pm.innerHTML, false);
+          setTimeout(()=>{ scheduleReflow && scheduleReflow(); }, 40);
+          toast(`"${f.term}" → "${newText}" 적용`, 'ok');
+        } else {
+          toast('본문에서 대상을 찾지 못했습니다', 'err');
+        }
+      } else if (b.dataset.action === 'skip'){
+        f.state = 'skipped';
+      }
+      renderMedFindings();
+    });
+  }
+})();
+
 /* Heuristic: a block is "splittable" if it's a paragraph, a list item,
    or a UL/OL container. Lists are split per-item to prevent TOC items
    being lost when a long list exceeds one page. */
@@ -4413,12 +5000,6 @@ window.addEventListener('drop', async e=>{
   for (const f of files) await handleUploadedFile(f);
 });
 
-$('#btn-sample').addEventListener('click', async ()=>{
-  const blob = new Blob([SAMPLE_HWPX_XML], { type: 'application/xml' });
-  const file = new File([blob], 'sample.xml', { type: 'application/xml' });
-  await handleUploadedFile(file, 'sample');
-});
-
 $('#btn-new').addEventListener('click', ()=>{
   if (!confirm('새 문서를 시작하면 현재 내용이 사라집니다. 계속할까요?')) return;
   editor.commands.setContent('<h1>새 문서</h1><p>여기에 본문을 작성하거나 원고 파일을 업로드하세요.</p>', false);
@@ -4925,9 +5506,14 @@ for (const [k,b] of Object.entries(dockBtns)){
 
 function openFloatPopup(){
   if (_floatWin && !_floatWin.closed){ _floatWin.focus(); return; }
-  const w = 900, h = 680;
+  /* 2026-04-22: 높이를 2배로(기본 680→1360) — 사용자 요구("현재는 너무 낮아").
+     사용 가능한 스크린 높이를 초과하지 않도록 availHeight-60 에서 클램프한다.
+     너비(900)는 유지. */
+  const screenH = (screen.availHeight || screen.height || 900);
+  const w = 900;
+  const h = Math.min(1360, Math.max(680, screenH - 60));
   const x = Math.max(0, (screen.width  - w) / 2);
-  const y = Math.max(0, (screen.height - h) / 2);
+  const y = Math.max(0, (screenH - h) / 2);
   try {
     _floatWin = window.open('', 'hcg-edit-float',
       `width=${w},height=${h},left=${x},top=${y},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`);
@@ -5262,6 +5848,60 @@ function openFloatPopup(){
     t = setTimeout(sendUp, 350);
   });
 
+  /* ────────────────────────────────────────────────────────────
+     분리창 → 프리뷰 스크롤/하이라이트 싱크 (2026-04-22)
+     - 클릭: 포커스한 최상위 블록의 인덱스를 opener 에 전달 → 프리뷰 스크롤
+     - 드래그(셀렉션): 선택 영역의 시작/끝 블록 인덱스를 전달 → 프리뷰 하이라이트 + 스크롤
+     블록 인덱스는 #fw-edit 의 직계 Element 자식 기준. TipTap 도 setContent 후
+     동일 순서로 블록을 만들며, paginate() 가 data-src-idx 로 프리뷰와 매핑한다.
+   ──────────────────────────────────────────────────────────── */
+  function topBlockIndexFromNode(node){
+    if (!node) return -1;
+    if (node.nodeType === 3) node = node.parentElement;
+    let top = node;
+    while (top && top.parentElement && top.parentElement !== edit){
+      top = top.parentElement;
+    }
+    if (!top || top.parentElement !== edit) return -1;
+    const kids = Array.from(edit.children);
+    return kids.indexOf(top);
+  }
+  function postSyncPreview(startIdx, endIdx){
+    try {
+      if (window.opener && !window.opener.closed && window.opener.__hcgSyncPreviewFromFloat){
+        window.opener.__hcgSyncPreviewFromFloat(startIdx, endIdx);
+      }
+    } catch(e){}
+  }
+  /* 클릭 → 캐럿 위치 블록 기준 */
+  edit.addEventListener('mouseup', ()=>{
+    /* 클릭/셀렉션 완료 시점에 한 번만 보낸다. selectionchange 를 직접 쓰면
+       입력할 때마다 폭주하므로 mouseup + keyup(화살표) 로 제한한다. */
+    setTimeout(()=>{
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      const r = sel.getRangeAt(0);
+      if (!edit.contains(r.startContainer)) return;
+      const s = topBlockIndexFromNode(r.startContainer);
+      const e = topBlockIndexFromNode(r.endContainer);
+      if (s < 0) return;
+      /* 드래그 없으면 단일 블록(== s) 만 통보. 드래그 있으면 범위. */
+      const collapsed = sel.isCollapsed || s === e;
+      postSyncPreview(s, collapsed ? s : e);
+    }, 0);
+  });
+  edit.addEventListener('keyup', (ev)=>{
+    /* 방향키 / Home / End 로 캐럿이 움직인 경우만 */
+    if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'].includes(ev.key)) return;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const r = sel.getRangeAt(0);
+    if (!edit.contains(r.startContainer)) return;
+    const s = topBlockIndexFromNode(r.startContainer);
+    if (s < 0) return;
+    postSyncPreview(s, s);
+  });
+
   /* Expose for main window to push updates down */
   window.__hcgSyncFromMain = function(html){
     if (edit.innerHTML !== html) edit.innerHTML = html;
@@ -5302,6 +5942,49 @@ function openFloatPopup(){
       editor.commands.setContent(html, false);
       setTimeout(()=>{ scheduleReflow(); rescanEditorImages(); }, 40);
     } finally { _floatSyncing = false; }
+  };
+  /* 분리창에서 캐럿/셀렉션 → 프리뷰 스크롤·하이라이트 (2026-04-22).
+     popup 쪽이 최상위 블록 인덱스를 보낸다. 프리뷰 쪽 매칭은 data-src-idx.
+     스플릿된 페이지가 여러 개면 첫/마지막 매치를 범위로 하이라이트한다. */
+  window.__hcgSyncPreviewFromFloat = function(startIdx, endIdx){
+    try {
+      if (typeof startIdx !== 'number' || startIdx < 0) return;
+      if (typeof endIdx !== 'number' || endIdx < startIdx) endIdx = startIdx;
+      /* 사용자가 프리뷰를 직접 스크롤 중이면 타인 조작으로 덮어쓰지 않음 */
+      if (Date.now() < __previewSyncUserScrollLockUntil) return;
+      /* 기존 하이라이트 제거 */
+      document.querySelectorAll('.page-content .float-sel').forEach(el => el.classList.remove('float-sel'));
+      /* startIdx~endIdx 범위의 모든 매치 블록에 하이라이트 부여 */
+      const highlightEls = [];
+      for (let i = startIdx; i <= endIdx; i++){
+        const hits = document.querySelectorAll(`.page-content [data-src-idx="${i}"]`);
+        hits.forEach(el => {
+          el.classList.add('float-sel');
+          highlightEls.push(el);
+        });
+      }
+      if (!highlightEls.length) return;
+      /* 시작 블록을 중앙에 오도록 stage 를 스크롤 */
+      const stage = document.querySelector('#stage');
+      if (stage){
+        const first = highlightEls[0];
+        const stageRect = stage.getBoundingClientRect();
+        const r = first.getBoundingClientRect();
+        const margin = stageRect.height * 0.1;
+        const visibleTop = stageRect.top + margin;
+        const visibleBottom = stageRect.bottom - margin;
+        if (!(r.top >= visibleTop && r.bottom <= visibleBottom)){
+          const delta = r.top - stageRect.top - (stageRect.height / 2) + (r.height / 2);
+          __previewSyncProgrammaticUntil = Date.now() + 800;
+          stage.scrollBy({ top: delta, behavior: 'smooth' });
+        }
+      }
+      /* 2.4초 후 하이라이트 자동 해제 — 입력 중 잔상이 남지 않도록 */
+      clearTimeout(window.__hcgFloatHiliteT);
+      window.__hcgFloatHiliteT = setTimeout(()=>{
+        document.querySelectorAll('.page-content .float-sel').forEach(el => el.classList.remove('float-sel'));
+      }, 2400);
+    } catch(e){ console.warn('__hcgSyncPreviewFromFloat:', e); }
   };
   /* 팝업에서 자동 분류 요청 → 메인에서 수행 후 팝업에도 다시 반영 */
   window.__hcgAutoClassifyFromFloat = function(html){
