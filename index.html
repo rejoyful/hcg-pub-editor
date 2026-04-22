@@ -1770,16 +1770,16 @@ function parseHwpxXmlToHtml(xmlText){
   if (perr) throw new Error('HWPX XML 파싱 실패');
   const paras = xml.querySelectorAll('p, hp\\:p');
   const out = [];
+  // 모든 단락은 <p>로만 내보낸다. 태그 승격(h1/h2/h3 구분)은 공통 경로
+  // (commitHtmlToEditor → applyKeywordRulesToHtml + applyKeywordRules)에
+  // 일원화돼 있다. 파서 자체 heuristic으로 먼저 heading을 만들면 공통 규칙의
+  // P/DIV/SPAN 가드에 걸려 재분류가 막혀 misalign을 영속화한다.
   paras.forEach(p=>{
     const runs = p.querySelectorAll('t, hp\\:t');
     let text = '';
     runs.forEach(t=>{ text += (t.textContent || ''); });
     text = text.trim();
     if (!text) return;
-    const isHeading = /^(\d+(\.\d+)*\.?\s+)/.test(text) && text.length < 80;
-    if (isHeading){ out.push(`<h2>${escapeHtml(text)}</h2>`); return; }
-    const isTitleMaybe = out.length === 0 && text.length < 40;
-    if (isTitleMaybe){ out.push(`<h1>${escapeHtml(text)}</h1>`); return; }
     out.push(`<p>${escapeHtml(text)}</p>`);
   });
   return out.join('\n');
@@ -1854,6 +1854,10 @@ async function parsePptxFile(file){
     }
   }
 
+  // 태그 승격(h2/h3)은 공통 경로에 일원화. 슬라이드 경계·섹션 경계는 빈 <p>로
+  // 표기해 커밋 3의 섹션 경계 힌트 감지와 일관된 정책을 유지한다.
+  // "슬라이드 N"·"첨부 이미지" 라벨은 텍스트 <p>로만 남기고 heading 태그는
+  // 붙이지 않는다(공통 규칙이 필요 시 승격).
   const parts = [];
   const parser = new DOMParser();
   for (let i=0; i<slidePaths.length; i++){
@@ -1862,14 +1866,13 @@ async function parsePptxFile(file){
     const xml = parser.parseFromString(xmlText, 'application/xml');
     const texts = Array.from(xml.getElementsByTagName('a:t'))
       .map(el=>el.textContent.trim()).filter(Boolean);
-    parts.push(`<h2>슬라이드 ${i+1}</h2>`);
-    if (texts.length){
-      parts.push(`<h3>${escapeHtml(texts[0])}</h3>`);
-      for (let j=1; j<texts.length; j++) parts.push(`<p>${escapeHtml(texts[j])}</p>`);
-    }
+    if (i > 0) parts.push('<p></p>', '<p></p>'); // 슬라이드 경계(2줄 → 섹션 힌트 후보)
+    parts.push(`<p>슬라이드 ${i+1}</p>`);
+    for (const t of texts) parts.push(`<p>${escapeHtml(t)}</p>`);
   }
   if (Object.keys(images).length){
-    parts.push('<h2>첨부 이미지</h2>');
+    parts.push('<p></p>', '<p></p>'); // 첨부 이미지 섹션 경계
+    parts.push('<p>첨부 이미지</p>');
     Object.values(images).forEach(src=>{
       parts.push(`<p><img src="${src}" class="center" alt=""></p>`);
     });
@@ -1891,17 +1894,17 @@ async function parseIdmlFile(file){
     const xmlText = await zip.file(p).async('string');
     const xml = parser.parseFromString(xmlText, 'application/xml');
     const psrs = xml.getElementsByTagName('ParagraphStyleRange');
+    // 태그 승격은 공통 경로에 일원화. IDML의 AppliedParagraphStyle이 영문
+    // "Heading 1" 등일 때만 h1~h3로 올리던 기존 heuristic은 한글 스타일명
+    // (예: "제목 1/본문 1")에는 무력하고, 공통 규칙과 충돌하여 misalign을
+    // 고착시킬 수 있어 제거한다. 모든 단락은 <p>로만 출력.
     for (const psr of psrs){
-      const style = (psr.getAttribute('AppliedParagraphStyle')||'').toLowerCase();
       const contents = psr.getElementsByTagName('Content');
       let text = '';
       for (const c of contents) text += c.textContent;
       text = text.trim();
       if (!text) continue;
-      if (/heading\s*1|h1|title/.test(style)){ parts.push(`<h1>${escapeHtml(text)}</h1>`); }
-      else if (/heading\s*2|h2/.test(style)){ parts.push(`<h2>${escapeHtml(text)}</h2>`); }
-      else if (/heading\s*3|h3/.test(style)){ parts.push(`<h3>${escapeHtml(text)}</h3>`); }
-      else { parts.push(`<p>${escapeHtml(text)}</p>`); }
+      parts.push(`<p>${escapeHtml(text)}</p>`);
     }
   }
   return parts.join('\n');
@@ -1994,15 +1997,23 @@ async function parseMarkdown(md){
 }
 
 function parseTxt(text){
-  const blocks = text.split(/\n\s*\n/);
-  return blocks.map(b=>{
-    const t = b.trim();
-    if (!t) return '';
-    if (t.length < 50 && /^[#]|^\d+\.\s|^제\d+[장절]|^[A-Z\uAC00-\uD7A3][^.!?]*$/.test(t)){
-      return `<h2>${escapeHtml(t)}</h2>`;
-    }
-    return `<p>${escapeHtml(t)}</p>`;
-  }).filter(Boolean).join('\n');
+  // 태그 승격(h1/h2/h3)은 공통 경로에 일원화. parseTxt는 순수 <p> 시퀀스만
+  // 내보낸다. 연속 non-empty 줄은 공백 join으로 한 <p>에 합치고(워드랩 보호),
+  // 각 빈 줄은 빈 <p> 하나로 유지해 커밋 3 섹션 경계 감지가 힌트를 얻을
+  // 수 있도록 한다.
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  let buf = [];
+  const flush = () => {
+    if (buf.length){ out.push(`<p>${escapeHtml(buf.join(' '))}</p>`); buf = []; }
+  };
+  for (const line of lines){
+    const t = line.trim();
+    if (t){ buf.push(t); }
+    else { flush(); out.push('<p></p>'); }
+  }
+  flush();
+  return out.join('\n');
 }
 
 function escapeHtml(s){
