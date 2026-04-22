@@ -2092,8 +2092,18 @@ async function handleUploadedFile(file, sourceHint='upload'){
 function normalizePastedHtml(html){
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
-  // Kill script/style/link/meta that HWP / Word clipboards often drag in
-  tmp.querySelectorAll('script, style, link, meta, xml, o\\:p, w\\:sdt').forEach(n=>n.remove());
+  // Kill script/style/link/meta/title/head that HWP / Word / macOS Cocoa HTML
+  // Writer clipboards often drag in. `<title>`·`<head>`는 innerHTML에 잔류할 수
+  // 있어 ProseMirror paste parser가 block 시퀀스를 인식하지 못하는 원인이 된다.
+  tmp.querySelectorAll('script, style, link, meta, title, head, xml, o\\:p, w\\:sdt').forEach(n=>n.remove());
+  // macOS Cocoa clipboard 처럼 `<html>/<head>/<body>` 래퍼가 flatten되면 최상위에
+  // 공백·줄바꿈만 있는 text 노드가 남는다. 이것도 paste 컨텍스트 inference를
+  // inline-first로 밀어내는 원인이 되므로 제거한다.
+  Array.from(tmp.childNodes).forEach(n => {
+    if (n.nodeType === 3 /* TEXT_NODE */ && /^[\s\u00A0]*$/.test(n.nodeValue || '')){
+      n.remove();
+    }
+  });
   // Unwrap font tags and spans that only carry junk styling
   tmp.querySelectorAll('font').forEach(f=>{
     const frag = document.createDocumentFragment();
