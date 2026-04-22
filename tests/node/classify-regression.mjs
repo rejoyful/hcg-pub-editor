@@ -235,10 +235,9 @@ async function main(){
     tally.h1.length >= 3 && tally.h1.length <= 4,
     `actual=${tally.h1.length}`);
 
-  /* ── 커밋 3 효과: 섹션 경계 힌트 ≥ 3개 (화타 원고는 장 경계 포함 30+ 관측) ── */
-  check('섹션 경계 힌트 ≥ 3개',
-    tally.p_section_break.length >= 3,
-    `actual=${tally.p_section_break.length}`);
+  /* ── 섹션 경계 힌트 assertion 은 PR #4 에서 제거됨 (PubParagraph revert).
+   *    tally.p_section_break 는 진단용으로만 남겨둔다 (data-section-break
+   *    속성이 normalizePastedHtml 단계에서 더 이상 붙지 않으므로 항상 0). */
 
   /* ── 기타 빈 p 없음 (단발 빈 줄은 기존 거동대로 제거) ── */
   check('단발 빈 p 제거 (기존 거동 유지)',
@@ -263,7 +262,6 @@ async function main(){
     ['H3 (절)',                 58,      tally.h3.length,  (a) => a === 58],
     ['callout (소항+블릿)',     23,      tally.callout.length, (a) => a === 23],
     ['fig (그림, 그림9 제외)',   20,      tally.fig.length, (a) => a === 20],
-    ['섹션 경계 힌트',          '≥3',    tally.p_section_break.length, (a) => a >= 3],
   ];
   for (const [label, expect, actual, pred] of rows){
     const ok = pred(actual);
