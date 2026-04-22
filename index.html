@@ -36,11 +36,23 @@
   --page-mb: 20mm;
   --page-ml: 20mm;
 
+  /* Facing Pages (마주보는 페이지) — 제본 시 안쪽(gutter)을 바깥쪽보다 넓게.
+     body.facing-pages 가 켜지면 .page-left / .page-right 에 대해
+     --page-ml/--page-mr 을 아래 값으로 덮어쓴다.
+     기본값: inner 25mm / outer 15mm (책 제본 기본 권장). */
+  --page-inner: 25mm;
+  --page-outer: 15mm;
+
   /* bleed + crop marks (실제 인쇄 재단선/도련) */
   --page-bleed: 3mm;
   --page-mark-len: 5mm;
   --page-mark-thick: 0.25mm;
   --page-mark-color: #222;
+
+  /* Printer's marks (인디자인 인쇄용 마크) */
+  --reg-mark-size: 6mm;        /* 맞춤표 지름 */
+  --color-bar-h: 3.2mm;        /* 컬러바 높이 */
+  --color-bar-swatch: 4mm;     /* 각 스와치 폭 */
 
   /* typography */
   --body-family: "Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif;
@@ -654,6 +666,117 @@ body.show-crop-marks .page::before{ display:block; }
   box-sizing:border-box;
 }
 body.show-bleed-guide .page::after{ display:block; }
+
+/* ============================================================
+   Facing Pages (마주보는 페이지) — 제본 시 홀/짝 페이지 좌우 대칭.
+   body.facing-pages 가 켜지면 .page-left(verso) 는 spine 이 오른쪽,
+   .page-right(recto) 는 spine 이 왼쪽에 오므로 inner 가 달라진다.
+   ============================================================ */
+body.facing-pages .page-left .page-inner{
+  padding-left: var(--page-outer);
+  padding-right: var(--page-inner);
+}
+body.facing-pages .page-right .page-inner{
+  padding-left: var(--page-inner);
+  padding-right: var(--page-outer);
+}
+/* 머리말/쪽번호 배치도 spine 기준으로 좌우 정렬이 바뀌도록 — 기존 outer 규칙과
+   별개로 padding 자체가 좌우 비대칭이 되므로 위 규칙만으로 시각 배치는 맞는다. */
+body.facing-pages .page-left .page-head,
+body.facing-pages .page-left .page-foot{
+  padding-left: var(--page-outer);
+  padding-right: var(--page-inner);
+}
+body.facing-pages .page-right .page-head,
+body.facing-pages .page-right .page-foot{
+  padding-left: var(--page-inner);
+  padding-right: var(--page-outer);
+}
+/* 마주보기 시각화: spine 쪽 그림자 강조 — .spread::after 는 이미 중앙에 drop shadow 를
+   주고 있으므로 그대로 둠. 추가로 facing-pages 일 때 페이지 간 간격을 0 으로 강제. */
+body.facing-pages .spread{ gap:0; }
+
+/* ============================================================
+   Printer's Marks — 인디자인식 인쇄용 마크
+   재단선(crop marks): 기존 .page::before — 그대로 사용
+   도련 가이드(bleed guide): 기존 .page::after — 그대로 사용
+   맞춤표(registration marks) + 컬러바(color bars): 아래 .page-marks
+   body.show-printer-marks 가 켜진 경우에만 표시.
+   ============================================================ */
+.page-marks{
+  position:absolute;
+  pointer-events:none;
+  z-index:5;
+  top:calc(-1 * var(--page-bleed));
+  right:calc(-1 * var(--page-bleed));
+  bottom:calc(-1 * var(--page-bleed));
+  left:calc(-1 * var(--page-bleed));
+  display:none;
+}
+body.show-printer-marks .page-marks{ display:block; }
+
+/* 맞춤표 — 상·하·좌·우 각 중앙에 배치.
+   외곽 원 + 내부 십자. 배경은 body (bleed 영역) 바깥 쪽. */
+.page-marks .reg{
+  position:absolute;
+  width:var(--reg-mark-size);
+  height:var(--reg-mark-size);
+  /* 동심원 + 십자 크로스 — SVG data URI */
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='8' fill='none' stroke='%23222' stroke-width='0.8'/><circle cx='12' cy='12' r='3.2' fill='none' stroke='%23222' stroke-width='0.8'/><line x1='12' y1='1' x2='12' y2='23' stroke='%23222' stroke-width='0.8'/><line x1='1' y1='12' x2='23' y2='12' stroke='%23222' stroke-width='0.8'/></svg>");
+  background-repeat:no-repeat;
+  background-size:100% 100%;
+}
+/* 마크는 bleed 외곽(즉 .page-marks 경계) 바로 위/아래/좌/우 중앙. */
+.page-marks .reg.top{    top:0;                        left:50%; transform:translate(-50%, -50%); }
+.page-marks .reg.bottom{ bottom:0;                     left:50%; transform:translate(-50%, 50%); }
+.page-marks .reg.left{   left:0;                       top:50%;  transform:translate(-50%, -50%); }
+.page-marks .reg.right{  right:0;                      top:50%;  transform:translate(50%, -50%); }
+
+/* 컬러바 — 페이지 하단, bleed 영역 바깥(@page 내부) 에 CMYK + 주요 프로세스 색을
+   나란히 배치. 실제 인쇄소에서 색 기준선으로 사용. */
+.page-marks .color-bar{
+  position:absolute;
+  left:calc(var(--page-bleed) + 14mm);   /* 왼쪽 맞춤표와 겹치지 않게 */
+  right:calc(var(--page-bleed) + 14mm);
+  bottom:calc((var(--page-bleed) - var(--color-bar-h)) / 2);
+  height:var(--color-bar-h);
+  display:flex;
+  gap:0;
+  border:0.15mm solid #000;
+  background:#fff;
+}
+.page-marks .color-bar .sw{
+  width:var(--color-bar-swatch);
+  height:100%;
+  flex:0 0 var(--color-bar-swatch);
+}
+.page-marks .color-bar .sw.c{ background:#00AEEF; }  /* Cyan */
+.page-marks .color-bar .sw.m{ background:#EC008C; }  /* Magenta */
+.page-marks .color-bar .sw.y{ background:#FFF200; }  /* Yellow */
+.page-marks .color-bar .sw.k{ background:#231F20; }  /* Key (Black) */
+.page-marks .color-bar .sw.r{ background:#ED1C24; }
+.page-marks .color-bar .sw.g{ background:#00A651; }
+.page-marks .color-bar .sw.b{ background:#2E3192; }
+.page-marks .color-bar .sw.w{ background:#FFFFFF; }
+/* Tints: 25/50/75% black — 인쇄 농도 기준 */
+.page-marks .color-bar .sw.k25{ background:#BFBFBF; }
+.page-marks .color-bar .sw.k50{ background:#808080; }
+.page-marks .color-bar .sw.k75{ background:#404040; }
+
+/* 페이지 번호 라벨(가이드용) — 작은 글자로 bleed 영역 우하단 바깥 표시.
+   실제 인쇄 시 유용. */
+.page-marks .slug{
+  position:absolute;
+  bottom:calc(var(--page-bleed) * 0.25);
+  right:calc(var(--page-bleed) * 0.25);
+  font-size:6pt;
+  color:#222;
+  font-family:var(--ui-family);
+  line-height:1;
+  transform:translateY(100%);
+  white-space:nowrap;
+}
+
 /* (legacy .page.live style removed — editor is now in #edit-pane) */
 .page-head,.page-foot{
   position:absolute;left:0;right:0;
@@ -1133,6 +1256,8 @@ ul.toc-list > li::before{
   body.show-crop-marks .page::before{ display:block !important; }
   /* 도련 가이드 점선은 인쇄에는 제외 (실제 인쇄물엔 불필요). */
   body.show-bleed-guide .page::after{ display:none !important; }
+  /* 맞춤표 + 컬러바 — 인쇄 시에도 body.show-printer-marks 가 켜져 있으면 표시 */
+  body.show-printer-marks .page-marks{ display:block !important; }
   .page-inner{
     padding:var(--page-mt) var(--page-mr) var(--page-mb) var(--page-ml) !important;
     height:100% !important;width:100% !important;
@@ -1140,6 +1265,13 @@ ul.toc-list > li::before{
     font-family:var(--body-family);
     font-size:var(--body-size);
     line-height:var(--body-leading);
+  }
+  /* Facing Pages — 인쇄 시에도 동일 규칙 유지 */
+  body.facing-pages .page-left .page-inner{
+    padding:var(--page-mt) var(--page-inner) var(--page-mb) var(--page-outer) !important;
+  }
+  body.facing-pages .page-right .page-inner{
+    padding:var(--page-mt) var(--page-outer) var(--page-mb) var(--page-inner) !important;
   }
   .page-clip{
     height:calc(var(--page-h) - var(--page-mt) - var(--page-mb)) !important;
@@ -1261,10 +1393,21 @@ ul.toc-list > li::before{
           <input type="number" id="m-top" value="20" min="0" max="60" step="1">
           <input type="number" id="m-bot" value="20" min="0" max="60" step="1">
         </div>
-        <div class="row">
+        <div class="row" id="row-margin-lr">
           <label>좌·우</label>
           <input type="number" id="m-left" value="20" min="0" max="60" step="1">
           <input type="number" id="m-right" value="20" min="0" max="60" step="1">
+        </div>
+        <div class="row">
+          <label>마주보기</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer" title="책 제본용 — 홀/짝 페이지를 좌우 대칭으로 배치하고, 안쪽(제본) 여백을 따로 설정합니다">
+            <input type="checkbox" id="chk-facing-pages" checked> Facing Pages
+          </label>
+        </div>
+        <div class="row" id="row-margin-io">
+          <label title="안쪽(Inner/Gutter) · 바깥쪽(Outer) — 제본 시 안쪽을 바깥보다 넓게 잡는 것이 일반적입니다.">안·바깥(mm)</label>
+          <input type="number" id="m-inner" value="25" min="0" max="60" step="1" title="안쪽(Inner / Gutter) — 제본 쪽 여백">
+          <input type="number" id="m-outer" value="15" min="0" max="60" step="1" title="바깥쪽(Outer) — 책장 바깥 쪽 여백">
         </div>
         <div class="row">
           <label>도련(mm)</label>
@@ -1278,6 +1421,12 @@ ul.toc-list > li::before{
           </label>
           <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer;margin-left:8px">
             <input type="checkbox" id="chk-bleed-guide" checked> 도련 가이드
+          </label>
+        </div>
+        <div class="row">
+          <label>인쇄 마크</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer" title="Printer's Marks — 맞춤표(Registration) + 컬러바(Color Bars) 포함. PDF 내보내기에도 그대로 반영됩니다.">
+            <input type="checkbox" id="chk-printer-marks" checked> 맞춤표·컬러바
           </label>
         </div>
       </div>
@@ -1381,6 +1530,16 @@ ul.toc-list > li::before{
               </div>
             </div>
             <div class="page-foot center" data-foot><span class="pagenum">1</span></div>
+            <div class="page-marks" aria-hidden="true">
+              <div class="reg top"></div><div class="reg bottom"></div>
+              <div class="reg left"></div><div class="reg right"></div>
+              <div class="color-bar">
+                <div class="sw c"></div><div class="sw m"></div><div class="sw y"></div><div class="sw k"></div>
+                <div class="sw r"></div><div class="sw g"></div><div class="sw b"></div>
+                <div class="sw k25"></div><div class="sw k50"></div><div class="sw k75"></div>
+              </div>
+              <div class="slug">page 1</div>
+            </div>
           </div>
           <div class="page page-right" data-page-idx="1">
             <div class="page-head center" data-head></div>
@@ -1390,6 +1549,16 @@ ul.toc-list > li::before{
               </div>
             </div>
             <div class="page-foot center" data-foot><span class="pagenum">2</span></div>
+            <div class="page-marks" aria-hidden="true">
+              <div class="reg top"></div><div class="reg bottom"></div>
+              <div class="reg left"></div><div class="reg right"></div>
+              <div class="color-bar">
+                <div class="sw c"></div><div class="sw m"></div><div class="sw y"></div><div class="sw k"></div>
+                <div class="sw r"></div><div class="sw g"></div><div class="sw b"></div>
+                <div class="sw k25"></div><div class="sw k50"></div><div class="sw k75"></div>
+              </div>
+              <div class="slug">page 2</div>
+            </div>
           </div>
         </div>
       </div>
@@ -3344,6 +3513,20 @@ function syncSpreads(target){
   }
 }
 
+/* .page-marks 블록 — 맞춤표(상/하/좌/우) + 컬러바 + 페이지 슬러그 */
+function printerMarksHtml(pageIdx){
+  return `<div class="page-marks" aria-hidden="true">
+    <div class="reg top"></div><div class="reg bottom"></div>
+    <div class="reg left"></div><div class="reg right"></div>
+    <div class="color-bar">
+      <div class="sw c"></div><div class="sw m"></div><div class="sw y"></div><div class="sw k"></div>
+      <div class="sw r"></div><div class="sw g"></div><div class="sw b"></div>
+      <div class="sw k25"></div><div class="sw k50"></div><div class="sw k75"></div>
+    </div>
+    <div class="slug">page ${pageIdx+1}</div>
+  </div>`;
+}
+
 function createExtraSpread(spreadIdx){
   const leftIdx  = spreadIdx * 2;
   const rightIdx = spreadIdx * 2 + 1;
@@ -3357,6 +3540,7 @@ function createExtraSpread(spreadIdx){
         <div class="page-content" data-page-idx="${leftIdx}"></div>
       </div></div>
       <div class="page-foot center" data-foot><span class="pagenum">${leftIdx+1}</span></div>
+      ${printerMarksHtml(leftIdx)}
     </div>
     <div class="page page-right" data-page-idx="${rightIdx}">
       <div class="page-head center" data-head></div>
@@ -3364,6 +3548,7 @@ function createExtraSpread(spreadIdx){
         <div class="page-content" data-page-idx="${rightIdx}"></div>
       </div></div>
       <div class="page-foot center" data-foot><span class="pagenum">${rightIdx+1}</span></div>
+      ${printerMarksHtml(rightIdx)}
     </div>`;
   return sp;
 }
@@ -3856,6 +4041,44 @@ function applyBleedGuideToggle(){
 const _inBleed = $('#in-bleed'); if (_inBleed) _inBleed.addEventListener('input', applyBleed);
 const _ckCrop = $('#chk-crop-marks'); if (_ckCrop) _ckCrop.addEventListener('change', applyCropMarksToggle);
 const _ckBleed = $('#chk-bleed-guide'); if (_ckBleed) _ckBleed.addEventListener('change', applyBleedGuideToggle);
+/* 초기 기본값 반영 — 체크박스는 checked 이지만 body 클래스가 아직 붙지 않은 상태이므로 */
+applyCropMarksToggle();
+applyBleedGuideToggle();
+
+/* ============================================================
+   Facing Pages (마주보는 페이지) — 제본용 좌우 대칭 + 안쪽 여백
+   & Printer's Marks — 맞춤표(Registration) + 컬러바(Color Bars)
+   ============================================================ */
+function applyFacingPages(){
+  const on = !!($('#chk-facing-pages') && $('#chk-facing-pages').checked);
+  document.body.classList.toggle('facing-pages', on);
+  /* UI: facing-pages ON → 안·바깥 행 표시, 좌·우 행 숨김 / OFF → 반대 */
+  const rowLR = document.getElementById('row-margin-lr');
+  const rowIO = document.getElementById('row-margin-io');
+  if (rowLR) rowLR.style.display = on ? 'none' : '';
+  if (rowIO) rowIO.style.display = on ? '' : 'none';
+  scheduleReflow();
+}
+function applyInnerOuter(){
+  const mi = $('#m-inner'), mo = $('#m-outer');
+  const inner = mi ? (parseFloat(mi.value) || 0) : 25;
+  const outer = mo ? (parseFloat(mo.value) || 0) : 15;
+  root.style.setProperty('--page-inner', `${inner}mm`);
+  root.style.setProperty('--page-outer', `${outer}mm`);
+  scheduleReflow();
+}
+function applyPrinterMarks(){
+  const on = !!($('#chk-printer-marks') && $('#chk-printer-marks').checked);
+  document.body.classList.toggle('show-printer-marks', on);
+}
+const _ckFacing = $('#chk-facing-pages'); if (_ckFacing) _ckFacing.addEventListener('change', applyFacingPages);
+const _mInner  = $('#m-inner'); if (_mInner) _mInner.addEventListener('input', applyInnerOuter);
+const _mOuter  = $('#m-outer'); if (_mOuter) _mOuter.addEventListener('input', applyInnerOuter);
+const _ckPrint = $('#chk-printer-marks'); if (_ckPrint) _ckPrint.addEventListener('change', applyPrinterMarks);
+/* 초기 기본 상태 반영 (기본값은 모두 checked) */
+applyFacingPages();
+applyInnerOuter();
+applyPrinterMarks();
 
 $('#seg-columns').addEventListener('click', e=>{
   const b = e.target.closest('button[data-val]'); if (!b) return;
@@ -4012,9 +4235,13 @@ const STYLE_PRESETS = {
     paper: 'Shinkook',
     columns: '1',
     margins: { top: 20, right: 20, bottom: 20, left: 20 },
+    facingPages: true,
+    innerMargin: 25,   /* Inner / Gutter — 제본 쪽 */
+    outerMargin: 15,   /* Outer — 책장 바깥 */
     bleed: 3,
     cropMarks: true,
     bleedGuide: true,
+    printerMarks: true,  /* 맞춤표 + 컬러바 */
     fontFamily: '"Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif',
     fontWeight: '400',
     fontSize: 10,
@@ -4058,6 +4285,19 @@ function applyStylePreset(name){
   applyCropMarksToggle();
   const ckBleed = $('#chk-bleed-guide'); if (ckBleed) ckBleed.checked = !!p.bleedGuide;
   applyBleedGuideToggle();
+
+  /* Facing Pages (마주보는 페이지) + 안쪽/바깥쪽 여백 */
+  const ckFacing = $('#chk-facing-pages');
+  if (ckFacing) ckFacing.checked = !!p.facingPages;
+  const mIn = $('#m-inner'); if (mIn && typeof p.innerMargin === 'number') mIn.value = p.innerMargin;
+  const mOut = $('#m-outer'); if (mOut && typeof p.outerMargin === 'number') mOut.value = p.outerMargin;
+  applyInnerOuter();
+  applyFacingPages();
+
+  /* Printer's Marks (맞춤표 + 컬러바) */
+  const ckPrint = $('#chk-printer-marks');
+  if (ckPrint) ckPrint.checked = !!p.printerMarks;
+  applyPrinterMarks();
 
   /* 본문 조판 */
   const selFont = $('#sel-font');
