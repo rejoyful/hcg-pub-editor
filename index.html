@@ -185,15 +185,22 @@ button:focus-visible,.btn:focus-visible{outline-offset:2px}
 .side .seg button:last-child{border-right:0}
 .side .seg button.active{background:var(--ink);color:#fff}
 
-.upload-zone{
-  border:2px dashed var(--line);border-radius:var(--radius);
-  padding:16px 12px;text-align:center;background:#fafaf7;
-  cursor:pointer;transition:all .15s;margin-bottom:10px;
+/* 원고 가져오기 — 실제 드래그앤드롭은 프리뷰/에디터 영역에서 처리되므로
+   사이드바는 버튼 + 짧은 안내 텍스트 2 줄로 단순화.
+   (2026-04-22: 드롭존 → 버튼 전환) */
+.btn-upload{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:10px 12px;
+  background:var(--ink);color:#fff;border:1px solid var(--ink);
+  border-radius:var(--radius);cursor:pointer;
+  font-size:13px;font-weight:600;transition:background .12s;
 }
-.upload-zone:hover{border-color:var(--accent);background:var(--accent-soft)}
-.upload-zone .big{display:block;font-size:22px;margin-bottom:4px}
-.upload-zone .t{font-size:12px;color:var(--ink);font-weight:600}
-.upload-zone .s{font-size:10.5px;color:var(--meta);margin-top:3px;line-height:1.5}
+.btn-upload:hover{background:#333}
+.btn-upload .ph{font-size:15px}
+.upload-note{font-size:10.5px;line-height:1.55;color:var(--meta);margin-top:6px}
+.upload-note .fmt{display:block;margin-bottom:4px}
+.upload-note .warn{color:var(--warn)}
+.upload-note .warn b{font-weight:700}
 
 .pipeline{
   display:flex;flex-direction:column;gap:2px;margin-top:6px;
@@ -1351,7 +1358,6 @@ ul.toc-list > li::before{
     </div>
     <button class="btn" id="btn-proof-check" title="교정·교열 — 띄어쓰기 · 문장부호 · 반복 단어 · 따옴표 일관성을 검사하고 사용자가 건건이 적용 여부를 결정합니다"><i class="ph ph-pen-nib"></i> 윤문검수</button>
     <button class="btn" id="btn-med-check" title="의학용어 검수 — 본문에서 의학용어 후보를 찾아 KMLE 의학검색엔진 링크를 제공합니다. 판·개정 표기 역시 별도로 검사합니다."><i class="ph ph-first-aid-kit"></i> 의학용어</button>
-    <button class="btn" id="btn-classify-report" title="3영역·페이지 유형 분류 리포트 (개발용)"><i class="ph ph-list-magnifying-glass"></i> 페이지 진단</button>
     <div class="menu-wrap">
       <button class="btn primary" id="btn-export"><i class="ph ph-export"></i> 내보내기 <i class="ph ph-caret-down"></i></button>
       <div class="menu" id="menu-export">
@@ -1370,16 +1376,14 @@ ul.toc-list > li::before{
     <aside class="side">
       <h3 data-sec="import"><span><i class="ph ph-upload-simple ic"></i><span class="title-text">원고 가져오기</span></span></h3>
       <div class="sec">
-        <div class="upload-zone" id="upload-zone">
-          <span class="big"><i class="ph ph-upload-simple"></i></span>
-          <div class="t">파일 업로드 / 드롭</div>
-          <div class="s">HWPX · DOCX · PPTX · PDF · HTML · MD · TXT · IDML · XML</div>
-          <div class="s" style="margin-top:8px;color:var(--warn);font-size:10.5px;line-height:1.45">
-            ※ <b>HWP (바이너리)는 지원되지 않습니다</b><br>
-            한글 → <i>다른 이름으로 저장</i> → <b>.hwpx</b>로 저장 후 업로드하세요.
-          </div>
-        </div>
+        <button type="button" class="btn-upload" id="btn-upload">
+          <i class="ph ph-upload-simple"></i> 원고 파일 선택
+        </button>
         <input type="file" id="file-input" accept=".hwpx,.hwp,.docx,.pptx,.pdf,.html,.htm,.md,.markdown,.txt,.idml,.indd,.xml,.zip" style="display:none" multiple>
+        <div class="upload-note">
+          <span class="fmt">HWPX · DOCX · PPTX · PDF · HTML · MD · TXT · IDML · XML</span>
+          <span class="warn">※ <b>HWP(바이너리)는 지원되지 않습니다</b>. 한글에서 <b>.hwpx</b>로 저장 후 업로드하세요.</span>
+        </div>
         <div class="pipeline" id="pipeline" style="display:none">
           <div class="step" data-step="unpack"><span class="ic">①</span><span>포맷 인식</span></div>
           <div class="step" data-step="parse"><span class="ic">②</span><span>문서 파싱</span></div>
@@ -1778,122 +1782,102 @@ ul.toc-list > li::before{
   </div>
 </div>
 
-<!-- 페이지 구조 진단 리포트 모달 — 앞부속/본문/뒷부속 + 페이지 유형 판별 -->
-<div class="modal" id="classify-modal">
-  <div class="card" style="max-width:980px;width:96vw">
-    <h4><i class="ph ph-list-magnifying-glass"></i> 페이지 구조 진단 리포트</h4>
-    <p style="font-size:12px;color:var(--mute);margin:4px 0 12px;line-height:1.55">
-      앞부속 · 본문 · 뒷부속 3영역으로 구분하고, 각 페이지 유형을 규칙 기반으로 판정합니다.
-      <b style="color:var(--warn)">본문·태그는 변경하지 않습니다</b> — 진단 리포트만 출력.
-    </p>
-    <div class="classify-summary" id="classify-summary" style="
-      display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px;
-      font-size:11.5px;color:#333;
-    "></div>
-    <div class="classify-tabs" style="display:flex;gap:6px;margin:0 0 8px">
-      <button class="btn ghost classify-tab active" data-filter="all" style="font-size:11.5px">전체</button>
-      <button class="btn ghost classify-tab" data-filter="front" style="font-size:11.5px">앞부속</button>
-      <button class="btn ghost classify-tab" data-filter="body" style="font-size:11.5px">본문</button>
-      <button class="btn ghost classify-tab" data-filter="back" style="font-size:11.5px">뒷부속</button>
-      <button class="btn ghost classify-tab" data-filter="mismatch" style="font-size:11.5px;color:var(--warn)">검증 필요</button>
-      <button class="btn ghost classify-tab" data-filter="unknown" style="font-size:11.5px">unknown</button>
-    </div>
-    <div class="classify-table-wrap" style="
-      max-height:52vh;overflow:auto;border:1px solid var(--line);border-radius:4px;
-    ">
-      <table class="classify-table" id="classify-table" style="
-        width:100%;border-collapse:collapse;font-size:11.5px;
-      ">
-        <thead style="position:sticky;top:0;background:#F5F5F2;z-index:1">
-          <tr>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)">#</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)">쪽번호</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)">영역</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)">유형(예상)</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)">기존 분류</th>
-            <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--line)">신뢰도</th>
-            <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)">근거 신호</th>
-            <th style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--line)">일치?</th>
-          </tr>
-        </thead>
-        <tbody id="classify-tbody"></tbody>
-      </table>
-    </div>
-    <div class="foot">
-      <button class="btn" id="classify-export-json" type="button"><i class="ph ph-download-simple"></i> JSON 저장</button>
-      <button class="btn" id="classify-copy-md" type="button"><i class="ph ph-clipboard"></i> Markdown 복사</button>
-      <div style="flex:1"></div>
-      <button class="btn primary" id="classify-close">닫기</button>
-    </div>
-  </div>
-</div>
 <style>
-/* 페이지 구조 진단 리포트 — 행/배지 스타일 */
-.classify-table tbody tr{border-bottom:1px solid #EEE}
-.classify-table tbody tr:hover{background:#FAFAF6}
-.classify-table td{padding:6px 8px;vertical-align:top;line-height:1.45}
-.classify-tab.active{background:#2A6FD6;color:#fff;border-color:#2A6FD6}
-.classify-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10.5px;
-  font-weight:600;letter-spacing:.2px;color:#333;background:#E5E5E0;line-height:1.6}
-.classify-badge.front{background:#DDE7F5;color:#1F4E79}
-.classify-badge.body{background:#E2F0DB;color:#2A5E2A}
-.classify-badge.back{background:#F3DFEA;color:#6D2A5A}
-.classify-badge.unknown{background:#F4F2E8;color:#6A4A0A;border:1px dashed #C7A64A}
-.classify-badge.mismatch{background:#FBE4E4;color:#8B1A1A;border:1px solid #DC6060}
-.classify-conf{display:inline-block;width:44px;text-align:center;padding:1px 0;border-radius:3px;
-  font-weight:700;font-variant-numeric:tabular-nums}
-.classify-conf.hi{background:#D7EFD7;color:#1E5A1E}
-.classify-conf.md{background:#FFF0C0;color:#755B00}
-.classify-conf.lo{background:#F7D8D8;color:#7A2A2A}
-.classify-signals{font-size:10.5px;color:#555;line-height:1.5}
-.classify-summary .kv{background:#F5F5F2;border:1px solid var(--line);border-radius:4px;
-  padding:6px 10px;display:flex;gap:6px;align-items:baseline}
-.classify-summary .kv b{font-size:13.5px;color:#222}
-
-/* 윤문검수(Proofreading) · 의학용어 모달 공통 스타일 */
-.proof-table{width:100%;border-collapse:collapse;font-size:12px}
+/* 윤문검수(Proofreading) · 의학용어 모달 공통 스타일 (2026-04-22 가독성 개선판)
+   - 문맥 폰트 11→13px, 산세리프로 전환 (모노스페이스는 한글 가독성 떨어짐)
+   - 변경 전/후를 별도 카드로 분리 → 한눈에 비교 가능
+   - 버튼 크기·간격·대비 상향 */
+.proof-table{width:100%;border-collapse:collapse;font-size:13px}
 .proof-table thead th{position:sticky;top:0;background:#F5F5F2;z-index:1;
-  padding:8px;text-align:left;border-bottom:1px solid var(--line);font-weight:600;font-size:11px;
-  color:var(--mute);text-transform:uppercase;letter-spacing:.4px}
+  padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);font-weight:600;font-size:11px;
+  color:var(--mute);text-transform:uppercase;letter-spacing:.5px}
 .proof-table tbody tr{border-bottom:1px solid #EEE;vertical-align:top}
 .proof-table tbody tr:hover{background:#FAFAF6}
-.proof-table tbody tr.applied{background:#E8F1EC;opacity:.7}
+.proof-table tbody tr.applied{background:#E8F1EC;opacity:.82}
 .proof-table tbody tr.rejected{background:#FAF4F4;opacity:.55}
-.proof-table td{padding:8px;line-height:1.5}
-.proof-rule{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10.5px;
-  font-weight:600;background:#EFECE3;color:#554E3A;letter-spacing:.2px}
+.proof-table td{padding:12px 10px;line-height:1.55}
+
+/* 유형 배지 — 크고 명확하게 */
+.proof-rule{display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;
+  font-weight:700;background:#EFECE3;color:#554E3A;letter-spacing:.3px;line-height:1.4}
 .proof-rule.spacing{background:#E2F0DB;color:#2A5E2A}
 .proof-rule.punct{background:#DDE7F5;color:#1F4E79}
 .proof-rule.repeat{background:#F3DFEA;color:#6D2A5A}
 .proof-rule.quote{background:#F4F2E8;color:#6A4A0A}
 .proof-rule.ellipsis{background:#EFE4F0;color:#5A2A6D}
 .proof-rule.med{background:#FBE8E2;color:#8B3A1A}
-.proof-ctx{font-family:"JetBrains Mono","Menlo",monospace;font-size:11px;line-height:1.6;
-  white-space:pre-wrap;word-break:break-all;color:#333;max-width:380px}
-.proof-ctx .orig{background:#FBE4E4;color:#8B1A1A;padding:0 2px;border-radius:2px;text-decoration:line-through}
-.proof-ctx .sugg{background:#D7EFD7;color:#1E5A1E;padding:0 2px;border-radius:2px;margin-left:4px;font-weight:600}
-.proof-row-actions{display:flex;gap:4px;white-space:nowrap}
-.proof-row-actions button{padding:3px 8px;font-size:11px;border-radius:3px;border:1px solid var(--line);
-  background:#fff;cursor:pointer;color:var(--ink)}
+.proof-block-ref{display:block;margin-top:4px;font-size:10.5px;color:var(--meta)}
+
+/* 변경 전/후 카드 — 좌측에 라벨, 우측에 본문 */
+.proof-diff{display:flex;flex-direction:column;gap:6px}
+.proof-diff-card{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:4px;
+  font-size:13px;line-height:1.55;border:1px solid transparent}
+.proof-diff-card.before{background:#FBECEC;border-color:#F0CECE}
+.proof-diff-card.after{background:#E8F1EC;border-color:#BFD6C8}
+.proof-diff-card .lbl{font-size:10.5px;font-weight:700;letter-spacing:.3px;
+  padding:2px 6px;border-radius:3px;flex-shrink:0;min-width:48px;text-align:center;
+  text-transform:uppercase}
+.proof-diff-card.before .lbl{background:#8B1A1A;color:#fff}
+.proof-diff-card.after .lbl{background:#1E5A1E;color:#fff}
+.proof-diff-card .body{flex:1;word-break:break-word;color:#222}
+.proof-diff-card .hl{padding:1px 4px;border-radius:3px;font-weight:700}
+.proof-diff-card.before .hl{background:#F5C6C6;color:#6B0F0F}
+.proof-diff-card.after .hl{background:#BFE4BF;color:#0F4D0F}
+.proof-reason{font-size:11.5px;color:var(--mute);margin-top:6px;padding-left:2px}
+
+/* 의학용어 — 용어를 큰 chip 으로, 문맥은 그 아래 단락으로 */
+.med-term-chip{display:inline-block;padding:6px 14px;border-radius:6px;
+  background:#F5EFE4;border:1px solid #D4C09A;color:#5A4A2A;
+  font-weight:700;font-size:15px;letter-spacing:.2px;line-height:1.4}
+.med-ctx{margin-top:8px;padding:8px 10px;background:#F8F7F2;border:1px solid var(--line);
+  border-radius:4px;font-size:13px;line-height:1.6;color:#333;word-break:break-word}
+.med-ctx .hl{background:#FFF3B0;padding:1px 4px;border-radius:3px;font-weight:700;color:#5A4A2A}
+
+/* 버튼 — 키 높이 28px, 크기 일관 */
+.proof-row-actions{display:flex;gap:6px;white-space:nowrap;align-items:center}
+.proof-row-actions button{padding:6px 14px;font-size:12px;font-weight:600;
+  border-radius:4px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--ink);
+  min-height:30px;transition:background .12s,border-color .12s,color .12s}
 .proof-row-actions button.accept{background:var(--accent);color:#fff;border-color:var(--accent)}
 .proof-row-actions button.accept:hover{background:#245944}
 .proof-row-actions button.reject:hover{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
 .proof-row-actions button:disabled{opacity:.5;cursor:not-allowed}
-.proof-tabs{display:flex;gap:6px;margin:0 0 10px;flex-wrap:wrap}
-.proof-tab{padding:5px 12px;font-size:11.5px;border:1px solid var(--line);background:#fff;
-  border-radius:4px;cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;gap:4px}
-.proof-tab:hover{background:var(--soft)}
-.proof-tab.active{background:var(--ink);color:#fff;border-color:var(--ink)}
-.proof-tab .cnt{font-size:10.5px;color:inherit;opacity:.75;font-weight:600}
-.proof-summary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px;font-size:11.5px}
+
+/* 탭 */
+.proof-tabs{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap}
+.proof-tab{padding:7px 14px;font-size:12.5px;border:1px solid var(--line);background:#fff;
+  border-radius:4px;cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;gap:6px;
+  font-weight:500;transition:background .12s,border-color .12s}
+.proof-tab:hover{background:var(--soft);border-color:var(--ink)}
+.proof-tab.active{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:600}
+.proof-tab .cnt{font-size:11px;opacity:.8;font-weight:700;padding:1px 6px;border-radius:10px;
+  background:rgba(0,0,0,.08)}
+.proof-tab.active .cnt{background:rgba(255,255,255,.18)}
+
+/* 요약 박스 */
+.proof-summary{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 14px;font-size:12px}
 .proof-summary .kv{background:#F5F5F2;border:1px solid var(--line);border-radius:4px;
-  padding:6px 10px;display:flex;gap:6px;align-items:baseline}
-.proof-summary .kv b{font-size:13.5px;color:#222}
-.proof-empty{padding:40px 20px;text-align:center;color:var(--meta);font-size:13px;line-height:1.6}
-.proof-empty .ph{font-size:32px;color:var(--ok);display:block;margin-bottom:8px}
-.med-link{color:var(--accent);text-decoration:none;font-size:11px;white-space:nowrap}
-.med-link:hover{text-decoration:underline}
-.med-link .ph{font-size:11px;margin-left:2px}
+  padding:8px 12px;display:flex;gap:8px;align-items:baseline}
+.proof-summary .kv b{font-size:16px;color:#222;font-weight:700}
+.proof-summary .kv span{color:var(--mute);font-size:11.5px}
+
+.proof-empty{padding:48px 20px;text-align:center;color:var(--meta);font-size:13px;line-height:1.7}
+.proof-empty .ph{font-size:36px;color:var(--ok);display:block;margin-bottom:10px}
+
+/* KMLE 검색 링크 — 버튼 스타일 */
+.med-link{display:inline-flex;align-items:center;gap:4px;
+  padding:6px 12px;font-size:12px;font-weight:600;
+  background:#fff;color:var(--accent);text-decoration:none;
+  border:1px solid var(--accent);border-radius:4px;
+  transition:background .12s,color .12s}
+.med-link:hover{background:var(--accent);color:#fff}
+.med-link .ph{font-size:12px}
+
+/* 의학용어 대체어 입력 */
+.med-replace{padding:6px 10px;font-size:12px;border:1px solid var(--line);
+  border-radius:4px;width:100%;color:var(--ink);box-sizing:border-box;transition:border-color .12s}
+.med-replace:focus{outline:none;border-color:var(--accent)}
+.med-edit-cell{display:flex;flex-direction:column;gap:6px;min-width:150px}
 </style>
 
 <!-- 윤문검수(교정·교열) 모달 — 띄어쓰기/문장부호/반복어/따옴표 검사 + 건별 적용 -->
@@ -3156,411 +3140,6 @@ function markTocListsInPreview(){
   }
 }
 
-/* ============================================================
-   Round 6: 페이지 구조 진단 리포트 (본문 변경 없음)
-   ------------------------------------------------------------
-   쪽번호 체계 + 페이지 상단 키워드 + 이미지 비중 등 복수 신호를
-   종합해 각 페이지를 {region, type, confidence, signals} 로 판정.
-   본문·DOM·태그는 일체 변경하지 않는다 — 리포트만 생성한다.
-   ============================================================ */
-const PAGE_TYPE_LABEL = {
-  half_title:    '속표지',
-  copyright:     '판권지',
-  cover_design:  '커버(디자인)',
-  author_bio:    '저자 소개',
-  preface:       '머리말',
-  toc:           '목차',
-  chapter_opener:'장 표지',
-  body_text:     '본문',
-  references:    '참고문헌',
-  index:         '색인',
-  epilogue:      '에필로그',
-  blank:         '백면',
-  unknown:       'unknown',
-};
-const REGION_LABEL = { front:'앞부속', body:'본문', back:'뒷부속', unknown:'?' };
-
-/* 쪽번호 체계 판별 — 로마(i, ii, iii…) vs 아라비아(1, 2, 3…). */
-function parsePageNumSystem(raw){
-  const t = (raw || '').replace(/[\s\-–—.,()[\]<>]/g, '').toLowerCase();
-  if (!t) return { system:'none', value:null };
-  if (/^[ivxlcdm]+$/.test(t)){
-    const map = { i:1, v:5, x:10, l:50, c:100, d:500, m:1000 };
-    let v = 0, prev = 0;
-    for (const ch of [...t].reverse()){
-      const val = map[ch] || 0;
-      if (val < prev) v -= val; else v += val;
-      prev = val;
-    }
-    return { system:'roman', value:v };
-  }
-  if (/^\d+$/.test(t)) return { system:'arabic', value:parseInt(t,10) };
-  return { system:'other', value:null };
-}
-
-/* 페이지 1장의 구조적 요약 수집 — 분류 입력용 */
-function gatherPageFacts(pageEl){
-  const content = pageEl.querySelector('.page-content');
-  const pageNum = (pageEl.querySelector('.pagenum')?.textContent || '').trim();
-  const frontSection = content?.querySelector(':scope > section[class*="front-matter"]');
-  const existingClass = (() => {
-    if (!frontSection) return null;
-    const cls = frontSection.className || '';
-    const m = cls.match(/front-matter\s+(\w+)/);
-    return m ? m[1] : null;
-  })();
-  const blocks = content
-    ? Array.from(content.querySelectorAll(':scope > *, :scope > section > *'))
-    : [];
-  /* 첫 번째 헤딩 텍스트 (존재 시) */
-  const firstHeading = (() => {
-    for (const b of blocks){
-      if (/^H[1-3]$/.test(b.tagName)) return (b.textContent || '').trim();
-    }
-    return null;
-  })();
-  const textAll = (content?.textContent || '').replace(/\s+/g, ' ').trim();
-  const textLen = textAll.length;
-  const imgs = content ? content.querySelectorAll('img') : [];
-  const hasImage = imgs.length > 0;
-  const imagePixelRatio = (() => {
-    if (!hasImage || !pageEl) return 0;
-    const pageRect = pageEl.getBoundingClientRect();
-    if (pageRect.width <= 0 || pageRect.height <= 0) return 0;
-    const pageArea = pageRect.width * pageRect.height;
-    let imgArea = 0;
-    imgs.forEach(im => {
-      const r = im.getBoundingClientRect();
-      imgArea += Math.max(0, r.width * r.height);
-    });
-    return imgArea / pageArea;
-  })();
-  return {
-    pageNum, pageNumSystem: parsePageNumSystem(pageNum),
-    existingClass, firstHeading,
-    textAll, textLen, hasImage, imagePixelRatio,
-    blockTags: blocks.map(b => b.tagName).join(','),
-    blockCount: blocks.length,
-  };
-}
-
-/* 단일 페이지 유형 판정 — 규칙별 가중치 기반. 우선순위:
-   쪽번호 체계 → 명시적 front-matter 클래스 → 키워드 → 구조/비중 */
-function classifyPageType(facts, pageCtx){
-  const signals = [];
-  let type = 'unknown';
-  let confidence = 0;
-
-  const t  = (facts.textAll || '');
-  const fh = (facts.firstHeading || '').replace(/\s+/g, ' ').trim();
-  const blockTags = facts.blockTags || '';
-
-  /* 기존 분류 클래스가 있으면 강한 기본선 */
-  const xmap = {
-    colophon:'copyright', author:'author_bio', preface:'preface',
-    foreword:'preface',  toc:'toc', dedication:'half_title',
-    references:'references', index:'index', epilogue:'epilogue',
-    half_title:'half_title', cover_design:'cover_design',
-    chapter_opener:'chapter_opener',
-  };
-  if (facts.existingClass && xmap[facts.existingClass]){
-    type = xmap[facts.existingClass];
-    confidence = Math.max(confidence, 0.6);
-    signals.push(`기존 분류 클래스: ${facts.existingClass}`);
-  }
-
-  /* 빈 페이지(백면) */
-  if (facts.textLen === 0 && !facts.hasImage){
-    return { type:'blank', confidence:0.99, signals:['페이지 컨텐츠 없음'] };
-  }
-
-  /* 판권지(copyright) — 3개 이상 토큰 */
-  const coloTokens = COLO_TOKENS.filter(k => t.includes(k));
-  if (coloTokens.length >= 3){
-    signals.push(`판권 토큰 ${coloTokens.length}개: ${coloTokens.slice(0,4).join(', ')}`);
-    type = 'copyright';
-    confidence = Math.min(0.98, 0.55 + 0.08 * coloTokens.length);
-  } else if (coloTokens.length >= 2){
-    signals.push(`판권 토큰 ${coloTokens.length}개(부족): ${coloTokens.join(', ')}`);
-    if (confidence < 0.7){ type = 'copyright'; confidence = 0.55; }
-  }
-
-  /* 커버(이미지 비중) */
-  if (facts.imagePixelRatio >= 0.5){
-    signals.push(`이미지 점유율 ${(facts.imagePixelRatio*100|0)}%`);
-    type = 'cover_design';
-    confidence = Math.max(confidence, 0.75);
-  }
-
-  /* 키워드 기반 유형 — 첫 헤딩 매칭 */
-  const HEAD_MAP = [
-    ['author_bio',     /^(저자\s*소개|저자\s*약력|역자\s*소개|역자\s*약력|지은이\s*소개|옮긴이\s*소개)$/],
-    ['preface',        /^(머리말|머릿말|서문|프롤로그|Preface|Prologue|들어가며)$/i],
-    ['toc',            /^(목차|차례|Contents|Table of Contents)$/i],
-    ['references',     /^(참고\s*문헌|인용\s*문헌|참고\s*자료|References|Bibliography)$/i],
-    ['index',          /^(찾아보기|색인|인덱스|Index)$/i],
-    ['epilogue',       /^(에필로그|결론|후기|맺음말|나오며)$/i],
-  ];
-  if (fh){
-    for (const [ty, re] of HEAD_MAP){
-      if (re.test(fh)){
-        signals.push(`첫 헤딩 "${fh}" → ${ty}`);
-        type = ty;
-        confidence = Math.max(confidence, 0.92);
-        break;
-      }
-    }
-  }
-
-  /* 장 표지(chapter_opener) — 큰 숫자/장 번호 + 짧은 제목 */
-  const chapHeadPatterns = [
-    /^(제\s*\d+\s*(장|부|편|절))\s*(.*)$/,
-    /^Chapter\s+\d+/i,
-    /^Part\s+\d+/i,
-    /^\d+\s+[^\s].{0,30}$/, /* "1 서문" / "2 환자 대하기의 원칙" */
-  ];
-  if (fh && facts.textLen <= 140 && chapHeadPatterns.some(re => re.test(fh))){
-    signals.push(`장 시작 헤딩 "${fh}"`);
-    type = 'chapter_opener';
-    confidence = Math.max(confidence, 0.85);
-  }
-
-  /* 목차(toc) — 헤딩 매칭을 통과하지 못해도 토큰 패턴으로 보강:
-     "장 번호 + 제목 + 쪽번호" 리스트형태 탐지 */
-  if (type !== 'toc' && /(\d+\s*\.?\s*\S+\s*[·…\.]{2,}\s*\d+)/.test(t) && facts.textLen < 1500){
-    signals.push('목차형 리스트 패턴(번호·점선·쪽수)');
-    if (confidence < 0.7){ type = 'toc'; confidence = 0.7; }
-  }
-
-  /* 속표지 — 짧은 텍스트 + 이미지 없음 + 쪽번호 체계가 front일 때만 */
-  if (type === 'unknown' && facts.textLen <= 60 && !facts.hasImage
-      && pageCtx.region !== 'body' && pageCtx.region !== 'back'){
-    signals.push(`텍스트 ${facts.textLen}자 + 이미지 없음(속표지 후보)`);
-    type = 'half_title';
-    confidence = 0.55;
-  }
-
-  /* 본문(body_text) — 영역이 body 이면서 다른 유형 미확정 */
-  if (type === 'unknown' && pageCtx.region === 'body'){
-    type = 'body_text';
-    confidence = 0.6;
-    signals.push('본문 영역 기본값');
-  }
-  /* 뒷부속에 유형 미확정이면 body_text 기본값이 아닌 unknown 유지 */
-  if (type === 'unknown' && pageCtx.region === 'back'){
-    /* 참고문헌/색인/에필로그 키워드 매칭이 안 된 상태 → 사람 확인 필요 */
-    signals.push('뒷부속 영역이나 키워드 미매칭 — 사람 확인 권장');
-  }
-
-  return { type, confidence, signals };
-}
-
-/* 전체 페이지 분류 리포트 생성 */
-function classifyPagesForReport(){
-  const pages = Array.from(document.querySelectorAll('#book .page'));
-  if (!pages.length) return { pages:[], summary:{}, mismatches:[] };
-
-  /* 1차 패스: 팩트 수집 */
-  const factList = pages.map(p => ({ el:p, facts: gatherPageFacts(p) }));
-
-  /* 영역 결정 —
-     (a) 쪽번호 체계: roman → front, arabic → body, 뒷쪽 뒷부속 키워드 → back
-     (b) 체계가 없으면 front-matter 클래스/키워드로 보조,
-     (c) 그래도 애매하면 앞쪽은 front, 중반 이후는 body, 말미는 back */
-  let bodyStartIdx = -1; /* 최초 arabic=1 페이지 인덱스 */
-  let backStartIdx = -1; /* 최초 뒷부속 유형 등장 인덱스 */
-  factList.forEach((f, i) => {
-    const sys = f.facts.pageNumSystem;
-    if (sys.system === 'arabic' && sys.value === 1 && bodyStartIdx < 0){
-      bodyStartIdx = i;
-    }
-    const fh = (f.facts.firstHeading || '');
-    if (/^(참고\s*문헌|인용\s*문헌|참고\s*자료|찾아보기|색인|인덱스|에필로그|결론|후기|맺음말|References|Bibliography|Index)/i.test(fh) && backStartIdx < 0){
-      backStartIdx = i;
-    }
-  });
-  /* 쪽번호로 bodyStartIdx를 못 찾았다면 본문 키워드로 추정:
-     첫 "제N장" / "Chapter N" / "1 서문" 헤딩 위치 */
-  if (bodyStartIdx < 0){
-    for (let i = 0; i < factList.length; i++){
-      const fh = factList[i].facts.firstHeading || '';
-      if (/^(제\s*\d+\s*(장|부|편))|^Chapter\s+\d+|^\d+\s+\S/.test(fh)){
-        bodyStartIdx = i; break;
-      }
-    }
-  }
-  /* 그래도 없으면 fallback: 전체 길이의 30% 지점 */
-  if (bodyStartIdx < 0) bodyStartIdx = Math.min(pages.length - 1, Math.floor(pages.length * 0.3));
-
-  /* 2차 패스: 페이지별 유형 판정 */
-  const results = factList.map((f, i) => {
-    let region = 'unknown';
-    const sys = f.facts.pageNumSystem.system;
-    if (sys === 'roman') region = 'front';
-    else if (sys === 'arabic'){
-      if (backStartIdx >= 0 && i >= backStartIdx) region = 'back';
-      else region = 'body';
-    } else {
-      if (backStartIdx >= 0 && i >= backStartIdx) region = 'back';
-      else if (i < bodyStartIdx) region = 'front';
-      else region = 'body';
-    }
-    const classification = classifyPageType(f.facts, { region, index:i });
-    return {
-      index: i + 1,
-      pageNum: f.facts.pageNum || '',
-      region,
-      type: classification.type,
-      confidence: classification.confidence,
-      signals: classification.signals,
-      existing: f.facts.existingClass || '',
-      firstHeading: f.facts.firstHeading || '',
-      textLen: f.facts.textLen,
-      imageRatio: f.facts.imagePixelRatio,
-    };
-  });
-
-  /* 기존 분류와의 불일치(검증 필요) 계산 */
-  const existingToType = {
-    colophon:'copyright', author:'author_bio', preface:'preface', foreword:'preface',
-    toc:'toc', dedication:'half_title', references:'references', index:'index',
-    epilogue:'epilogue', half_title:'half_title', cover_design:'cover_design',
-    chapter_opener:'chapter_opener',
-  };
-  const mismatches = [];
-  results.forEach(r => {
-    const mapped = existingToType[r.existing] || null;
-    r.match = !r.existing ? 'no-existing'
-           : (mapped === r.type ? 'match' : 'mismatch');
-    if (r.match === 'mismatch') mismatches.push(r);
-  });
-
-  /* 요약 */
-  const summary = {
-    totalPages: results.length,
-    front: results.filter(r => r.region === 'front').length,
-    body:  results.filter(r => r.region === 'body').length,
-    back:  results.filter(r => r.region === 'back').length,
-    unknown: results.filter(r => r.type === 'unknown').length,
-    needVerify: mismatches.length,
-    bodyStartIdx: bodyStartIdx + 1,
-    backStartIdx: backStartIdx < 0 ? null : backStartIdx + 1,
-  };
-  return { pages: results, summary, mismatches };
-}
-
-/* 리포트를 모달에 렌더링 */
-function renderClassificationReport(){
-  const modal = document.getElementById('classify-modal');
-  if (!modal) return;
-  const report = classifyPagesForReport();
-  if (!report.pages.length){
-    toast('페이지가 비어있습니다', 'warn');
-    return;
-  }
-  const sumEl = document.getElementById('classify-summary');
-  const tbody = document.getElementById('classify-tbody');
-  if (!sumEl || !tbody) return;
-  const s = report.summary;
-  sumEl.innerHTML = `
-    <div class="kv"><span>총 페이지</span><b>${s.totalPages}</b></div>
-    <div class="kv"><span>앞부속</span><b>${s.front}</b></div>
-    <div class="kv"><span>본문</span><b>${s.body}</b></div>
-    <div class="kv"><span>뒷부속</span><b>${s.back}</b></div>
-    <div class="kv"><span style="color:var(--warn)">unknown</span><b>${s.unknown}</b></div>
-    <div class="kv"><span style="color:var(--warn)">검증 필요</span><b>${s.needVerify}</b></div>
-    <div class="kv" style="font-size:10.5px;color:#666">본문 시작 페이지: ${s.bodyStartIdx}${s.backStartIdx ? ` · 뒷부속 시작: ${s.backStartIdx}` : ''}</div>
-  `;
-  tbody.innerHTML = report.pages.map(r => {
-    const confCls = r.confidence >= 0.8 ? 'hi' : r.confidence >= 0.6 ? 'md' : 'lo';
-    const confPct = (r.confidence * 100).toFixed(0) + '%';
-    const matchIco = r.match === 'match' ? '✔' : r.match === 'mismatch' ? '⚠' : '–';
-    const typeLabel = PAGE_TYPE_LABEL[r.type] || r.type;
-    return `<tr data-region="${r.region}" data-match="${r.match}" data-type="${r.type}">
-      <td>${r.index}</td>
-      <td>${r.pageNum ? escapeHtml(r.pageNum) : '<span style="color:#AAA">—</span>'}</td>
-      <td><span class="classify-badge ${r.region}">${REGION_LABEL[r.region] || r.region}</span></td>
-      <td><span class="classify-badge ${r.type === 'unknown' ? 'unknown' : ''}">${escapeHtml(typeLabel)}</span></td>
-      <td style="color:${r.existing ? '#333' : '#AAA'}">${r.existing ? escapeHtml(r.existing) : '—'}</td>
-      <td style="text-align:center"><span class="classify-conf ${confCls}">${confPct}</span></td>
-      <td class="classify-signals">${r.signals.map(escapeHtml).join('<br>') || '<span style="color:#AAA">—</span>'}</td>
-      <td style="text-align:center;${r.match === 'mismatch' ? 'color:var(--warn);font-weight:700' : ''}">${matchIco}</td>
-    </tr>`;
-  }).join('');
-  /* 탭 필터 */
-  const tabs = modal.querySelectorAll('.classify-tab');
-  const filterRows = (f) => {
-    tabs.forEach(t => t.classList.toggle('active', t.dataset.filter === f));
-    tbody.querySelectorAll('tr').forEach(tr => {
-      const show = (
-        f === 'all' ||
-        (f === 'front' && tr.dataset.region === 'front') ||
-        (f === 'body'  && tr.dataset.region === 'body') ||
-        (f === 'back'  && tr.dataset.region === 'back') ||
-        (f === 'unknown'  && tr.dataset.type === 'unknown') ||
-        (f === 'mismatch' && tr.dataset.match === 'mismatch')
-      );
-      tr.style.display = show ? '' : 'none';
-    });
-  };
-  tabs.forEach(t => { t.onclick = () => filterRows(t.dataset.filter); });
-  filterRows('all');
-
-  /* 저장/복사 버튼 */
-  const exportBtn = document.getElementById('classify-export-json');
-  if (exportBtn){
-    exportBtn.onclick = () => {
-      const blob = new Blob([JSON.stringify(report, null, 2)], { type:'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `page-classify-${Date.now()}.json`;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-      toast('JSON 리포트 저장됨', 'ok');
-    };
-  }
-  const copyBtn = document.getElementById('classify-copy-md');
-  if (copyBtn){
-    copyBtn.onclick = () => {
-      const md = [
-        `# 페이지 구조 진단 리포트`,
-        ``,
-        `- 총 페이지: ${s.totalPages}`,
-        `- 앞부속/본문/뒷부속: ${s.front} / ${s.body} / ${s.back}`,
-        `- 본문 시작 페이지: ${s.bodyStartIdx}${s.backStartIdx ? ` / 뒷부속 시작: ${s.backStartIdx}` : ''}`,
-        `- unknown: ${s.unknown} · 검증 필요: ${s.needVerify}`,
-        ``,
-        `| # | 쪽번호 | 영역 | 유형 | 기존 | 신뢰도 | 일치 |`,
-        `|---|---|---|---|---|---|---|`,
-        ...report.pages.map(r => `| ${r.index} | ${r.pageNum || '—'} | ${REGION_LABEL[r.region]} | ${PAGE_TYPE_LABEL[r.type] || r.type} | ${r.existing || '—'} | ${(r.confidence*100|0)}% | ${r.match === 'mismatch' ? '⚠' : (r.match === 'match' ? '✔' : '–')} |`),
-      ].join('\n');
-      try { navigator.clipboard.writeText(md); toast('Markdown 리포트 복사됨', 'ok'); }
-      catch(e){ console.warn('clipboard:', e); toast('복사 실패', 'err'); }
-    };
-  }
-  modal.classList.add('show');
-}
-
-/* 모달 닫기 + 버튼 바인딩 */
-(function bindClassifyReportUI(){
-  const modal = document.getElementById('classify-modal');
-  const closeBtn = document.getElementById('classify-close');
-  const openBtn = document.getElementById('btn-classify-report');
-  if (openBtn){
-    openBtn.addEventListener('click', () => {
-      try { renderClassificationReport(); }
-      catch(e){ console.error('classify report:', e); toast('리포트 생성 실패: ' + e.message, 'err'); }
-    });
-  }
-  if (closeBtn){
-    closeBtn.addEventListener('click', () => modal?.classList.remove('show'));
-  }
-  if (modal){
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.classList.remove('show');
-    });
-  }
-})();
 
 /* ============================================================
    윤문검수(교정·교열) — 규칙 기반 스캔 + 건별 적용 (2026-04-22)
@@ -3647,12 +3226,33 @@ function scanProofIssues(){
   return findings;
 }
 
+/* 윤문검수 전용: 변경 전/후 카드 두 장 */
 function buildCtxHtml(ctxText, orig, sugg){
   const i = ctxText.indexOf(orig);
-  if (i < 0) return `<span class="orig">${escapeHtml(orig)}</span><span class="sugg">${escapeHtml(sugg)}</span>`;
-  const pre = ctxText.slice(Math.max(0, i-30), i);
-  const post = ctxText.slice(i + orig.length, i + orig.length + 30);
-  return `${escapeHtml(pre)}<span class="orig">${escapeHtml(orig)}</span><span class="sugg">${escapeHtml(sugg)}</span>${escapeHtml(post)}`;
+  const pre  = i < 0 ? '' : ctxText.slice(Math.max(0, i-40), i);
+  const post = i < 0 ? '' : ctxText.slice(i + orig.length, i + orig.length + 40);
+  const preEsc  = escapeHtml(pre);
+  const postEsc = escapeHtml(post);
+  return `
+    <div class="proof-diff">
+      <div class="proof-diff-card before">
+        <div class="lbl">변경 전</div>
+        <div class="body">${preEsc}<span class="hl">${escapeHtml(orig)}</span>${postEsc}</div>
+      </div>
+      <div class="proof-diff-card after">
+        <div class="lbl">변경 후</div>
+        <div class="body">${preEsc}<span class="hl">${escapeHtml(sugg)}</span>${postEsc}</div>
+      </div>
+    </div>`;
+}
+
+/* 의학용어 전용: 컨텍스트 안의 target 한 곳만 강조 */
+function buildHighlightCtx(ctxText, target){
+  const i = ctxText.indexOf(target);
+  if (i < 0) return escapeHtml(ctxText.slice(0, 120));
+  const pre  = ctxText.slice(Math.max(0, i-50), i);
+  const post = ctxText.slice(i + target.length, i + target.length + 50);
+  return `${escapeHtml(pre)}<span class="hl">${escapeHtml(target)}</span>${escapeHtml(post)}`;
 }
 
 /* 한 건 적용: 해당 블록의 text node 에서 orig 의 첫 발생을 sugg 로 교체.
@@ -3726,8 +3326,8 @@ function renderProofFindings(){
       <td><span class="proof-rule ${f.cat}">${escapeHtml(f.label)}</span>
         <div style="font-size:10px;color:var(--meta);margin-top:3px">블록 #${f.blockIdx + 1}</div></td>
       <td>
-        <div class="proof-ctx">${buildCtxHtml(f.ctxText, f.orig, f.sugg)}</div>
-        <div style="font-size:10.5px;color:var(--mute);margin-top:4px">${escapeHtml(f.reason || '')}</div>
+        ${buildCtxHtml(f.ctxText, f.orig, f.sugg)}
+        <div style="font-size:11px;color:var(--mute);margin-top:8px">${escapeHtml(f.reason || '')}</div>
       </td>
       <td>
         <div class="proof-row-actions" style="justify-content:center">
@@ -3908,32 +3508,38 @@ function renderMedFindings(){
   const catLabel = { term:'용어', abbr:'약어', edition:'판·개정', unit:'단위' };
   tbody.innerHTML = filtered.map((f) => {
     const realIdx = _medFindings.indexOf(f);
-    const ctx = buildCtxHtml(f.ctxText, f.term, f.term);
+    const ctx = buildHighlightCtx(f.ctxText, f.term);
     const kmleUrl = KMLE_BASE + encodeURIComponent(f.term);
     const disabled = f.state === 'applied';
-    return `<tr class="${f.state === 'applied' ? 'applied' : ''}">
+    const stateTag = f.state === 'applied'
+      ? `<div style="margin-top:6px;font-size:11px;color:#1E5A1E;font-weight:700">✓ 적용됨</div>`
+      : f.state === 'skipped'
+      ? `<div style="margin-top:6px;font-size:11px;color:var(--meta);font-weight:700">보류</div>`
+      : '';
+    return `<tr class="${f.state === 'applied' ? 'applied' : f.state === 'skipped' ? 'rejected' : ''}">
       <td>${realIdx + 1}</td>
       <td><span class="proof-rule med">${catLabel[f.cat] || f.cat}</span>
-        <div style="font-size:10px;color:var(--meta);margin-top:3px">블록 #${f.blockIdx + 1}</div></td>
+        <div style="font-size:10px;color:var(--meta);margin-top:4px">블록 #${f.blockIdx + 1}</div></td>
       <td>
-        <div style="font-weight:600;margin-bottom:4px">${escapeHtml(f.term)}</div>
-        <div class="proof-ctx">${ctx}</div>
-        <div style="font-size:10.5px;color:var(--mute);margin-top:4px">${escapeHtml(f.reason || '')}</div>
+        <span class="med-term-chip">${escapeHtml(f.term)}</span>
+        <div class="med-ctx">${ctx}</div>
+        <div style="font-size:11px;color:var(--mute);margin-top:6px">${escapeHtml(f.reason || '')}</div>
+        ${stateTag}
       </td>
       <td>
         <a class="med-link" href="${kmleUrl}" target="_blank" rel="noopener">
-          KMLE 검색<i class="ph ph-arrow-square-out"></i>
+          KMLE 검색 <i class="ph ph-arrow-square-out"></i>
         </a>
       </td>
       <td>
-        <div class="proof-row-actions" style="justify-content:center;flex-direction:column;gap:3px">
-          <input type="text" class="med-replace" data-idx="${realIdx}" placeholder="대체어(선택)"
-            value="${escapeHtml(f.replace || '')}"
-            style="padding:3px 6px;font-size:11px;border:1px solid var(--line);border-radius:3px;width:120px"
-            ${disabled ? 'disabled' : ''}>
-          <div style="display:flex;gap:3px">
-            <button class="accept" data-idx="${realIdx}" data-action="replace" ${disabled ? 'disabled' : ''}>적용</button>
-            <button class="reject" data-idx="${realIdx}" data-action="skip" ${disabled ? 'disabled' : ''}>보류</button>
+        <div class="med-edit-cell">
+          <input type="text" class="med-replace" data-idx="${realIdx}" placeholder="대체어 입력"
+            value="${escapeHtml(f.replace || '')}" ${disabled ? 'disabled' : ''}>
+          <div style="display:flex;gap:6px">
+            <button class="accept" data-idx="${realIdx}" data-action="replace" ${disabled ? 'disabled' : ''}
+              style="flex:1">적용</button>
+            <button class="reject" data-idx="${realIdx}" data-action="skip" ${disabled ? 'disabled' : ''}
+              style="flex:1">보류</button>
           </div>
         </div>
       </td>
@@ -4970,7 +4576,7 @@ if (_btnApplyPreset){
    File upload / drag-drop
    ============================================================ */
 const fileInput = $('#file-input');
-$('#upload-zone').addEventListener('click', ()=>fileInput.click());
+$('#btn-upload').addEventListener('click', ()=>fileInput.click());
 fileInput.addEventListener('change', async e=>{
   const files = Array.from(e.target.files || []);
   for (const f of files){ await handleUploadedFile(f); }
