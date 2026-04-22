@@ -2137,9 +2137,15 @@ function normalizePastedHtml(html){
       n.removeAttribute('class');
     }
   });
-  // Collapse totally-empty paragraphs that HWP uses for spacing
+  // Collapse totally-empty paragraphs that HWP / MS Word / Cocoa clipboards use
+  // for paragraph-spacing. &nbsp;(U+00A0) 또는 whitespace 만 남은 p 도 "빈 단락"으로
+  // 간주하여 제거. MS Word Mac 은 제목 아래 여백을 <p>&nbsp;</p> 로 넘기고,
+  // HWPX 도 유사 패턴이 있어 H3 아래 큰 공백의 주 원인.
+  // 예외: <img>/<br>/<hr>/<table> 을 품은 p 는 보존(미디어·하드브레이크 단락).
   tmp.querySelectorAll('p').forEach(p=>{
-    if (!p.textContent.trim() && !p.querySelector('img,br,hr,table')) p.remove();
+    if (p.querySelector('img,br,hr,table')) return;
+    const t = (p.textContent || '').replace(/\u00A0/g, '').trim();
+    if (!t) p.remove();
   });
   // Hoist single-child div wrappers up to paragraphs
   tmp.querySelectorAll('div').forEach(d=>{

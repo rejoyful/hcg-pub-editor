@@ -187,6 +187,23 @@ async function main(){
     bodyFigOverclass.length === 0,
     bodyFigOverclass.length ? `후보: ${bodyFigOverclass.slice(0,3).join(' / ')}` : '');
 
+  /* ── [이슈 1] &nbsp; / whitespace-only <p> 도 "빈 단락"으로 제거 ── */
+  console.log('\n─── [이슈 1] &nbsp; / whitespace-only 빈 p 제거 ───');
+  const nbspCases = [
+    { label: 'NBSP only',         html: '<p>A</p><p>&nbsp;</p><p>B</p>',                 expect: 2 },
+    { label: 'multiple NBSP',     html: '<p>A</p><p>\u00A0\u00A0\u00A0</p><p>B</p>',    expect: 2 },
+    { label: 'NBSP + space',      html: '<p>A</p><p>\u00A0 \u00A0</p><p>B</p>',         expect: 2 },
+    { label: 'NBSP inside span',  html: '<p>A</p><p><span>&nbsp;</span></p><p>B</p>',   expect: 2 },
+    { label: 'NBSP in p with br', html: '<p>A</p><p>&nbsp;<br></p><p>B</p>',            expect: 3 /* br 포함이면 보존 */ },
+    { label: 'non-breaking text', html: '<p>A</p><p>\u00A0가\u00A0</p><p>B</p>',        expect: 3 /* 실제 글자 포함 */ },
+  ];
+  for (const c of nbspCases){
+    const out = helpers.normalizePastedHtml(c.html);
+    const dom = new JSDOM('<!doctype html><html><body><div>' + out + '</div></body></html>');
+    const n = dom.window.document.querySelectorAll('p').length;
+    check(`${c.label}: <p>${c.expect}개`, n === c.expect, `actual=${n}, html=${out}`);
+  }
+
   /* ── [커밋 2] 파서 출력이 공통 규칙으로 통일되는지 ── */
   console.log('\n─── [커밋 2] 파서 공통 규칙 통일 ───');
   const src = fs.readFileSync(INDEX_HTML, 'utf8');
@@ -207,7 +224,15 @@ async function main(){
   /* ── 통합: Cocoa paste full pipeline ── */
   console.log('\n─── [통합] Cocoa paste → normalize → applyKeywordRulesToHtml ───');
   const cocoa = wrapAsCocoaPaste(raw);
+  /* normalize 전후 <p> 개수 비교 — normalizePastedHtml 의 빈 p 제거가
+     실제로 몇 단락을 걷어내는지 진단. */
+  const domBefore = new JSDOM('<!doctype html><html><body><div>' + cocoa + '</div></body></html>');
+  const pCountBefore = domBefore.window.document.querySelectorAll('p').length;
   const norm = helpers.normalizePastedHtml(cocoa);
+  const domAfter = new JSDOM('<!doctype html><html><body><div>' + norm + '</div></body></html>');
+  const pCountAfter = domAfter.window.document.querySelectorAll('p').length;
+  console.log(`  <p> before normalize: ${pCountBefore}`);
+  console.log(`  <p> after  normalize: ${pCountAfter}  (제거된 빈 p: ${pCountBefore - pCountAfter})`);
   const final = helpers.applyKeywordRulesToHtml(norm);
   const tally = analyzeFinalHtml(final, helpers);
 
