@@ -5573,16 +5573,22 @@ const CLF_BLUE   = '#DDEBF7';   /* "이미지 첨부" 라벨 */
 function classifyByKeyword(raw){
   const t = (raw || '').replace(/\s+/g,' ').trim();
   if (!t) return null;
+
+  /* FIG: 도판 캡션 — 140자 가드보다 먼저 판정하여 긴 캡션(최대 300자)도 인정.
+     fig 정규식은 블록 시작을 "그림/표/Figure..." + 숫자로 강하게 앵커하므로
+     본문 문장이 우연히 매칭될 가능성이 매우 낮다. 실제 책 캡션은 서브라벨
+     (A:/B:/C:)과 긴 설명이 붙어 100자를 초과하는 경우가 다수(화타 원고 그림
+     9/12/15). 이전 순서: 140자 가드 → H1 → fig(100자). 현재: fig(300자)만
+     선행, 나머지 규칙은 140자 가드 아래에서 종전과 동일. */
+  if (t.length <= 300 && /^[<\[\(〈【]?\s*(그림|표|사진|도표|도|Figure|Fig\.?|Table|Photo)\s*[0-9IVXLCMⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/i.test(t)){
+    return 'fig';
+  }
+
   if (t.length > 140) return null; // 긴 블록은 본문으로 유지
 
   /* H1: 주요 섹션 이름 (정확 일치 또는 그 단어로 시작) */
   if (H1_EXACT.has(t)) return 'h1';
   if (H1_PREFIX.some(w => t === w || t.startsWith(w + ' ') || t.startsWith(w + ':') || t.startsWith(w + '—') || t.startsWith(w + '-'))) return 'h1';
-
-  /* FIG: 도판 캡션 — heading이 아닌 본문 굵게. 위에 라벨 자동 추가 */
-  if (t.length <= 100 && /^[<\[\(〈【]?\s*(그림|표|사진|도표|도|Figure|Fig\.?|Table|Photo)\s*[0-9IVXLCMⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/i.test(t)){
-    return 'fig';
-  }
 
   if (t.length <= 100){
     /* H2: 숫자 접두 */
