@@ -2127,6 +2127,41 @@ function normalizePastedHtml(html){
       d.replaceWith(p);
     }
   });
+  // Split paragraphs at <br> so each logical line becomes its own block.
+  // 브라우저 clipboard는 plain text 다줄을 `<p>A<br>B<br>C</p>` 형태로 주는
+  // 경우가 흔한데, 그 구조는 classifyByKeyword(단일 텍스트 덩어리)에서 매칭 실패한다.
+  // 블록/미디어 자식(img/table/list/hr/figure/blockquote/pre)이 섞여 있으면
+  // 레이아웃 보존을 위해 건드리지 않는다.
+  //
+  // [알려진 동작 변화]
+  // 시 형식을 복붙하면 각 행이 별도 단락으로 분리됩니다.
+  // 의도적으로 한 단락 안 여러 줄을 유지하려면 에디터 내에서 Shift+Enter로 구성하세요.
+  // (설계상 의도된 동작)
+  tmp.querySelectorAll('p, div').forEach(block => {
+    const directBrs = Array.from(block.children).filter(c => c.tagName === 'BR');
+    if (directBrs.length === 0) return;
+    if (block.querySelector('img, table, ul, ol, li, hr, figure, blockquote, pre')) return;
+    /* childNodes를 <br> 경계로 segment 배열로 분할 */
+    const segments = [[]];
+    block.childNodes.forEach(n => {
+      if (n.nodeType === 1 && n.tagName === 'BR') segments.push([]);
+      else segments[segments.length - 1].push(n);
+    });
+    /* NBSP 포함 공백만 있는 조각은 버림 */
+    const clean = segments.filter(seg => {
+      const t = seg.map(x => x.textContent || '').join('').replace(/[\s\u00A0]+/g, '');
+      return t.length > 0;
+    });
+    /* 유효 조각이 2개 이상일 때만 분할 적용 — 시·주소 등 의도된 단일 br 보존 */
+    if (clean.length < 2) return;
+    const frag = document.createDocumentFragment();
+    clean.forEach(seg => {
+      const p = document.createElement('p');
+      seg.forEach(n => p.appendChild(n));
+      frag.appendChild(p);
+    });
+    block.replaceWith(frag);
+  });
   return tmp.innerHTML;
 }
 
@@ -5586,6 +5621,30 @@ function isEmptyPara(node){
    단락들은 bulletList 내부 listItem으로 묶는다. 이 구간에서는 classifyByKeyword
    결과(예: '서문'→h1)를 무시하여, 목차 항목이 헤딩으로 승격되지 않게 한다. */
 const TOC_ENTRY_TEXTS = new Set(['목차','차례','Contents','contents','CONTENTS','Table of Contents']);
+/* paragraph 내부에 hardBreak가 있고 이미지 등 block-inline이 섞여있지 않으면
+   hardBreak 경계로 여러 paragraph로 분할한다. HTML 단계의 <br> 분할과 대칭 —
+   업로드·setContent 경로에서도 분류 규칙이 줄 단위로 적용되도록 보장.
+   - 대상: { type:'paragraph', content:[text, hardBreak, text, ...] }
+   - 금지: content에 text/hardBreak 외 타입(예: image) 섞인 경우
+   - 유효 세그먼트 < 2개면 원본 유지(의도된 단일 hardBreak 보존). */
+function splitParagraphOnHardBreak(node){
+  if (!node || node.type !== 'paragraph') return [node];
+  const content = Array.isArray(node.content) ? node.content : [];
+  if (!content.some(c => c && c.type === 'hardBreak')) return [node];
+  if (content.some(c => c && c.type !== 'text' && c.type !== 'hardBreak')) return [node];
+  const segments = [[]];
+  content.forEach(c => {
+    if (c && c.type === 'hardBreak') segments.push([]);
+    else segments[segments.length - 1].push(c);
+  });
+  const clean = segments.filter(seg => {
+    const t = seg.map(x => (x && typeof x.text === 'string') ? x.text : '').join('').replace(/[\s\u00A0]+/g, '');
+    return t.length > 0;
+  });
+  if (clean.length < 2) return [node];
+  return clean.map(seg => ({ type:'paragraph', content: seg }));
+}
+
 function applyKeywordRules(docJson){
   if (!docJson || !Array.isArray(docJson.content)) return docJson;
   const emptyPara = () => ({ type:'paragraph', content:[] });
@@ -5597,6 +5656,12 @@ function applyKeywordRules(docJson){
       { type:'highlight', attrs:{ color: CLF_BLUE }},
     ]}],
   });
+  /* 메인 루프 진입 전: paragraph 안의 hardBreak를 경계로 paragraph 배열을 펼친다. */
+  const expanded = [];
+  for (const n of docJson.content){
+    const parts = splitParagraphOnHardBreak(n);
+    for (const p of parts) expanded.push(p);
+  }
   const out = [];
   let inTocRegion = false;
   let tocItems = []; /* 수집된 listItem들 */
@@ -5608,8 +5673,8 @@ function applyKeywordRules(docJson){
     inTocRegion = false;
   };
 
-  for (let i = 0; i < docJson.content.length; i++){
-    const node = docJson.content[i];
+  for (let i = 0; i < expanded.length; i++){
+    const node = expanded[i];
     if (!node || typeof node !== 'object'){ flushToc(); out.push(node); continue; }
     const type = node.type;
 
