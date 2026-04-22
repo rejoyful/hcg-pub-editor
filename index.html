@@ -454,9 +454,10 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
   text-indent:0;
   margin:0 0 10pt;
   line-height:1.7;
-  /* justify 가 아닌 자연스러운 왼쪽 정렬 — word-break:keep-all 와 결합 시
-     한국어 어절 사이가 비정상적으로 벌어지는 현상을 피한다. */
-  text-align:left;
+  /* 실제 책과 같은 양쪽 정렬. word-break 기본값(normal) 로 두면 한글은
+     문자 단위로 자연스럽게 개행되고, 영어 단어는 공백/하이픈에서 개행된다. */
+  text-align:justify;
+  overflow-wrap:break-word;
 }
 .front-matter.author p + p,
 .front-matter.preface p + p,
@@ -834,9 +835,10 @@ body.show-printer-marks .page-marks{ display:block; }
 .page-content h2{font-size:16pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4;break-after:avoid}
 .page-content h3{font-size:13pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4;break-after:avoid}
 .page-content{letter-spacing:var(--body-tracking)}
-/* text-align: 한글 본문은 word-break:keep-all 와 함께 justify 하면 어절 사이가
-   크게 벌어져 보이므로 자연스러운 왼쪽 정렬을 기본으로 한다. */
-.page-content p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:left;word-break:keep-all;overflow-wrap:break-word;text-indent:var(--body-indent);orphans:2;widows:2}
+/* 본문 양쪽 정렬(justify) — 실제 책과 같이 좌우 끝 맞춤. word-break 을 기본값(normal)
+   으로 두어 한글은 문자 단위로 개행되어 어절 간 공백이 비정상적으로 벌어지지 않게 한다.
+   word-break:keep-all 과 justify 를 함께 쓰면 어절 공백에만 spacing 이 몰려 커진다. */
+.page-content p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:justify;overflow-wrap:break-word;text-indent:var(--body-indent);orphans:2;widows:2}
 .page-content p + p{margin-top:0}
 .page-content h1+p,.page-content h2+p,.page-content h3+p{text-indent:0}
 .page-content ul,.page-content ol{margin:0 0 10pt;padding-left:18pt}
@@ -877,7 +879,7 @@ body.show-printer-marks .page-marks{ display:block; }
 .ProseMirror h2{font-size:16pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4}
 .ProseMirror h3{font-size:13pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4}
 .ProseMirror{letter-spacing:var(--body-tracking)}
-.ProseMirror p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:left;word-break:keep-all;overflow-wrap:break-word;text-indent:var(--body-indent)}
+.ProseMirror p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:justify;overflow-wrap:break-word;text-indent:var(--body-indent)}
 /* Tiptap Highlight & Color */
 .ProseMirror mark,.page-content mark{background:#FFF59D;padding:0 2px;border-radius:2px}
 /* 자동분류가 부여하는 회색 callout 음영 — 문단 전체를 회색 배경으로 보이게 */
@@ -4675,7 +4677,7 @@ function buildStandaloneHtml(){
 @page{size:${page.w} ${page.h};margin:20mm}
 body{font-family:${family};font-size:${size};line-height:${lead};color:#1A1A1A;max-width:${page.w};margin:40px auto;padding:20mm}
 h1{font-size:22pt;margin:0 0 12pt}h2{font-size:16pt;margin:18pt 0 8pt}h3{font-size:13pt;margin:14pt 0 6pt}
-p{margin:0 0 8pt;text-align:left;word-break:keep-all}
+p{margin:0 0 8pt;text-align:justify;overflow-wrap:break-word}
 img{max-width:100%;height:auto}img.float-left{float:left;margin:0 12pt 6pt 0;max-width:50%}
 img.float-right{float:right;margin:0 0 6pt 12pt;max-width:50%}img.center{display:block;margin:10pt auto}
 blockquote{border-left:3px solid #ccc;padding:0 12pt;color:#666;font-style:italic}
@@ -4980,7 +4982,7 @@ function openFloatPopup(){
   .fw-edit h1:first-child{margin-top:0}
   .fw-edit h2{font-size:16pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4}
   .fw-edit h3{font-size:13pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4}
-  .fw-edit p{margin:0 0 1em;text-align:left;word-break:keep-all;text-indent:1em}
+  .fw-edit p{margin:0 0 1em;text-align:justify;overflow-wrap:break-word;text-indent:1em}
   .fw-edit h1+p,.fw-edit h2+p,.fw-edit h3+p{text-indent:0}
   .fw-edit mark{background:#FFF59D;padding:0 2px;border-radius:2px}
   .fw-edit img{max-width:100%;border-radius:2pt;vertical-align:middle;cursor:pointer}
