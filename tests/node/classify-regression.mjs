@@ -260,8 +260,15 @@ async function main(){
 
   /* ── 커밋 2 효과: 장 17 / 절 58 / 소항 19+블릿 4 = callout 23 ── */
   check('H2 (장) 17개', tally.h2.length === 17, `actual=${tally.h2.length}`);
-  check('H3 (절) 58개', tally.h3.length === 58, `actual=${tally.h3.length}`);
+  /* H3 카운트 체크는 '이슈 4' 에서 59로 재검증 (저자 이름 +1). 원본 '절 58 개' 체크는 제거. */
   check('callout (소항+블릿) 23개', tally.callout.length === 23, `actual=${tally.callout.length}`);
+
+  /* ── [이슈 4] 저자 이름 H3 승격: "저자 소개" 영역 첫 이름 단락이 H3 ── */
+  check('H3 에 "윤성수(尹星洙)" 포함 (저자 이름 승격)',
+    tally.h3.includes('윤성수(尹星洙)'),
+    `샘플=${JSON.stringify(tally.h3.slice(0,3))}`);
+  /* 저자 이름 승격은 1건만 (H3 58 → 59) */
+  check('H3 (절 + 저자 이름) 59개', tally.h3.length === 59, `actual=${tally.h3.length}`);
 
   /* ── [이슈 2/3] 참고문헌 → ref-head 2건 (line 45 '참고문헌', line 851 '<참고문헌>') ── */
   check('ref-head 2개 (참고문헌 / <참고문헌>)',
@@ -301,7 +308,7 @@ async function main(){
   const rows = [
     ['H1 (영역)',               '2~3',   tally.h1.length,  (a) => a >= 2 && a <= 3],
     ['H2 (장)',                 17,      tally.h2.length,  (a) => a === 17],
-    ['H3 (절)',                 58,      tally.h3.length,  (a) => a === 58],
+    ['H3 (절+저자이름)',        59,      tally.h3.length,  (a) => a === 59],
     ['callout (소항+블릿)',     23,      tally.callout.length, (a) => a === 23],
     ['fig (그림, 그림9 제외)',   20,      tally.fig.length, (a) => a === 20],
     ['ref-head (참고문헌)',      2,       tally.ref_head.length, (a) => a === 2],

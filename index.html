@@ -5706,6 +5706,17 @@ function applyKeywordRules(docJson){
   const out = [];
   let inTocRegion = false;
   let tocItems = []; /* 수집된 listItem들 */
+  /* "저자 소개" 영역: 저자 이름(짧은 고유명사) 을 H3 으로 승격. HTML 버전과 동형. */
+  let inAuthorRegion = false;
+  let authorPromoted = false;
+  const isAuthorRegionHead = (txt) =>
+    /^(저자\s*소개|저자소개|역자\s*소개|역자소개)/.test(txt);
+  const isAuthorName = (txt) => {
+    if (!txt || txt.length > 20) return false;
+    if (/^[가-힣]{2,5}(\s*\([가-힣\u4E00-\u9FFF\s·,]+\))?$/.test(txt)) return true;
+    if (/^[A-Z][a-zA-Z'.-]+(\s[A-Z][a-zA-Z'.-]+){0,2}$/.test(txt)) return true;
+    return false;
+  };
   const flushToc = () => {
     if (tocItems.length > 0){
       out.push({ type:'bulletList', content: tocItems });
@@ -5776,12 +5787,30 @@ function applyKeywordRules(docJson){
       }
     }
 
-    if (!tag){ out.push(node); continue; }
+    if (!tag){
+      /* 저자 소개 영역 내부의 짧은 이름 단락 → H3 승격 */
+      if (inAuthorRegion && !authorPromoted && node.type === 'paragraph' && isAuthorName(text.trim())){
+        out.push({ type:'heading', attrs:{ level:3 }, content: inline });
+        authorPromoted = true;
+        continue;
+      }
+      out.push(node);
+      continue;
+    }
 
     if (tag === 'h1' || tag === 'h2' || tag === 'h3'){
       const level = tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3;
       out.push({ type:'heading', attrs:{ level }, content: inline });
-      /* H1이 새로 나타나면 목차 가능성은 사라진 상태 */
+      /* H1이 새로 나타나면 목차 가능성은 사라진 상태.
+         저자 소개 영역 enter/exit: H1 텍스트 기준. */
+      if (level === 1){
+        if (isAuthorRegionHead(text.trim())){
+          inAuthorRegion = true;
+          authorPromoted = false;
+        } else {
+          inAuthorRegion = false;
+        }
+      }
     }
     else if (tag === 'ref-head'){
       /* 참고문헌 — 위에 빈 단락 1개 + 본문 굵게. HTML 버전과 동형. */
@@ -5901,6 +5930,49 @@ function applyKeywordRulesToHtml(html){
       node.replaceWith(frag);
     }
   });
+
+  /* Pass 2 — "저자 소개" 영역 안의 짧은 이름 단락을 H3 으로 승격.
+     classifyByKeyword 는 영역 컨텍스트를 모르므로 이 단계에서 별도 처리.
+     규칙 (보수적):
+       - 앞의 H1 이 /^저자\s*소개|^저자소개|^역자\s*소개|^역자소개/ 이면 영역 진입
+       - 다음 H1 을 만나면 영역 종료
+       - 영역 내부 P 중:
+         · 한글 이름 (2~5자) + 선택적 괄호 (한자/한글/점/가운뎃점 허용)
+         · 또는 영문 Title Case 1~3 단어
+         · 전체 길이 ≤ 20
+       - 이 조건을 만족하는 첫 P 만 H3 으로 승격
+         (저자가 1명인 전형적 케이스. 다명 저자는 이후 별도 규칙 필요). */
+  const isAuthorRegionHead = (txt) =>
+    /^(저자\s*소개|저자소개|역자\s*소개|역자소개)/.test(txt);
+  const isAuthorName = (txt) => {
+    if (!txt || txt.length > 20) return false;
+    // 한글 이름 + 선택적 괄호 (한자·한글·공백·점·가운뎃점 허용)
+    if (/^[가-힣]{2,5}(\s*\([가-힣\u4E00-\u9FFF\s·,]+\))?$/.test(txt)) return true;
+    // 영문 Title Case 이름 (1~3 단어)
+    if (/^[A-Z][a-zA-Z'.-]+(\s[A-Z][a-zA-Z'.-]+){0,2}$/.test(txt)) return true;
+    return false;
+  };
+  let inAuthorRegion = false;
+  let authorPromoted = false;
+  const after = Array.from(tmp.children);
+  for (const n of after){
+    const tg = n.tagName;
+    const tx = (n.textContent || '').trim();
+    if (tg === 'H1'){
+      if (isAuthorRegionHead(tx)){ inAuthorRegion = true; authorPromoted = false; }
+      else { inAuthorRegion = false; }
+      continue;
+    }
+    if (!inAuthorRegion) continue;
+    if (tg !== 'P') continue;
+    if (authorPromoted) continue;
+    if (n.querySelector('img,table,strong,em,mark')) continue;
+    if (!isAuthorName(tx)) continue;
+    const h3 = document.createElement('h3');
+    while (n.firstChild) h3.appendChild(n.firstChild);
+    n.replaceWith(h3);
+    authorPromoted = true;
+  }
   return tmp.innerHTML;
 }
 
