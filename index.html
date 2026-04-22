@@ -1646,7 +1646,26 @@ import TextAlign from 'https://esm.sh/@tiptap/extension-text-align@2.6.6';
 import TextStyle from 'https://esm.sh/@tiptap/extension-text-style@2.6.6';
 import { Color } from 'https://esm.sh/@tiptap/extension-color@2.6.6';
 import Highlight from 'https://esm.sh/@tiptap/extension-highlight@2.6.6';
+import Paragraph from 'https://esm.sh/@tiptap/extension-paragraph@2.6.6';
 import JSZip from 'https://esm.sh/jszip@3.10.1';
+
+/* Paragraph 확장 — 빈 paragraph 의 data-section-break 속성을 schema
+   정식 attribute 로 등록해 setContent → getJSON → setContent 왕복에도
+   보존되도록 한다. 영역 경계 힌트(원고의 여러 빈 줄)를 남기는 용도. */
+const PubParagraph = Paragraph.extend({
+  addAttributes(){
+    return {
+      ...(this.parent?.() || {}),
+      sectionBreak: {
+        default: null,
+        parseHTML: el => el.getAttribute('data-section-break') || null,
+        renderHTML: attrs => attrs.sectionBreak
+          ? { 'data-section-break': String(attrs.sectionBreak) }
+          : {},
+      },
+    };
+  },
+});
 /* pdfjs-dist — lazy-loaded on first PDF upload (see importPdfFile) */
 let __pdfjsLoader = null;
 async function loadPdfJs(){
@@ -2137,10 +2156,37 @@ function normalizePastedHtml(html){
       n.removeAttribute('class');
     }
   });
-  // Collapse totally-empty paragraphs that HWP uses for spacing
-  tmp.querySelectorAll('p').forEach(p=>{
-    if (!p.textContent.trim() && !p.querySelector('img,br,hr,table')) p.remove();
-  });
+  // Collapse totally-empty paragraphs, but preserve section-break hints.
+  //   - 연속 2개 이상 빈 p → 첫 개만 <p data-section-break="1"></p>로 유지,
+  //     나머지 제거. 이후 영역 감지(classifyPageType 등)가 원고의 실제
+  //     빈 줄 위치(저자 소개→목차, 목차→본문 같은 영역 경계)를 재구성할 수
+  //     있도록 신호를 남긴다.
+  //   - 단발 빈 p → 제거(기존 거동 유지).
+  //   - img/br/hr/table을 품은 p는 건드리지 않는다.
+  // 최상위 자식만 대상으로 한다. 중첩된 p의 정책은 기존 단순 제거 유지.
+  {
+    const isEmptyP = (el) => el && el.tagName === 'P'
+      && !el.textContent.trim()
+      && !el.querySelector('img,br,hr,table');
+    const tops = Array.from(tmp.children);
+    for (let i = 0; i < tops.length; ){
+      if (!isEmptyP(tops[i])){ i++; continue; }
+      let j = i;
+      while (j < tops.length && isEmptyP(tops[j])) j++;
+      const run = j - i;
+      if (run >= 2){
+        tops[i].setAttribute('data-section-break', '1');
+        for (let k = i + 1; k < j; k++) tops[k].remove();
+      } else {
+        tops[i].remove();
+      }
+      i = j;
+    }
+    // 중첩된(최상위 아닌) 빈 p는 기존과 같이 단순 제거
+    tmp.querySelectorAll(':scope p p').forEach(p=>{
+      if (!p.textContent.trim() && !p.querySelector('img,br,hr,table')) p.remove();
+    });
+  }
   // Hoist single-child div wrappers up to paragraphs
   tmp.querySelectorAll('div').forEach(d=>{
     if (d.children.length === 0 && d.textContent.trim()){
@@ -2231,7 +2277,9 @@ const editor = window.editor = new Editor({
     StarterKit.configure({
       heading: { levels: [1,2,3] },
       codeBlock: false,
+      paragraph: false, // PubParagraph로 교체(data-section-break 속성 보존)
     }),
+    PubParagraph,
     Underline,
     Image.configure({ inline: false, allowBase64: true, HTMLAttributes: { class: 'center' }}),
     Table.configure({ resizable: true }),
