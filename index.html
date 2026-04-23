@@ -1767,6 +1767,51 @@ ul.toc-list > li::before{
       <div class="ai-detail" id="ai-progress-detail">대기 중…</div>
     </div>
     <div class="ai-diff-warn" id="ai-diff-warn" style="display:none"></div>
+
+    <!-- ── 타이틀 영역 디자인 생성 (신규) ────────────────────────────
+         기존 키워드 분류는 "어떤 태그인지" 만 결정하지만, 여기서는 AI 가
+         본문의 톤·장르를 분석해 "타이틀 영역이 어떻게 보여야 하는지"
+         (폰트 스케일·자간·색·장식선·여백 등) CSS 디자인 토큰 JSON 을
+         생성한다. 적용 시 <style id="ai-title-design"> 로 주입되어
+         에디터·프리뷰·PDF 내보내기에 모두 반영. -->
+    <details class="ai-title-design-sec" style="margin-top:18px;border:1px solid var(--line);border-radius:6px;padding:10px 14px;background:#FAF8F3">
+      <summary style="font-weight:700;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px">
+        <i class="ph ph-crown-simple"></i> 타이틀 영역 디자인 생성 <span style="font-size:10.5px;color:var(--mute);font-weight:500">(v1 — 디자인 토큰)</span>
+      </summary>
+      <p style="font-size:11.5px;color:var(--mute);margin:8px 0;line-height:1.55">
+        본문의 톤·장르를 분석해 <b>제목(h1/h2/h3) 영역의 타이포·장식</b>을 자동 제안합니다.
+        결과는 CSS 디자인 토큰으로 <b>즉시 적용·취소</b> 가능하며, 본문 텍스트는 <b>수정되지 않습니다</b>.
+      </p>
+      <div class="ai-row" style="align-items:center">
+        <label>프로바이더</label>
+        <select id="aidesign-provider">
+          <option value="claude" selected>Anthropic Claude</option>
+          <option value="openai">OpenAI (ChatGPT)</option>
+          <option value="gemini">Google AI Studio (Gemini)</option>
+        </select>
+      </div>
+      <div class="ai-row">
+        <label>API 키</label>
+        <input type="password" id="aidesign-key" placeholder="선택한 프로바이더의 키를 붙여넣으세요" autocomplete="off">
+        <label class="check" style="margin-left:8px"><input type="checkbox" id="aidesign-save-key" checked> 저장</label>
+      </div>
+      <div class="ai-row">
+        <label>모델</label>
+        <input type="text" id="aidesign-model" placeholder="프로바이더 기본값 사용하려면 비워두세요">
+      </div>
+      <div class="ai-row ai-prompt-row">
+        <label>톤 힌트 <span style="color:var(--mute);font-weight:400">(선택)</span></label>
+        <textarea id="aidesign-hint" rows="2" placeholder="예: 고전 한방의학 교양서 · 따뜻한 세리프 톤 · 장식은 최소화"></textarea>
+      </div>
+      <div id="aidesign-preview" style="display:none;background:#fff;border:1px solid var(--line);border-radius:4px;padding:10px 12px;margin:8px 0;font-size:11.5px;line-height:1.6"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn" id="aidesign-generate" type="button"><i class="ph ph-magic-wand"></i> 디자인 생성</button>
+        <button class="btn" id="aidesign-revert" type="button" disabled><i class="ph ph-arrow-counter-clockwise"></i> 되돌리기</button>
+        <div style="flex:1"></div>
+        <span id="aidesign-status" style="font-size:11px;color:var(--mute);align-self:center"></span>
+      </div>
+    </details>
+
     <div class="foot">
       <button class="btn" id="ai-cancel">취소</button>
       <button class="btn primary" id="ai-apply">검증 실행</button>
@@ -7526,6 +7571,352 @@ function applyTagPatches(docJson, response, options){
 
   return { type: 'doc', content: [...prefix, ...body] };
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   AI 프로바이더 추상화 — Claude / OpenAI / Gemini
+   ═══════════════════════════════════════════════════════════════
+   각 프로바이더의 완성 엔드포인트와 요청/응답 형태가 다르므로 단일
+   `callAIProvider` 진입점으로 감싼다. JSON 응답 전용이며, 타이틀 디자인
+   생성처럼 "시스템 프롬프트 + 사용자 프롬프트 → JSON" 패턴을 공유하는
+   모든 기능에서 재사용 가능하도록 한다.
+
+   반환: parsed JSON object.  실패 시 throw.
+
+   주의: 브라우저 직접 호출 경로로, 일부 프로바이더는 CORS 제한이 있다:
+   - Anthropic: `anthropic-dangerous-direct-browser-access: true` 로 허용
+   - OpenAI:    기본 CORS 허용 (api.openai.com)
+   - Google:    기본 CORS 허용 (generativelanguage.googleapis.com) — 쿼리스트링 키
+   ═══════════════════════════════════════════════════════════════ */
+const AI_PROVIDERS = {
+  claude: {
+    label: 'Anthropic Claude',
+    keyStoreName: 'hcg.ai.key.claude',
+    defaultModel: 'claude-sonnet-4-5',
+    endpoint: 'https://api.anthropic.com/v1/messages',
+  },
+  openai: {
+    label: 'OpenAI (ChatGPT)',
+    keyStoreName: 'hcg.ai.key.openai',
+    defaultModel: 'gpt-4o-mini',
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+  },
+  gemini: {
+    label: 'Google AI Studio (Gemini)',
+    keyStoreName: 'hcg.ai.key.gemini',
+    defaultModel: 'gemini-2.0-flash',
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
+  },
+};
+
+async function callAIProvider({ providerId, apiKey, model, system, user, maxTokens=2000 }){
+  const prov = AI_PROVIDERS[providerId];
+  if (!prov) throw new Error(`Unknown provider: ${providerId}`);
+  if (!apiKey) throw new Error(`${prov.label} API 키가 필요합니다.`);
+  const mdl = (model && model.trim()) || prov.defaultModel;
+
+  if (providerId === 'claude'){
+    const r = await fetch(prov.endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: mdl, max_tokens: maxTokens, temperature: 0,
+        system, messages: [{ role:'user', content: user }],
+      }),
+    });
+    if (!r.ok){
+      const t = await r.text().catch(()=>''); throw new Error(`Claude ${r.status}: ${t.slice(0,200)}`);
+    }
+    const j = await r.json();
+    const text = (j?.content || []).map(b => b?.text || '').join('').trim();
+    return _parseJsonFromLLM(text);
+  }
+
+  if (providerId === 'openai'){
+    const r = await fetch(prov.endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: mdl,
+        temperature: 0,
+        max_tokens: maxTokens,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user',   content: user },
+        ],
+      }),
+    });
+    if (!r.ok){
+      const t = await r.text().catch(()=>''); throw new Error(`OpenAI ${r.status}: ${t.slice(0,200)}`);
+    }
+    const j = await r.json();
+    const text = (j?.choices?.[0]?.message?.content || '').trim();
+    return _parseJsonFromLLM(text);
+  }
+
+  if (providerId === 'gemini'){
+    const url = `${prov.endpoint}/${encodeURIComponent(mdl)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig: {
+          temperature: 0,
+          maxOutputTokens: maxTokens,
+          responseMimeType: 'application/json',
+        },
+      }),
+    });
+    if (!r.ok){
+      const t = await r.text().catch(()=>''); throw new Error(`Gemini ${r.status}: ${t.slice(0,200)}`);
+    }
+    const j = await r.json();
+    const text = (j?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+    return _parseJsonFromLLM(text);
+  }
+
+  throw new Error(`Provider ${providerId} 호출 경로가 구현되지 않았습니다.`);
+}
+
+function _parseJsonFromLLM(text){
+  if (!text) throw new Error('AI 응답이 비어 있습니다.');
+  /* 일부 프로바이더는 ```json ... ``` 래핑을 섞어 보내므로 방어적으로 추출 */
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const raw = fenced ? fenced[1].trim() : text.trim();
+  /* 앞뒤에 제일 큰 중괄호 쌍만 남기기 */
+  const start = raw.indexOf('{'), end = raw.lastIndexOf('}');
+  const core = (start >= 0 && end > start) ? raw.slice(start, end + 1) : raw;
+  try { return JSON.parse(core); }
+  catch(e){ throw new Error('AI 응답 JSON 파싱 실패: ' + e.message); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   타이틀 영역 디자인 생성
+   ═══════════════════════════════════════════════════════════════
+   AI 가 본문 일부를 보고 톤·장르에 맞는 H1/H2/H3 스타일 디자인 토큰을
+   JSON 으로 반환. 결과는 <style id="ai-title-design"> 태그로 문서에
+   주입돼 에디터·프리뷰·PDF 전체에 일괄 반영된다.
+
+   스키마 (AI 가 반환해야 할 JSON 형태):
+   {
+     "mood": "역사·의학 교양 · 고전적 · 따뜻한 세리프",
+     "h1": {
+       "font_family": "'나눔명조', serif",
+       "font_size": "26pt", "font_weight": "300",
+       "letter_spacing": "-0.4px", "line_height": "1.3",
+       "color": "#1A1A1A", "text_transform": "none",
+       "text_align": "center",
+       "margin_top": "3.2em", "margin_bottom": "1.4em",
+       "border_top": "0.5pt solid #1A1A1A",
+       "border_bottom": "0.5pt solid #1A1A1A",
+       "padding_top": "0.8em", "padding_bottom": "0.8em",
+       "ornament_before": "", "ornament_after": ""
+     },
+     "h2": { ... 동일 구조 },
+     "h3": { ... 동일 구조 }
+   }
+   ═══════════════════════════════════════════════════════════════ */
+function collectBookSample(){
+  /* 에디터 JSON 에서 title / 첫 3~5개 단락 / 첫 H1·H2 을 추출 — 톤 판단 재료 */
+  const title = ($('#doc-title')?.value || '').trim();
+  const json = editor?.getJSON();
+  const top = Array.isArray(json?.content) ? json.content : [];
+  const out = [];
+  let pCount = 0, h1Count = 0, h2Count = 0;
+  for (const node of top){
+    if (pCount >= 5 && h1Count >= 1 && h2Count >= 2) break;
+    const txt = extractPlainText(node).trim();
+    if (!txt) continue;
+    if (node.type === 'heading'){
+      const lvl = node.attrs?.level || 1;
+      if (lvl === 1 && h1Count < 2){ out.push(`[H1] ${txt}`); h1Count++; }
+      else if (lvl === 2 && h2Count < 3){ out.push(`[H2] ${txt}`); h2Count++; }
+      else if (lvl === 3){ out.push(`[H3] ${txt.slice(0, 80)}`); }
+    } else if (node.type === 'paragraph' && pCount < 5 && txt.length > 30){
+      out.push(`[P]  ${txt.slice(0, 180)}`);
+      pCount++;
+    }
+  }
+  return { title, sample: out.join('\n').slice(0, 2500) };
+}
+
+function _titleDesignSystemPrompt(){
+  return [
+    '당신은 한국어 단행본의 **타이포그래피·조판 디자이너**입니다.',
+    '입력: 책 제목과 본문 샘플 몇 개 · 선택적 톤 힌트.',
+    '출력: 제목(H1/H2/H3) 영역의 CSS 디자인 토큰을 담은 **JSON 객체만** 반환.',
+    '',
+    '## 출력 JSON 스키마 (모두 필수)',
+    '{',
+    '  "mood": "한 줄 톤 설명",',
+    '  "h1": { "font_family":"…", "font_size":"NNpt", "font_weight":"100~900", "letter_spacing":"Npx",',
+    '          "line_height":"N", "color":"#RRGGBB", "text_align":"left|center|right",',
+    '          "margin_top":"Xem", "margin_bottom":"Xem",',
+    '          "border_top":"0|0.5pt solid #RRGGBB", "border_bottom":"0|0.5pt solid #RRGGBB",',
+    '          "padding_top":"Xem", "padding_bottom":"Xem",',
+    '          "ornament_before":"" , "ornament_after":"" },',
+    '  "h2": { 동일 구조 },',
+    '  "h3": { 동일 구조 }',
+    '}',
+    '',
+    '## 제약',
+    '- 값은 모두 CSS 에 유효한 문자열(px/pt/em/%, #rrggbb)로.',
+    '- 기본 font_family 후보: `\'나눔명조\', serif` / `\'나눔바른고딕\', sans-serif` / `\'Noto Serif KR\', serif` 중 하나.',
+    '- 색은 본문 가독성을 위해 #1A1A1A ~ #3A3A3A 범위 권장. 강한 색은 피할 것.',
+    '- ornament_before/after 는 빈 문자열 또는 단일 문자(예: "—", "§", "❦"). 과도한 장식 금지.',
+    '- 본문 텍스트는 절대 언급하거나 출력하지 말 것.',
+    '- 불필요한 설명·주석 없이 **JSON 만** 반환.',
+  ].join('\n');
+}
+
+function buildTitleDesignCss(design){
+  const t = (design && typeof design === 'object') ? design : {};
+  const safe = (v, d='') => (typeof v === 'string' ? v : d);
+  const rule = (sel, s) => {
+    if (!s || typeof s !== 'object') return '';
+    const lines = [];
+    const add = (prop, val) => { if (val) lines.push(`  ${prop}: ${val};`); };
+    add('font-family',    safe(s.font_family));
+    add('font-size',      safe(s.font_size));
+    add('font-weight',    safe(s.font_weight));
+    add('letter-spacing', safe(s.letter_spacing));
+    add('line-height',    safe(s.line_height));
+    add('color',          safe(s.color));
+    add('text-align',     safe(s.text_align));
+    add('margin-top',     safe(s.margin_top));
+    add('margin-bottom',  safe(s.margin_bottom));
+    add('border-top',     safe(s.border_top) === '0' ? 'none' : safe(s.border_top));
+    add('border-bottom',  safe(s.border_bottom) === '0' ? 'none' : safe(s.border_bottom));
+    add('padding-top',    safe(s.padding_top));
+    add('padding-bottom', safe(s.padding_bottom));
+    if (!lines.length) return '';
+    const before = safe(s.ornament_before) ? `${sel}::before{content:"${safe(s.ornament_before)} ";opacity:.6}` : '';
+    const after  = safe(s.ornament_after)  ? `${sel}::after{content:" ${safe(s.ornament_after)}";opacity:.6}`  : '';
+    return `${sel}{\n${lines.join('\n')}\n}\n${before}${after}`;
+  };
+  /* 에디터(.ProseMirror h1) · 프리뷰(.page-content h1) · 인쇄 공통 커버 */
+  const h1Sel = '.ProseMirror h1, .page-content h1';
+  const h2Sel = '.ProseMirror h2, .page-content h2';
+  const h3Sel = '.ProseMirror h3, .page-content h3';
+  return [ rule(h1Sel, t.h1), rule(h2Sel, t.h2), rule(h3Sel, t.h3) ].filter(Boolean).join('\n\n');
+}
+
+function applyTitleDesignCss(css){
+  let style = document.getElementById('ai-title-design');
+  if (!style){
+    style = document.createElement('style');
+    style.id = 'ai-title-design';
+    document.head.appendChild(style);
+  }
+  style.textContent = css || '';
+}
+
+function revertTitleDesignCss(){
+  const style = document.getElementById('ai-title-design');
+  if (style) style.textContent = '';
+}
+
+/* ── 타이틀 디자인 생성 UI 바인딩 ── */
+(function bindTitleDesignUI(){
+  const btn = document.getElementById('aidesign-generate');
+  const btnRev = document.getElementById('aidesign-revert');
+  const selProv = document.getElementById('aidesign-provider');
+  const inpKey = document.getElementById('aidesign-key');
+  const chkSave = document.getElementById('aidesign-save-key');
+  const inpModel = document.getElementById('aidesign-model');
+  const inpHint = document.getElementById('aidesign-hint');
+  const preview = document.getElementById('aidesign-preview');
+  const status = document.getElementById('aidesign-status');
+  if (!btn || !selProv) return;
+
+  /* 프로바이더 전환 시 저장된 키 복원 */
+  const restoreKey = () => {
+    const prov = AI_PROVIDERS[selProv.value];
+    if (!prov) return;
+    try {
+      const saved = localStorage.getItem(prov.keyStoreName) || '';
+      if (inpKey) inpKey.value = saved;
+      if (inpModel) inpModel.placeholder = `기본값: ${prov.defaultModel}`;
+    } catch(e){}
+  };
+  selProv.addEventListener('change', restoreKey);
+  restoreKey();
+
+  btn.addEventListener('click', async () => {
+    const providerId = selProv.value;
+    const prov = AI_PROVIDERS[providerId];
+    const apiKey = (inpKey?.value || '').trim();
+    if (!apiKey){ toast(`${prov.label} API 키가 필요합니다.`, 'err'); return; }
+    if (chkSave?.checked){
+      try { localStorage.setItem(prov.keyStoreName, apiKey); } catch(e){}
+    }
+    const model = (inpModel?.value || '').trim();
+    const hint = (inpHint?.value || '').trim();
+    const { title, sample } = collectBookSample();
+    if (!sample){
+      toast('본문 내용이 부족합니다. 제목/본문을 먼저 작성해 주세요.', 'err');
+      return;
+    }
+    btn.disabled = true;
+    if (btnRev) btnRev.disabled = true;
+    status.textContent = `${prov.label} 에 분석 요청 중…`;
+    try {
+      const system = _titleDesignSystemPrompt();
+      const user = [
+        `# 책 제목`, title || '(미입력)',
+        '',
+        `# 본문 샘플`, sample,
+        '',
+        hint ? `# 톤 힌트\n${hint}` : '',
+        '',
+        '위 정보를 바탕으로 JSON 디자인 토큰만 반환하세요.',
+      ].filter(Boolean).join('\n');
+      const design = await callAIProvider({
+        providerId, apiKey, model, system, user, maxTokens: 1800,
+      });
+      const css = buildTitleDesignCss(design);
+      if (!css){
+        status.textContent = 'AI 응답에서 유효한 디자인 토큰을 찾지 못했습니다.';
+        btn.disabled = false;
+        return;
+      }
+      applyTitleDesignCss(css);
+      preview.style.display = 'block';
+      preview.innerHTML = `
+        <div style="font-weight:600;margin-bottom:4px">분위기: ${design.mood ? String(design.mood).replace(/</g,'&lt;') : '—'}</div>
+        <details><summary style="cursor:pointer;font-size:11px;color:var(--mute)">생성된 CSS 보기</summary>
+          <pre style="font-size:10.5px;white-space:pre-wrap;background:#F5EFE4;padding:8px;border-radius:4px;margin-top:6px;max-height:240px;overflow:auto">${css.replace(/</g,'&lt;')}</pre>
+        </details>`;
+      status.textContent = `✓ 적용됨 (${prov.label})`;
+      if (btnRev) btnRev.disabled = false;
+      toast('타이틀 디자인 적용 완료', 'ok');
+    } catch(e){
+      console.error(e);
+      status.textContent = '오류: ' + (e.message || String(e)).slice(0, 180);
+      toast('디자인 생성 실패: ' + (e.message || e), 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  btnRev?.addEventListener('click', () => {
+    revertTitleDesignCss();
+    if (preview){ preview.style.display = 'none'; preview.innerHTML = ''; }
+    status.textContent = '되돌림';
+    btnRev.disabled = true;
+    toast('타이틀 디자인 제거됨', 'info');
+  });
+})();
 
 /* ═══════════════════════════════════════════════════════════════
    Claude streaming call — tag-patch JSON only
