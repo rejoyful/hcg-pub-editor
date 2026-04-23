@@ -427,6 +427,81 @@ async function main(){
     tally.p_empty_other.length === 0,
     `기타 빈 p=${tally.p_empty_other.length}`);
 
+  /* ── [idempotency] 목차 선행 번호 제거: 이미 번호가 박힌 bulletList/orderedList
+     가 목차 영역에 들어오면, CSS `ul.toc-list > li::before` 의 counter 와
+     중복되어 "1. 1. 서론" 처럼 이중 렌더된다. 이 번호를 제거해 CSS 만
+     번호의 단일 출처가 되도록 보장한다. ── */
+  console.log('\n─── [idempotency] 목차 선행 번호 제거 ───');
+  {
+    /* 시나리오 B — 이미 bulletList 로 구조화된 입력 (재업로드·export 라운드트립 후) */
+    const docB = {
+      type:'doc',
+      content:[
+        { type:'heading', attrs:{ level:1 }, content:[{type:'text', text:'목차'}] },
+        { type:'bulletList', content:[
+          { type:'listItem', content:[{ type:'paragraph', content:[{type:'text', text:'1. 서론'}] }] },
+          { type:'listItem', content:[{ type:'paragraph', content:[{type:'text', text:'2) 본론'}] }] },
+          { type:'listItem', content:[{ type:'paragraph', content:[{type:'text', text:'① 결론'}] }] },
+          { type:'listItem', content:[{ type:'paragraph', content:[{type:'text', text:'I. 부록'}] }] },
+          { type:'listItem', content:[{ type:'paragraph', content:[{type:'text', text:'제1장 도입'}] }] /* 보존 */ },
+        ]},
+      ],
+    };
+    const outB = helpers.applyKeywordRules(docB);
+    const listB = outB.content.find(n => n && n.type === 'bulletList');
+    check('Scenario B: 기존 bulletList 보존', !!listB);
+    if (listB){
+      const textsB = listB.content.map(li =>
+        (li?.content?.[0]?.content || [])
+          .filter(c => c?.type === 'text').map(c => c.text).join('')
+      );
+      check('Scenario B: "1. 서론" → "서론"',
+        textsB[0] === '서론', `actual="${textsB[0]}"`);
+      check('Scenario B: "2) 본론" → "본론"',
+        textsB[1] === '본론', `actual="${textsB[1]}"`);
+      check('Scenario B: "① 결론" → "결론"',
+        textsB[2] === '결론', `actual="${textsB[2]}"`);
+      check('Scenario B: "I. 부록" → "부록"',
+        textsB[3] === '부록', `actual="${textsB[3]}"`);
+      check('Scenario B: "제1장 도입" 은 장 접두라 보존',
+        textsB[4] === '제1장 도입', `actual="${textsB[4]}"`);
+    }
+
+    /* 시나리오 C — 멱등성: 번호가 이미 제거된 입력에 다시 적용해도 동일 */
+    const docC = JSON.parse(JSON.stringify(outB));
+    const outC = helpers.applyKeywordRules(docC);
+    const listC = outC.content.find(n => n && n.type === 'bulletList');
+    if (listC){
+      const textsC = listC.content.map(li =>
+        (li?.content?.[0]?.content || [])
+          .filter(c => c?.type === 'text').map(c => c.text).join('')
+      );
+      check('Scenario C: 재적용 후에도 "서론"이 "서론" (멱등)',
+        textsC[0] === '서론', `actual="${textsC[0]}"`);
+      check('Scenario C: 재적용 후에도 "제1장 도입" 이 보존',
+        textsC[4] === '제1장 도입', `actual="${textsC[4]}"`);
+    }
+
+    /* 시나리오 D — orderedList 도 동일하게 처리 */
+    const docD = {
+      type:'doc',
+      content:[
+        { type:'heading', attrs:{ level:1 }, content:[{type:'text', text:'목차'}] },
+        { type:'orderedList', content:[
+          { type:'listItem', content:[{ type:'paragraph', content:[{type:'text', text:'1. 서론'}] }] },
+        ]},
+      ],
+    };
+    const outD = helpers.applyKeywordRules(docD);
+    const listD = outD.content.find(n => n && n.type === 'orderedList');
+    if (listD){
+      const textD = (listD.content[0]?.content?.[0]?.content || [])
+        .filter(c => c?.type === 'text').map(c => c.text).join('');
+      check('Scenario D: orderedList 도 번호 제거',
+        textD === '서론', `actual="${textD}"`);
+    }
+  }
+
   /* ─────────────── 요약 ─────────────── */
   console.log('\n══════════════════ 요약 ══════════════════');
   const pass = results.filter(r => r.ok).length;
