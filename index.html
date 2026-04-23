@@ -6853,14 +6853,51 @@ function applyKeywordRules(docJson){
     }
     inTocRegion = false;
   };
+  /* 목차 항목 inline 에서 선행 번호 접두사 제거.
+     CSS `ul.toc-list > li::before { content: counter(toc-counter)". "; }` 가
+     이미 자동 번호를 렌더하므로, 원본 단락에 "1. ", "2) ", "①" 같은 번호가
+     박혀 있으면 CSS 번호와 겹쳐 "1. 1. 서론" 처럼 중복된다 (멱등성 버그).
+     - 제거 대상: 십진수(1./1.1./1)) · 원문자(①②③) · 로마자(I./II.)
+     - 보존 대상: "제1장/제1절/Chapter N/Part N" — 번호가 레이블의 일부이며
+                 독자에게 의미가 있음 (단순 시퀀스가 아님). */
+  const TOC_NUM_PREFIX_RE = /^\s*(?:\d{1,3}(?:\.\d{1,3}){0,3}[\.\)]|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮]|[IVX]{1,4}\.)\s+/;
+  const stripLeadingNumberFromTocInline = (inline) => {
+    if (!Array.isArray(inline) || inline.length === 0) return inline;
+    const idx = inline.findIndex(c => c && c.type === 'text' && typeof c.text === 'string' && c.text.length);
+    if (idx < 0) return inline;
+    const first = inline[idx];
+    /* 장/절 접두는 건드리지 않는다. */
+    if (/^(제\s*\d+\s*(장|절|편|부|항)|Chapter\s+\d+|Part\s+\d+)/i.test(first.text)) return inline;
+    const stripped = first.text.replace(TOC_NUM_PREFIX_RE, '');
+    if (stripped === first.text) return inline;
+    const copy = inline.slice();
+    copy[idx] = { ...first, text: stripped };
+    return copy;
+  };
 
   for (let i = 0; i < expanded.length; i++){
     const node = expanded[i];
     if (!node || typeof node !== 'object'){ flushToc(); out.push(node); continue; }
     const type = node.type;
 
-    /* paragraph/heading이 아닌 블록(이미지/표/HR/list 등)은 목차 종료 신호 */
+    /* paragraph/heading이 아닌 블록(이미지/표/HR/list 등)은 목차 종료 신호.
+       단, 이미 구조화된 bulletList/orderedList 가 TOC 영역 내에서 등장하면
+       각 listItem 안의 선행 번호 접두("1. ", "①", "I." 등)를 제거해 CSS
+       toc-counter 와의 중복("1. 1. 서론")을 방지한다. */
     if (type !== 'paragraph' && type !== 'heading'){
+      if (inTocRegion && (type === 'bulletList' || type === 'orderedList')){
+        const cleaned = Array.isArray(node.content) ? node.content.map(li => {
+          if (!li || li.type !== 'listItem' || !Array.isArray(li.content)) return li;
+          const liContent = li.content.map(child => {
+            if (!child || child.type !== 'paragraph' || !Array.isArray(child.content)) return child;
+            return { ...child, content: stripLeadingNumberFromTocInline(child.content) };
+          });
+          return { ...li, content: liContent };
+        }) : node.content;
+        out.push({ ...node, content: cleaned });
+        inTocRegion = false;
+        continue;
+      }
       flushToc();
       out.push(node);
       continue;
@@ -6910,7 +6947,7 @@ function applyKeywordRules(docJson){
         if (!text.trim()) continue;
         tocItems.push({
           type:'listItem',
-          content:[{ type:'paragraph', content: inline }],
+          content:[{ type:'paragraph', content: stripLeadingNumberFromTocInline(inline) }],
         });
         continue;
       }
