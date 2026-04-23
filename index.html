@@ -184,6 +184,15 @@ button:focus-visible,.btn:focus-visible{outline-offset:2px}
 }
 .side .seg button:last-child{border-right:0}
 .side .seg button.active{background:var(--ink);color:#fff}
+/* 용지 프리셋 저장·삭제 버튼 — 사이드바 톤 맞춤 (얇은 outline) */
+.side .btn-preset{
+  padding:5px 10px;background:#fff;border:1px solid var(--line);border-radius:4px;
+  color:var(--ink);font-size:11.5px;cursor:pointer;transition:background .12s, border-color .12s;
+  white-space:nowrap;
+}
+.side .btn-preset:hover:not(:disabled){background:var(--panel);border-color:var(--ink)}
+.side .btn-preset:disabled{opacity:.4;cursor:not-allowed}
+.side .paper-preset-ctrl{margin-top:-2px}
 
 /* 원고 가져오기 — 실제 드래그앤드롭은 프리뷰/에디터 영역에서 처리되므로
    사이드바는 버튼 + 짧은 안내 텍스트 2 줄로 단순화.
@@ -1421,6 +1430,11 @@ ul.toc-list > li::before{
             <option value="46">46판 (127×188)</option>
           </select>
         </div>
+        <div class="row paper-preset-ctrl" title="현재 용지·도련·여백·단·Facing Pages 설정을 프리셋으로 저장합니다. 저장된 프리셋은 이 브라우저의 로컬 저장소에 남아 다음 세션에도 복원됩니다.">
+          <label style="opacity:.7">프리셋</label>
+          <button type="button" class="btn-preset" id="btn-paper-save" title="현재 설정을 프리셋으로 저장">＋ 저장</button>
+          <button type="button" class="btn-preset" id="btn-paper-delete" disabled title="내장 프리셋은 삭제할 수 없습니다">− 삭제</button>
+        </div>
         <div class="row">
           <label>단</label>
           <div class="seg" id="seg-columns">
@@ -2045,13 +2059,48 @@ window.addEventListener('unhandledrejection', e=>{
 /* ============================================================
    Paper presets
    ============================================================ */
-const PAPERS = {
-  B5:       { w:182, h:257 },
-  A4:       { w:210, h:297 },
-  A5:       { w:148, h:210 },
-  Shinkook: { w:152, h:225 },
-  '46':     { w:127, h:188 },
+/* 용지 프리셋 ─────────────────────────────────────────────────────
+   내장 프리셋(읽기 전용) + 사용자 정의 프리셋(localStorage) 이원화.
+   사용자 프리셋은 저장 시점의 "현재 조판 설정 스냅샷" 을 담아 확장 필드도
+   함께 보존한다: w, h(트림 mm), bleed(도련 mm), margins{mt,mr,mb,ml,inner,outer},
+   columns(1|2), facingPages(bool), label(표시명), description(툴팁).
+   - 내장은 builtin:true 로 표시, 삭제 불가
+   - 사용자 프리셋은 select 에서 "★ " 접두로 구분
+   - key 는 사용자가 입력한 label 을 slug 화해 생성 (중복 시 숫자 접미)
+   ───────────────────────────────────────────────────────────────── */
+const BUILTIN_PAPERS = {
+  Shinkook: { w:152, h:225, label:'신국판 (152×225)', builtin:true },
+  B5:       { w:182, h:257, label:'B5 (182×257)',     builtin:true },
+  A4:       { w:210, h:297, label:'A4 (210×297)',     builtin:true },
+  A5:       { w:148, h:210, label:'A5 (148×210)',     builtin:true },
+  '46':     { w:127, h:188, label:'46판 (127×188)',    builtin:true },
 };
+const USER_PAPERS_KEY = 'hcg.paperPresets.v1';
+function loadUserPapers(){
+  try {
+    const raw = localStorage.getItem(USER_PAPERS_KEY);
+    if (!raw) return {};
+    const o = JSON.parse(raw);
+    return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {};
+  } catch(e){ return {}; }
+}
+function saveUserPapers(obj){
+  try { localStorage.setItem(USER_PAPERS_KEY, JSON.stringify(obj || {})); return true; }
+  catch(e){ console.warn('paper preset save failed', e); return false; }
+}
+function getAllPapers(){ return { ...BUILTIN_PAPERS, ...loadUserPapers() }; }
+/* 호환: 기존 코드가 PAPERS[key] 로 읽는 경로를 유지하기 위해 Proxy 로 래핑.
+   PAPERS.Shinkook 같은 static 접근도 getAllPapers() 결과를 따라간다. */
+const PAPERS = new Proxy({}, {
+  get(_t, prop){ return getAllPapers()[prop]; },
+  has(_t, prop){ return prop in getAllPapers(); },
+  ownKeys(){ return Reflect.ownKeys(getAllPapers()); },
+  getOwnPropertyDescriptor(_t, prop){
+    const all = getAllPapers();
+    if (prop in all) return { configurable:true, enumerable:true, value: all[prop] };
+    return undefined;
+  },
+});
 
 /* ============================================================
    Lazy-loaded parsers
@@ -4320,7 +4369,8 @@ function syncPrintPageSize(){
 }
 
 function applyPaper(key){
-  const p = PAPERS[key] || PAPERS.B5;
+  const all = getAllPapers();
+  const p = all[key] || all.Shinkook || BUILTIN_PAPERS.Shinkook;
   root.style.setProperty('--page-w', `${p.w}mm`);
   root.style.setProperty('--page-h', `${p.h}mm`);
   /* 용지 프리셋이 고유 bleed 값을 지정하면 그에 맞춰 입력도 동기화 */
@@ -4328,10 +4378,118 @@ function applyPaper(key){
     const b = $('#in-bleed'); if (b){ b.value = p.bleed; }
     applyBleed();
   }
+  /* 확장 필드 — 사용자 프리셋에만 존재할 수 있다. 존재할 때만 덮어쓴다. */
+  const m = p.margins;
+  if (m && typeof m === 'object'){
+    if (typeof m.mt === 'number'){ const el = $('#m-top');   if (el) el.value = m.mt; }
+    if (typeof m.mb === 'number'){ const el = $('#m-bot');   if (el) el.value = m.mb; }
+    if (typeof m.ml === 'number'){ const el = $('#m-left');  if (el) el.value = m.ml; }
+    if (typeof m.mr === 'number'){ const el = $('#m-right'); if (el) el.value = m.mr; }
+    if (typeof m.inner === 'number'){ const el = $('#m-inner'); if (el) el.value = m.inner; }
+    if (typeof m.outer === 'number'){ const el = $('#m-outer'); if (el) el.value = m.outer; }
+    applyMargins();
+    if (typeof applyInnerOuter === 'function') applyInnerOuter();
+  }
+  if (typeof p.facingPages === 'boolean'){
+    const cb = $('#chk-facing-pages');
+    if (cb && cb.checked !== p.facingPages){ cb.checked = p.facingPages; cb.dispatchEvent(new Event('change')); }
+  }
+  if (p.columns === 1 || p.columns === 2){
+    const seg = document.getElementById('seg-columns');
+    if (seg){
+      const btn = seg.querySelector(`button[data-val="${p.columns}"]`);
+      if (btn && !btn.classList.contains('active')) btn.click();
+    }
+  }
   syncPrintPageSize();
   scheduleReflow();
 }
-$('#sel-paper').addEventListener('change', e=>applyPaper(e.target.value));
+/* ── 용지 select option 렌더 ──
+   내장(5) + 사용자 프리셋을 모두 반영. 사용자 프리셋은 "★ " 접두로 구분.
+   현재 선택값은 보존하려 하되, 삭제된 경우 Shinkook 으로 폴백. */
+function renderPaperOptions(){
+  const sel = $('#sel-paper');
+  if (!sel) return;
+  const prev = sel.value;
+  const all = getAllPapers();
+  const items = Object.entries(all);
+  const frag = document.createDocumentFragment();
+  for (const [key, p] of items){
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = (p.builtin ? '' : '★ ') + (p.label || key);
+    if (p.description) opt.title = p.description;
+    frag.appendChild(opt);
+  }
+  sel.innerHTML = '';
+  sel.appendChild(frag);
+  if (all[prev]) sel.value = prev;
+  else sel.value = 'Shinkook';
+  /* 삭제 버튼 활성화: 선택이 사용자 프리셋일 때만 */
+  const btnDel = $('#btn-paper-delete');
+  if (btnDel){
+    const cur = getAllPapers()[sel.value];
+    btnDel.disabled = !!(cur && cur.builtin);
+    btnDel.title = btnDel.disabled ? '내장 프리셋은 삭제할 수 없습니다' : '현재 프리셋 삭제';
+  }
+}
+/* ── 현재 설정 스냅샷을 사용자 프리셋으로 저장 ── */
+function savePaperPresetFromCurrent(){
+  const name = (prompt('프리셋 이름을 입력하세요\n(예: 신국판-에세이 / A5-시집-여백넓음)', '') || '').trim();
+  if (!name) return;
+  /* key 는 label 을 slug 화 — 영/숫자/한글/_/- 외 제거, 중복 시 _2, _3 */
+  const baseKey = name.replace(/[^\w가-힣\-]+/g, '_').slice(0, 40) || 'preset';
+  const users = loadUserPapers();
+  let key = baseKey, n = 2;
+  while ((key in BUILTIN_PAPERS) || (key in users)) key = `${baseKey}_${n++}`;
+  const pageW = parseFloat(getComputedStyle(root).getPropertyValue('--page-w')) || 152;
+  const pageH = parseFloat(getComputedStyle(root).getPropertyValue('--page-h')) || 225;
+  const bleed = parseFloat($('#in-bleed')?.value || '0') || 0;
+  const mt = parseFloat($('#m-top')?.value   || '20') || 20;
+  const mb = parseFloat($('#m-bot')?.value   || '20') || 20;
+  const ml = parseFloat($('#m-left')?.value  || '20') || 20;
+  const mr = parseFloat($('#m-right')?.value || '20') || 20;
+  const mi = parseFloat($('#m-inner')?.value || '25') || 25;
+  const mo = parseFloat($('#m-outer')?.value || '15') || 15;
+  const facingPages = !!$('#chk-facing-pages')?.checked;
+  const colBtn = document.querySelector('#seg-columns button.active');
+  const columns = colBtn ? (parseInt(colBtn.dataset.val, 10) || 1) : 1;
+  users[key] = {
+    label: name,
+    w: pageW, h: pageH, bleed,
+    margins: { mt, mr, mb, ml, inner: mi, outer: mo },
+    columns, facingPages,
+  };
+  if (!saveUserPapers(users)){ toast('프리셋 저장 실패 — localStorage 접근 불가', 'err'); return; }
+  renderPaperOptions();
+  $('#sel-paper').value = key;
+  toast(`프리셋 "${name}" 저장됨`, 'ok');
+}
+/* ── 현재 선택된 사용자 프리셋 삭제 ── */
+function deleteCurrentPaperPreset(){
+  const key = $('#sel-paper').value;
+  const all = getAllPapers();
+  const p = all[key];
+  if (!p || p.builtin){ toast('내장 프리셋은 삭제할 수 없습니다', 'info'); return; }
+  if (!confirm(`프리셋 "${p.label || key}" 을(를) 삭제할까요?`)) return;
+  const users = loadUserPapers();
+  delete users[key];
+  saveUserPapers(users);
+  renderPaperOptions();
+  applyPaper($('#sel-paper').value);
+  toast('프리셋 삭제됨', 'ok');
+}
+/* 초기 렌더: 내장 + 사용자 프리셋을 select 에 반영. 이후 selectedIndex 유지는
+   renderPaperOptions 내부에서 담당. */
+renderPaperOptions();
+$('#sel-paper').addEventListener('change', e=>{ applyPaper(e.target.value); renderPaperOptions(); });
+/* 저장·삭제 버튼 바인딩 — DOM 에 버튼이 존재할 때만 */
+(() => {
+  const bSave = document.getElementById('btn-paper-save');
+  if (bSave) bSave.addEventListener('click', savePaperPresetFromCurrent);
+  const bDel = document.getElementById('btn-paper-delete');
+  if (bDel) bDel.addEventListener('click', deleteCurrentPaperPreset);
+})();
 
 function applyMargins(){
   root.style.setProperty('--page-mt', `${$('#m-top').value}mm`);
