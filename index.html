@@ -1262,9 +1262,9 @@ ul.toc-list > li::before{
    Print / PDF export
    ============================================================ */
 @media print{
-  /* @page = 트림 + 2×도련. 도련이 0 이면 트림과 동일. */
+  /* PDF 미리보기/내보내기는 선택한 원본 용지 크기를 그대로 따른다. */
   @page{
-    size:calc(var(--page-w) + 2 * var(--page-bleed)) calc(var(--page-h) + 2 * var(--page-bleed));
+    size:var(--page-w) var(--page-h);
     margin:0;
   }
   html,body{background:#fff !important;margin:0 !important;padding:0 !important;height:auto !important;overflow:visible !important}
@@ -1290,8 +1290,8 @@ ul.toc-list > li::before{
        실제 잘림은 내부 .page-clip 이 담당. */
     overflow:visible !important;
     display:block !important;position:relative !important;
-    /* 페이지를 @page 중앙에 배치하여 사방 도련 확보. */
-    margin:var(--page-bleed) !important;
+    /* PDF 페이지 자체가 원본 용지 크기이므로 인쇄 시 추가 외곽 여백은 두지 않는다. */
+    margin:0 !important;
   }
   .page:last-child{page-break-after:auto !important;break-after:auto !important}
   /* 인쇄 시에도 재단선/도련 가이드는 body 클래스에 의존. */
@@ -1973,14 +1973,22 @@ import TextStyle from 'https://esm.sh/@tiptap/extension-text-style@2.6.6';
 import { Color } from 'https://esm.sh/@tiptap/extension-color@2.6.6';
 import Highlight from 'https://esm.sh/@tiptap/extension-highlight@2.6.6';
 import JSZip from 'https://esm.sh/jszip@3.10.1';
-/* pdfjs-dist — lazy-loaded on first PDF upload (see importPdfFile) */
+/* pdfjs-dist — lazy-loaded on first PDF upload.
+   CMap + standardFontDataUrl 지정은 오래된 CID 폰트(한자·특수 문자) PDF 에서
+   텍스트 추출이 깨지는 것을 방지한다. 모던 PDF(OTF/TTF 서브셋 임베드)는
+   이 설정 없이도 동작하지만, 학술·의학 구간 원고에는 CID 글꼴이 섞여
+   들어오는 경우가 있어 안전망으로 같이 둔다. */
+const PDFJS_VERSION = '4.0.379';
+const PDFJS_CDN = `https://esm.sh/pdfjs-dist@${PDFJS_VERSION}`;
+const PDFJS_CMAP_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/cmaps/`;
+const PDFJS_STDFONT_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`;
 let __pdfjsLoader = null;
 async function loadPdfJs(){
   if (window.pdfjsLib) return window.pdfjsLib;
   if (__pdfjsLoader) return __pdfjsLoader;
   __pdfjsLoader = (async () => {
-    const mod = await import('https://esm.sh/pdfjs-dist@4.0.379/build/pdf.min.mjs');
-    mod.GlobalWorkerOptions.workerSrc = 'https://esm.sh/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
+    const mod = await import(`${PDFJS_CDN}/build/pdf.min.mjs`);
+    mod.GlobalWorkerOptions.workerSrc = `${PDFJS_CDN}/build/pdf.worker.min.mjs`;
     window.pdfjsLib = mod;
     return mod;
   })();
@@ -2240,64 +2248,126 @@ function sanitizeHtml(html){
 }
 
 /* ============================================================
-   PDF parser — pdfjs-dist로 페이지별 텍스트 줄 복원
-   각 줄의 y좌표로 묶어 단락 결합 → HTML
+   PDF parser — pdfjs-dist 로 페이지별 텍스트 줄 복원.
+   각 줄의 y좌표로 묶어 단락 결합 → HTML.
+
+   설계 포인트
+   - CMap / standardFontDataUrl 지정으로 CID 폰트 PDF 까지 커버.
+   - 페이지 경계에서 문장이 끊긴 경우 다음 페이지 첫 단락과 병합(continuation merge).
+   - 자동 분류는 호출자(commitHtmlToEditor → preprocessHtml) 에 위임.
+     여기서 pre-classify 를 실행하면 파이프라인이 같은 규칙을 3번 타게 되므로
+     (파서·preprocessHtml·applyKeywordRules JSON) idempotent 라 해도 디버깅 가독성을
+     해치고, 설명 비용이 늘어난다.
+   - 스캔(이미지 전용) PDF 는 텍스트 층이 없으므로 빈 결과로 마무리하지 않고
+     명시적 에러로 OCR 필요성을 안내.
    ============================================================ */
 async function parsePdfFile(file){
   const pdfjs = await loadPdfJs();
   const buf = await file.arrayBuffer();
-  const pdf = await pdfjs.getDocument({ data: buf }).promise;
+  let pdf;
+  try {
+    pdf = await pdfjs.getDocument({
+      data: buf,
+      cMapUrl: PDFJS_CMAP_URL,
+      cMapPacked: true,
+      standardFontDataUrl: PDFJS_STDFONT_URL,
+      /* 보안 문서·권한 제한 PDF 도 최대한 열기 — 텍스트 추출만 하므로 위험 낮음 */
+      useSystemFonts: false,
+    }).promise;
+  } catch(e){
+    if (/password|encrypted/i.test(e?.message || '')){
+      throw new Error('PDF 가 암호로 보호되어 있어 열 수 없습니다. 암호를 해제한 뒤 다시 업로드하세요.');
+    }
+    throw new Error('PDF 파싱 실패: ' + (e?.message || e));
+  }
+
   const htmlChunks = [];
+  let totalChars = 0;           /* 이미지 전용 PDF 감지용 */
+  let lastPageTail = '';        /* 이전 페이지 마지막 단락 — 연속 병합 판정 */
+
   for (let i = 1; i <= pdf.numPages; i++){
     const page = await pdf.getPage(i);
     const tc = await page.getTextContent();
-    /* y좌표(같은 라인)끼리 묶기. 소수점 반올림 단위를 약간 넓혀(1pt) 같은
-       줄이 미세 jitter 로 분리되는 것을 방지. */
+
+    /* y좌표로 라인 그룹핑 (1pt 단위로 반올림해 미세 jitter 방어) */
     const lines = new Map();
     tc.items.forEach(it => {
       if (!it.str) return;
+      totalChars += it.str.length;
       const y = Math.round(it.transform?.[5] || 0);
       if (!lines.has(y)) lines.set(y, []);
       lines.get(y).push({ x: it.transform?.[4] || 0, s: it.str });
     });
-    /* y 내림차순 = 페이지 위→아래 */
     const ys = Array.from(lines.keys()).sort((a,b)=>b-a);
     const rowTexts = ys.map(y => lines.get(y)
       .sort((a,b)=>a.x-b.x)
       .map(t=>t.s).join(''));
 
-    /* 라인별로 단락 결합:
-       - 짧은 라인(<= 30자) → 그 자체로 단락(헤딩/라벨 후보 보호)
-       - 빈 줄 → 단락 경계
-       - 연속된 일반 라인 → 한 단락으로 합침 */
+    /* 라인 → 단락 결합 */
     const pageParas = [];
-    let buf2 = [];
-    const flushBuf = () => { if (buf2.length){ pageParas.push(buf2.join(' ')); buf2 = []; } };
+    let acc = [];
+    const flushAcc = () => { if (acc.length){ pageParas.push(acc.join(' ')); acc = []; } };
     rowTexts.forEach(line => {
       const t = (line || '').trim();
-      if (!t){ flushBuf(); return; }
-      /* 짧은 라인(숫자 접두 포함) → 바로 단락화 */
+      if (!t){ flushAcc(); return; }
       const isShort = t.length <= 30;
-      const looksHeading = /^(제\s*\d+|Chapter|Part|\d+\.\s|머리말|서문|목차|차례|저자\s*소개|역자\s*소개|판권|헌사|추천사|감사의\s*글|부록|참고\s*문헌|찾아보기|색인|맺음말|에필로그|서론|결론)/.test(t) ||
-                           (/^[A-Z가-힣][^.!?]{0,18}$/.test(t) && t.length <= 20);
-      if ((isShort && looksHeading) || /ISBN\s*[:\s]*[\d\-–]/i.test(t)){
-        flushBuf();
+      /* 헤딩/영역 라벨로 보이는 짧은 줄은 별도 단락으로 분리 */
+      const looksHeading = /^(제\s*\d+|Chapter|Part|\d+\.\s|머리말|서문|목차|차례|저자\s*소개|역자\s*소개|판권|헌사|추천사|감사의\s*글|부록|참고\s*문헌|찾아보기|색인|맺음말|에필로그|서론|결론)/.test(t);
+      /* 20자 이하이면서 종결부호 없는 짧은 줄은 제목 후보 — 단, 본문 흐름에서
+         오탐을 줄이기 위해 "숫자·특수문자 접두" 또는 "대문자/한자 단어" 만 허용 */
+      const isLikelyTitleLine =
+        /^[A-Z가-힣][^.!?。]{0,18}$/.test(t) &&
+        t.length <= 20 &&
+        /^(?:[A-Z가-힣]){1,3}\s*[\d가-힣A-Za-z]{0,}$/.test(t);
+      if ((isShort && (looksHeading || isLikelyTitleLine)) || /ISBN\s*[:\s]*[\d\-–]/i.test(t)){
+        flushAcc();
         pageParas.push(t);
       } else {
-        buf2.push(t);
+        acc.push(t);
       }
     });
-    flushBuf();
+    flushAcc();
 
-    /* 각 단락을 <p>로, 페이지마다 페이지-브레이크 HR 삽입 */
+    /* Cross-page continuation merge: 이전 페이지 마지막 단락이 종결부호로
+       끝나지 않았고, 이번 페이지 첫 단락이 소문자/한글 초성·연결어로 시작하면
+       두 단락을 합친다. 학술서·소설에서 문장이 페이지 경계를 넘나드는 흔한 경우. */
+    if (pageParas.length && htmlChunks.length){
+      const tail = lastPageTail;
+      const head = pageParas[0];
+      const tailIsOpen = tail && !/[.!?。．！？…\)'"'"·:：]$/.test(tail);
+      const headIsContinuation = head && !/^(제\s*\d+|Chapter|\d+\.\s|■|□|▲|●|①|②|③|④|⑤|목차|참고|서문|머리말)/.test(head) &&
+                                         /^[가-힣a-z\-·,]/.test(head);
+      if (tailIsOpen && headIsContinuation){
+        /* 마지막 삽입된 <p>에 현재 페이지 첫 단락을 덧붙이고, 현재 pageParas 첫 항목 제거 */
+        const lastChunk = htmlChunks[htmlChunks.length - 1];
+        const merged = lastChunk.replace(/(<p>[^<]*)<\/p>\s*$/, (m, g1) => `${g1} ${escapeHtml(head)}</p>`);
+        if (merged !== lastChunk){
+          htmlChunks[htmlChunks.length - 1] = merged;
+          pageParas.shift();
+        }
+      }
+    }
+
     const pageHtml = pageParas.filter(Boolean).map(p => `<p>${escapeHtml(p)}</p>`).join('\n');
     if (pageHtml){
-      if (htmlChunks.length > 0) htmlChunks.push('<hr class="page-break">');
+      if (htmlChunks.length > 0){
+        /* 섹션 경계 힌트(커밋 3) 와 호환되는 빈 <p> 2개 = 페이지 경계 표시.
+           <hr class="page-break"> 는 ProseMirror 가 class 를 스트립하므로 유지되지
+           않고, 빈 p 는 normalizePastedHtml 에서 제거되지 않도록 non-breaking space
+           로 채워 둔다. */
+        htmlChunks.push('<p>\u00A0</p>', '<p>\u00A0</p>');
+      }
       htmlChunks.push(pageHtml);
+      lastPageTail = pageParas[pageParas.length - 1] || '';
     }
   }
-  const html = htmlChunks.join('\n');
-  try { return applyKeywordRulesToHtml(html); } catch(e){ return html; }
+
+  /* 이미지 전용 스캔 PDF 진단 — 텍스트 항목이 거의 없으면 OCR 안내 */
+  if (totalChars < 30){
+    throw new Error('이 PDF 는 스캔(이미지) 원본으로 보여 텍스트 층이 없습니다. OCR(예: Adobe Acrobat · Google Docs) 도구로 변환한 PDF 를 업로드해 주세요.');
+  }
+
+  return htmlChunks.join('\n');
 }
 
 async function parseMarkdown(md){
@@ -4235,6 +4305,20 @@ function rescanEditorImages(){
    ============================================================ */
 const root = document.documentElement;
 
+function syncPrintPageSize(){
+  const w = getComputedStyle(root).getPropertyValue('--page-w').trim() || '152mm';
+  const h = getComputedStyle(root).getPropertyValue('--page-h').trim() || '225mm';
+  let style = document.getElementById('dynamic-print-page-size');
+  if (!style){
+    style = document.createElement('style');
+    style.id = 'dynamic-print-page-size';
+    document.head.appendChild(style);
+  }
+  /* Chromium 계열은 @page 에 CSS 변수를 넣으면 미리보기에서 기본 용지로
+     되돌아가는 경우가 있어, 인쇄 직전에 실제 mm 값으로 고정 주입한다. */
+  style.textContent = `@media print { @page { size: ${w} ${h}; margin: 0; } }`;
+}
+
 function applyPaper(key){
   const p = PAPERS[key] || PAPERS.B5;
   root.style.setProperty('--page-w', `${p.w}mm`);
@@ -4244,6 +4328,7 @@ function applyPaper(key){
     const b = $('#in-bleed'); if (b){ b.value = p.bleed; }
     applyBleed();
   }
+  syncPrintPageSize();
   scheduleReflow();
 }
 $('#sel-paper').addEventListener('change', e=>applyPaper(e.target.value));
@@ -4317,6 +4402,7 @@ const _ckPrint = $('#chk-printer-marks'); if (_ckPrint) _ckPrint.addEventListene
 applyFacingPages();
 applyInnerOuter();
 applyPrinterMarks();
+syncPrintPageSize();
 
 $('#seg-columns').addEventListener('click', e=>{
   const b = e.target.closest('button[data-val]'); if (!b) return;
@@ -4817,7 +4903,8 @@ async function runExport(kind){
     const base = safeFilename();
     if (kind === 'pdf'){
       toast('PDF 인쇄 창을 엽니다', 'info');
-      setTimeout(()=>window.print(), 180);
+      syncPrintPageSize();
+      await printRenderedBook();
       return;
     }
     if (kind === 'html'){
@@ -4870,6 +4957,187 @@ img.float-right{float:right;margin:0 0 6pt 12pt;max-width:50%}img.center{display
 blockquote{border-left:3px solid #ccc;padding:0 12pt;color:#666;font-style:italic}
 table{border-collapse:collapse;width:100%;margin:10pt 0}td,th{border:1px solid #333;padding:4pt 6pt}
 </style></head><body>${bodyHtml}</body></html>`;
+}
+
+function buildPrintHtml(){
+  const title = ($('#doc-title').value || 'HCG typesetting editor').trim();
+  const bodyClasses = document.body.className || '';
+  const headAssets = Array.from(document.head.querySelectorAll('style, link[rel="stylesheet"]'))
+    .map(el => el.outerHTML)
+    .join('\n');
+  const pageW = parseFloat(getComputedStyle(root).getPropertyValue('--page-w')) || 152;
+  const pageH = parseFloat(getComputedStyle(root).getPropertyValue('--page-h')) || 225;
+  const bleed = Math.max(0, parseFloat(getComputedStyle(root).getPropertyValue('--page-bleed')) || 0);
+  const sheetW = `${pageW + bleed * 2}mm`;
+  const sheetH = `${pageH + bleed * 2}mm`;
+  const trimW = `${pageW}mm`;
+  const trimH = `${pageH}mm`;
+  const bleedMm = `${bleed}mm`;
+  const vars = [
+    '--page-w',
+    '--page-h',
+    '--page-mt',
+    '--page-mr',
+    '--page-mb',
+    '--page-ml',
+    '--page-inner',
+    '--page-outer',
+    '--page-bleed',
+    '--page-mark-len',
+    '--page-mark-thick',
+    '--page-mark-color',
+    '--reg-mark-size',
+    '--color-bar-h',
+    '--color-bar-swatch',
+    '--body-family',
+    '--ui-family',
+    '--body-size',
+    '--body-leading',
+    '--body-tracking',
+    '--body-para-gap',
+    '--body-indent',
+    '--body-weight',
+    '--columns',
+  ].map(name => `${name}:${getComputedStyle(root).getPropertyValue(name).trim()};`).join('');
+  const bookNode = document.getElementById('book')?.cloneNode(true);
+  if (bookNode){
+    Array.from(bookNode.querySelectorAll('.page')).forEach(page => {
+      const sheet = document.createElement('div');
+      sheet.className = 'print-sheet';
+      page.parentNode.insertBefore(sheet, page);
+      sheet.appendChild(page);
+    });
+  }
+  const bookHtml = bookNode?.outerHTML || '';
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(title)}</title>
+${headAssets}
+<style>
+@page{size:${sheetW} ${sheetH};margin:0}
+:root{${vars}}
+html,body{margin:0;padding:0;background:#fff;}
+body{overflow:visible !important;}
+.print-root{display:block !important;background:#fff !important;}
+.print-root .main,
+.print-root .stage,
+.print-root .book{display:block !important;height:auto !important;overflow:visible !important;}
+.print-root .spread{
+  display:block !important;
+  width:auto !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  grid-template-columns:none !important;
+}
+.print-root .spread::before,
+.print-root .spread::after{display:none !important;}
+.print-root .print-sheet{
+  width:${sheetW} !important;
+  height:${sheetH} !important;
+  padding:${bleedMm} !important;
+  box-sizing:border-box !important;
+  display:block !important;
+  position:relative !important;
+  overflow:visible !important;
+  background:#fff !important;
+  page-break-after:always !important;
+  break-after:page !important;
+  page-break-inside:avoid !important;
+}
+.print-root .print-sheet:last-child{
+  page-break-after:auto !important;
+  break-after:auto !important;
+}
+.print-root .page{
+  width:${trimW} !important;
+  height:${trimH} !important;
+  margin:0 !important;
+  display:block !important;
+  position:relative !important;
+  overflow:visible !important;
+  box-shadow:none !important;
+  background:#fff !important;
+}
+/* Facing Pages 는 export 전용 문서에서도 명시적으로 다시 적용한다.
+   홀/짝 페이지의 inner/outer 여백이 제본 기준으로 달라야 한다. */
+body.facing-pages .print-root .page-left .page-inner{
+  padding:var(--page-mt) var(--page-inner) var(--page-mb) var(--page-outer) !important;
+}
+body.facing-pages .print-root .page-right .page-inner{
+  padding:var(--page-mt) var(--page-outer) var(--page-mb) var(--page-inner) !important;
+}
+body.facing-pages .print-root .page-left .page-head,
+body.facing-pages .print-root .page-left .page-foot{
+  padding-left:var(--page-outer) !important;
+  padding-right:var(--page-inner) !important;
+}
+body.facing-pages .print-root .page-right .page-head,
+body.facing-pages .print-root .page-right .page-foot{
+  padding-left:var(--page-inner) !important;
+  padding-right:var(--page-outer) !important;
+}
+/* PDF export 는 실제 조판용 마크를 포함한 상태로 렌더한다.
+   첨부된 인쇄 전 PDF 화면처럼 재단선/맞춤표/컬러바를 같이 보여준다. */
+body.show-crop-marks .page::before{display:block !important;}
+body.show-bleed-guide .page::after{display:block !important;}
+body.show-printer-marks .page-marks{display:block !important;}
+@media screen{
+  body{display:flex;justify-content:center;padding:24px;background:#d9d9d2;}
+}
+</style>
+</head>
+<body class="${escapeHtml(bodyClasses)}">
+  <div class="app print-root">
+    <div class="main">
+      <section class="stage">
+        ${bookHtml}
+      </section>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+function printRenderedBook(){
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById('print-frame');
+    if (existing) existing.remove();
+    const iframe = document.createElement('iframe');
+    iframe.id = 'print-frame';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.onload = () => {
+      try {
+        const w = iframe.contentWindow;
+        if (!w) throw new Error('print window unavailable');
+        const cleanup = () => setTimeout(() => iframe.remove(), 300);
+        w.addEventListener('afterprint', cleanup, { once: true });
+        w.focus();
+        setTimeout(() => {
+          try {
+            w.print();
+            resolve();
+          } catch (err){
+            cleanup();
+            reject(err);
+          }
+        }, 120);
+      } catch (err){
+        iframe.remove();
+        reject(err);
+      }
+    };
+    iframe.srcdoc = buildPrintHtml();
+    document.body.appendChild(iframe);
+  });
 }
 
 function tiptapJsonToMarkdown(doc){
