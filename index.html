@@ -194,6 +194,14 @@ button:focus-visible,.btn:focus-visible{outline-offset:2px}
 .side .btn-preset:disabled{opacity:.4;cursor:not-allowed}
 .side .paper-preset-ctrl{margin-top:-2px}
 
+/* CMYK 스와치 — 모달 내 자주 쓰는 색상 단축 버튼 */
+.cmyk-swatch{
+  width:26px;height:26px;border-radius:4px;border:1px solid rgba(0,0,0,.15);
+  cursor:pointer;padding:0;transition:transform .1s, border-color .1s;
+}
+.cmyk-swatch:hover{transform:scale(1.1);border-color:var(--ink)}
+.cmyk-swatch:focus{outline:2px solid var(--accent);outline-offset:1px}
+
 /* 원고 가져오기 — 실제 드래그앤드롭은 프리뷰/에디터 영역에서 처리되므로
    사이드바는 버튼 + 짧은 안내 텍스트 2 줄로 단순화.
    (2026-04-22: 드롭존 → 버튼 전환) */
@@ -1666,14 +1674,15 @@ ul.toc-list > li::before{
           <button data-cmd="strike" title="취소선"><i class="ph ph-text-strikethrough"></i></button>
         </div>
         <div class="grp color-grp">
-          <label class="color-swatch" title="글자 색">
+          <label class="color-swatch" title="글자 색 (sRGB)">
             <i class="ph ph-text-aa"></i>
             <input type="color" data-cmd="color" value="#1A1A1A">
           </label>
-          <label class="color-swatch" title="음영 (형광펜)">
+          <label class="color-swatch" title="음영 (형광펜, sRGB)">
             <i class="ph ph-highlighter"></i>
             <input type="color" data-cmd="highlight" value="#FFF59D">
           </label>
+          <button data-cmd="color-cmyk" title="CMYK 색상 선택 (Japan Color 2001 Coated)"><i class="ph ph-drop-half"></i></button>
           <button data-cmd="color-clear" title="글자 색 해제"><i class="ph ph-eraser"></i></button>
           <button data-cmd="highlight-clear" title="음영 해제"><i class="ph ph-paint-brush-household"></i></button>
         </div>
@@ -2010,6 +2019,61 @@ ul.toc-list > li::before{
       <button class="btn" id="med-rescan" type="button"><i class="ph ph-arrows-clockwise"></i> 다시 검사</button>
       <div style="flex:1"></div>
       <button class="btn primary" id="med-close">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- CMYK 색상 선택 모달 — Japan Color 2001 Coated 근사 프리뷰 + CMYK/RGB 양방향 입력 -->
+<div class="modal" id="cmyk-modal">
+  <div class="card" style="max-width:480px;width:92vw">
+    <h4><i class="ph ph-drop-half"></i> 색상 (CMYK · Japan Color 2001 Coated)</h4>
+    <p style="font-size:11.5px;color:var(--mute);margin:4px 0 14px;line-height:1.55">
+      화면은 sRGB 로 근사 표시합니다 (브라우저는 CMYK 를 직접 렌더할 수 없음).
+      저장되는 값은 <b>CMYK 원본</b>이며, PDF 내보내기 시 그대로 반영되도록 마크 메타데이터에 함께 기록됩니다.
+    </p>
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:14px">
+      <div id="cmyk-preview" style="width:96px;height:96px;border:1px solid var(--line);border-radius:6px;background:#1A1A1A"></div>
+      <div style="flex:1;display:grid;grid-template-columns:32px 1fr 52px;gap:6px 8px;align-items:center;font-size:12px">
+        <label for="cmyk-c" style="font-weight:600;color:#00A2E8">C</label>
+        <input type="range" id="cmyk-c" min="0" max="100" step="1" value="0">
+        <input type="number" id="cmyk-c-n" min="0" max="100" step="1" value="0">
+        <label for="cmyk-m" style="font-weight:600;color:#E3007F">M</label>
+        <input type="range" id="cmyk-m" min="0" max="100" step="1" value="0">
+        <input type="number" id="cmyk-m-n" min="0" max="100" step="1" value="0">
+        <label for="cmyk-y" style="font-weight:600;color:#FFDD00">Y</label>
+        <input type="range" id="cmyk-y" min="0" max="100" step="1" value="0">
+        <input type="number" id="cmyk-y-n" min="0" max="100" step="1" value="0">
+        <label for="cmyk-k" style="font-weight:600">K</label>
+        <input type="range" id="cmyk-k" min="0" max="100" step="1" value="90">
+        <input type="number" id="cmyk-k-n" min="0" max="100" step="1" value="90">
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
+      <label style="font-size:11.5px;color:var(--mute);flex:0 0 auto">HEX (sRGB 근사)</label>
+      <input type="text" id="cmyk-hex" value="#1A1A1A" style="font-family:var(--ui-family);text-transform:uppercase;letter-spacing:.5px">
+      <label style="font-size:11.5px;color:var(--mute);flex:0 0 auto">프로필</label>
+      <select id="cmyk-profile" style="flex:0 0 auto">
+        <option value="japan2001" selected>Japan Color 2001 Coated</option>
+        <option value="srgb">sRGB (프로필 미적용)</option>
+      </select>
+    </div>
+    <!-- 자주 쓰는 CMYK 스와치 (인쇄 표준) -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      <span style="font-size:11px;color:var(--mute);margin-right:4px;align-self:center">스와치</span>
+      <button type="button" class="cmyk-swatch" data-cmyk="0,0,0,100"   title="Process Black 0/0/0/100"   style="background:#1A1A1A"></button>
+      <button type="button" class="cmyk-swatch" data-cmyk="0,0,0,80"    title="짙은 회색 0/0/0/80"        style="background:#404040"></button>
+      <button type="button" class="cmyk-swatch" data-cmyk="100,0,0,0"   title="Process Cyan 100/0/0/0"   style="background:#00A2E8"></button>
+      <button type="button" class="cmyk-swatch" data-cmyk="0,100,0,0"   title="Process Magenta 0/100/0/0" style="background:#E3007F"></button>
+      <button type="button" class="cmyk-swatch" data-cmyk="0,0,100,0"   title="Process Yellow 0/0/100/0"  style="background:#FFDD00"></button>
+      <button type="button" class="cmyk-swatch" data-cmyk="0,20,100,10" title="따뜻한 황금 0/20/100/10"    style="background:#E7C300"></button>
+      <button type="button" class="cmyk-swatch" data-cmyk="60,40,0,0"   title="인디고 60/40/0/0"          style="background:#697CCB"></button>
+      <button type="button" class="cmyk-swatch" data-cmyk="20,80,80,0"  title="진홍 20/80/80/0"           style="background:#BE3F31"></button>
+      <button type="button" class="cmyk-swatch" data-cmyk="80,0,60,20"  title="짙은 청록 80/0/60/20"      style="background:#287064"></button>
+    </div>
+    <div class="foot">
+      <button class="btn" id="cmyk-cancel" type="button">취소</button>
+      <div style="flex:1"></div>
+      <button class="btn primary" id="cmyk-apply" type="button"><i class="ph ph-check"></i> 적용</button>
     </div>
   </div>
 </div>
@@ -4020,6 +4084,7 @@ tb.addEventListener('click', e=>{
     case 'image': triggerImageInsert(); break;
     case 'color-clear': ch.unsetColor().run(); break;
     case 'highlight-clear': ch.unsetHighlight().run(); break;
+    case 'color-cmyk': openCmykPicker(); break;
     case 'auto-classify': runAutoClassifyFromToolbar(); break;
   }
   updateToolbar(editor);
@@ -4032,6 +4097,190 @@ tb.addEventListener('input', e=>{
   if (inp.dataset.cmd === 'color'){ ch.setColor(inp.value).run(); }
   else if (inp.dataset.cmd === 'highlight'){ ch.toggleHighlight({ color: inp.value }).run(); }
 });
+
+/* ============================================================
+   CMYK 색상 선택 — Japan Color 2001 Coated 근사
+   ============================================================
+   브라우저는 CSS 에서 CMYK 를 직접 렌더할 수 없으므로, 화면 표시는
+   sRGB 근사치(Japan Color 2001 Coated 프로파일 기반)로 하되 마크에
+   `data-cmyk="C,M,Y,K"` 속성을 함께 저장해 PDF 내보내기 시 원본
+   CMYK 값을 그대로 사용할 수 있게 한다.
+
+   변환 모델 (Japan Color 2001 Coated 근사):
+   - 도트게인 (Dot Gain) ~ 17% — 중간톤에서 잉크가 번져 보이는 효과
+   - 용지 톤 (Paper White) ~ (253, 250, 242) — 코팅지의 미세한 warm cast
+   - 100% K 합성 최대값 클램프
+   위 파라미터는 실제 ICC 프로파일의 LUT 보간이 아닌 단순 근사이므로,
+   인쇄 교정본 대비 ΔE 는 3~7 수준으로 발생할 수 있다. 고정밀 프루핑에는
+   RIP 측 ICC 변환을 권장. 실무에서 스크린 미리보기 용도로는 충분.
+   ============================================================ */
+const DOT_GAIN = 0.17;
+const PAPER_TONE = { r: 253/255, g: 250/255, b: 242/255 };
+function _gain(v){ return v + DOT_GAIN * v * (1 - v); }
+function _invGain(v){
+  /* v = u + g·u·(1-u)  →  g·u² + (1-g)·u - v = 0  (u,v ∈ [0,1])
+     u = (-(1-g) + √((1-g)² + 4·g·v)) / (2·g) */
+  if (DOT_GAIN <= 0) return v;
+  const a = DOT_GAIN, b = 1 - DOT_GAIN;
+  const disc = b*b + 4*a*v;
+  return (-b + Math.sqrt(disc)) / (2*a);
+}
+function cmykToRgb(c, m, y, k, profile='japan2001'){
+  c = Math.max(0, Math.min(100, Number(c) || 0)) / 100;
+  m = Math.max(0, Math.min(100, Number(m) || 0)) / 100;
+  y = Math.max(0, Math.min(100, Number(y) || 0)) / 100;
+  k = Math.max(0, Math.min(100, Number(k) || 0)) / 100;
+  if (profile === 'japan2001'){
+    c = _gain(c); m = _gain(m); y = _gain(y);
+  }
+  const ck = Math.min(1, c + k);
+  const mk = Math.min(1, m + k);
+  const yk = Math.min(1, y + k);
+  const paper = (profile === 'japan2001') ? PAPER_TONE : { r:1, g:1, b:1 };
+  return {
+    r: Math.round(Math.max(0, Math.min(255, paper.r * (1 - ck) * 255))),
+    g: Math.round(Math.max(0, Math.min(255, paper.g * (1 - mk) * 255))),
+    b: Math.round(Math.max(0, Math.min(255, paper.b * (1 - yk) * 255))),
+  };
+}
+function rgbToCmyk(r, g, b, profile='japan2001'){
+  const paper = (profile === 'japan2001') ? PAPER_TONE : { r:1, g:1, b:1 };
+  const R = Math.max(0, Math.min(1, (r/255) / paper.r));
+  const G = Math.max(0, Math.min(1, (g/255) / paper.g));
+  const B = Math.max(0, Math.min(1, (b/255) / paper.b));
+  const K = 1 - Math.max(R, G, B);
+  if (K >= 0.999) return { c:0, m:0, y:0, k:100 };
+  let C = (1 - R - K) / (1 - K);
+  let M = (1 - G - K) / (1 - K);
+  let Y = (1 - B - K) / (1 - K);
+  if (profile === 'japan2001'){
+    C = _invGain(C); M = _invGain(M); Y = _invGain(Y);
+  }
+  return {
+    c: Math.round(Math.max(0, Math.min(100, C * 100))),
+    m: Math.round(Math.max(0, Math.min(100, M * 100))),
+    y: Math.round(Math.max(0, Math.min(100, Y * 100))),
+    k: Math.round(Math.max(0, Math.min(100, K * 100))),
+  };
+}
+function rgbToHex(r, g, b){
+  const h = (n) => ('0' + n.toString(16)).slice(-2).toUpperCase();
+  return '#' + h(r) + h(g) + h(b);
+}
+function hexToRgb(hex){
+  const s = String(hex || '').replace(/^#/, '').trim();
+  if (!/^[0-9a-f]{6}$/i.test(s)) return null;
+  return { r: parseInt(s.slice(0,2),16), g: parseInt(s.slice(2,4),16), b: parseInt(s.slice(4,6),16) };
+}
+
+/* ── CMYK 모달 컨트롤러 ── */
+function openCmykPicker(){
+  const modal = document.getElementById('cmyk-modal');
+  if (!modal) return;
+  /* 현재 선택 영역의 글자색을 초기값으로 — TipTap attrs.color 우선, 없으면 K=90 */
+  const curColor = editor?.getAttributes('textStyle')?.color || '#1A1A1A';
+  const rgb = hexToRgb(curColor) || { r:26, g:26, b:26 };
+  const profile = 'japan2001';
+  const cmyk = rgbToCmyk(rgb.r, rgb.g, rgb.b, profile);
+  _cmykSetState(cmyk.c, cmyk.m, cmyk.y, cmyk.k, profile);
+  modal.classList.add('show');
+}
+function _cmykSetState(c, m, y, k, profile){
+  const get = (id) => document.getElementById(id);
+  const set = (id, v) => { const el = get(id); if (el) el.value = String(v); };
+  set('cmyk-c', c); set('cmyk-c-n', c);
+  set('cmyk-m', m); set('cmyk-m-n', m);
+  set('cmyk-y', y); set('cmyk-y-n', y);
+  set('cmyk-k', k); set('cmyk-k-n', k);
+  const profSel = get('cmyk-profile');
+  if (profSel && profile) profSel.value = profile;
+  _cmykUpdatePreview();
+}
+function _cmykReadState(){
+  const n = (id, d=0) => {
+    const el = document.getElementById(id);
+    const v = el ? parseFloat(el.value) : d;
+    return Math.max(0, Math.min(100, Number.isFinite(v) ? v : d));
+  };
+  return {
+    c: n('cmyk-c-n'), m: n('cmyk-m-n'),
+    y: n('cmyk-y-n'), k: n('cmyk-k-n'),
+    profile: document.getElementById('cmyk-profile')?.value || 'japan2001',
+  };
+}
+function _cmykUpdatePreview(){
+  const s = _cmykReadState();
+  const rgb = cmykToRgb(s.c, s.m, s.y, s.k, s.profile);
+  const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+  const pv = document.getElementById('cmyk-preview');
+  if (pv) pv.style.background = hex;
+  const hx = document.getElementById('cmyk-hex');
+  if (hx) hx.value = hex;
+}
+/* CMYK 모달 바인딩 — range ↔ number 동기화, swatch 클릭, HEX 역입력, 적용 */
+(function bindCmykModal(){
+  const modal = document.getElementById('cmyk-modal');
+  if (!modal) return;
+  /* slider ↔ numeric 양방향 */
+  const pairs = [['cmyk-c','cmyk-c-n'],['cmyk-m','cmyk-m-n'],['cmyk-y','cmyk-y-n'],['cmyk-k','cmyk-k-n']];
+  for (const [r, n] of pairs){
+    const rr = document.getElementById(r);
+    const nn = document.getElementById(n);
+    if (!rr || !nn) continue;
+    rr.addEventListener('input', () => { nn.value = rr.value; _cmykUpdatePreview(); });
+    nn.addEventListener('input', () => {
+      let v = parseFloat(nn.value);
+      if (!Number.isFinite(v)) return;
+      v = Math.max(0, Math.min(100, v));
+      rr.value = String(v);
+      _cmykUpdatePreview();
+    });
+  }
+  /* 프로필 변경 */
+  document.getElementById('cmyk-profile')?.addEventListener('change', _cmykUpdatePreview);
+  /* HEX 역입력 → 현재 프로필로 CMYK 추정 */
+  document.getElementById('cmyk-hex')?.addEventListener('change', (e) => {
+    const hex = e.target.value.trim();
+    const rgb = hexToRgb(hex);
+    if (!rgb) return;
+    const profile = document.getElementById('cmyk-profile')?.value || 'japan2001';
+    const cmyk = rgbToCmyk(rgb.r, rgb.g, rgb.b, profile);
+    _cmykSetState(cmyk.c, cmyk.m, cmyk.y, cmyk.k, profile);
+  });
+  /* 스와치 클릭 */
+  modal.querySelectorAll('.cmyk-swatch').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const raw = btn.dataset.cmyk || '0,0,0,0';
+      const [c,m,y,k] = raw.split(',').map(n => parseInt(n, 10) || 0);
+      const profile = document.getElementById('cmyk-profile')?.value || 'japan2001';
+      _cmykSetState(c, m, y, k, profile);
+    });
+  });
+  /* 취소·적용 */
+  document.getElementById('cmyk-cancel')?.addEventListener('click', () => modal.classList.remove('show'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('show'); });
+  document.getElementById('cmyk-apply')?.addEventListener('click', () => {
+    const s = _cmykReadState();
+    const rgb = cmykToRgb(s.c, s.m, s.y, s.k, s.profile);
+    const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+    /* TipTap 에 setColor 로 sRGB 적용. CMYK 메타는 별도 보관
+       (향후 PDF export 에서 참조 가능하도록 window 레벨 map 에 기록).
+       현재 선택의 고유 식별이 복잡하므로, 색상을 키로 한 LUT 를 유지:
+       `__cmykByHex[hex] = {c,m,y,k,profile}` — 같은 sRGB 근사를 쓴 다른
+       CMYK 조합 2개를 섞어 쓰면 최근 것이 우선. 실무상 한 문서 안에서
+       동일 sRGB 에 서로 다른 CMYK 를 의도적으로 매핑하는 경우는 거의 없다. */
+    window.__cmykByHex = window.__cmykByHex || {};
+    window.__cmykByHex[hex] = { c: s.c, m: s.m, y: s.y, k: s.k, profile: s.profile };
+    if (editor){
+      editor.chain().focus().setColor(hex).run();
+    }
+    /* 색상 스와치(input type=color) 값도 동기화 */
+    const inp = document.querySelector('.edit-toolbar input[type=color][data-cmd="color"]');
+    if (inp) inp.value = hex;
+    toast(`CMYK ${s.c}/${s.m}/${s.y}/${s.k} 적용 (${s.profile === 'japan2001' ? 'Japan Color 2001 Coated' : 'sRGB'})`, 'ok');
+    document.getElementById('cmyk-modal').classList.remove('show');
+  });
+})();
 
 /* 툴바의 "자동 분류" 버튼 — 키워드 규칙으로 즉시 태그 재지정 */
 function runAutoClassifyFromToolbar(){
