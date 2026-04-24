@@ -901,6 +901,16 @@ body.show-printer-marks .page-marks{ display:block; }
 .page-content li{margin-bottom:3pt}
 .page-content li > p{text-indent:0;margin:0}
 .page-content blockquote{border-left:3px solid var(--line);padding:2pt 12pt;margin:10pt 0;color:var(--mute);font-style:italic}
+/* 인라인 인용 (<q data-inline-quote>) — 블록 인용과 구분되는 컬러 + 따옴표 */
+.page-content q[data-inline-quote],
+.ProseMirror q[data-inline-quote]{
+  quotes:"\201C" "\201D" "\2018" "\2019";
+  color:#3E5847;font-style:italic;
+}
+.page-content q[data-inline-quote]::before,
+.ProseMirror q[data-inline-quote]::before{content:open-quote}
+.page-content q[data-inline-quote]::after,
+.ProseMirror q[data-inline-quote]::after{content:close-quote}
 .page-content code{background:var(--soft);padding:1pt 4pt;border-radius:2pt;font-family:"JetBrains Mono",Menlo,Consolas,monospace;font-size:.9em}
 .page-content pre{background:#1A1A1A;color:#F5F5F2;padding:10pt;border-radius:4pt;overflow-x:auto;margin:10pt 0;font-size:.85em;break-inside:avoid}
 .page-content img{max-width:100%;height:auto;border-radius:2pt;vertical-align:middle}
@@ -1031,14 +1041,28 @@ body.show-printer-marks .page-marks{ display:block; }
   vertical-align:middle;
 }
 .toolbar button span.tag{font-size:11px;font-weight:700;letter-spacing:.2px}
-/* 색상·음영 swatch (인풋 클릭하면 즉시 색 변경) */
+/* 색상·음영 swatch — 2026-04-24 재설계.
+   기존: label + absolute input[type=color]{inset:0} 패턴이라 native color
+         widget 의 실제 히트박스가 label 을 넘어 인접 버튼(CMYK) 위까지
+         겹침 → 호버 영역 꼬임.
+   변경: swatch 는 순수 버튼. 클릭 시 숨겨둔 input.click() 으로 피커 열기.
+         native widget 은 오프스크린으로 밀어 호버/클릭 영역에 간섭 없게. */
 .toolbar .color-swatch{
-  position:relative;min-width:30px;height:28px;padding:0 6px;border:1px solid transparent;border-radius:4px;
+  min-width:30px;height:28px;padding:0 6px;border:1px solid transparent;border-radius:4px;
   display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink);font-size:12px;
+  background:transparent;position:relative;
 }
 .toolbar .color-swatch:hover{background:var(--soft);border-color:var(--line)}
-.toolbar .color-swatch input[type=color]{
-  position:absolute;inset:0;opacity:0;cursor:pointer;border:0;padding:0;background:transparent;
+.toolbar .color-swatch .color-dot{
+  position:absolute;left:50%;bottom:3px;transform:translateX(-50%);
+  width:14px;height:3px;border-radius:2px;pointer-events:none;
+  background:currentColor;  /* JS 가 --swatch-color 로 덮어씀 */
+}
+.toolbar input.color-picker-hidden{
+  /* 포커스 가능하지만 레이아웃에서 완전 제외 — native picker widget 이
+     시각/히트박스에 전혀 영향 주지 않게. */
+  position:absolute !important;width:1px !important;height:1px !important;
+  left:-9999px !important;top:-9999px !important;opacity:0 !important;pointer-events:none !important;
 }
 .toolbar .auto-classify{
   padding:0 10px;background:linear-gradient(180deg,#F5EFE4,#E8DDC4);
@@ -1046,6 +1070,52 @@ body.show-printer-marks .page-marks{ display:block; }
 }
 .toolbar .auto-classify:hover{background:linear-gradient(180deg,#E8DDC4,#D4C09A);border-color:#8B6E3E}
 .toolbar .auto-classify .ph{margin-right:4px}
+
+/* ============================================================
+   Table: 그리드 크기 선택 팝오버 + 표 내부 액션바
+   ============================================================
+   - 그리드 팝오버: 표 삽입 버튼 클릭 시 8x8 그리드가 뜨고 호버한 셀까지
+     주황 하이라이트. 클릭하면 해당 rows/cols 로 insertTable.
+   - 액션바: 커서가 표 안에 있을 때 표 위에 floating 으로 뜸. 행/열 추가·
+     삭제, 표 전체 삭제, 헤더 토글. */
+.table-size-popover{
+  position:fixed;z-index:2500;background:var(--panel);
+  border:1px solid var(--line);border-radius:8px;
+  box-shadow:0 10px 30px rgba(0,0,0,.12);padding:10px;
+  display:none;
+}
+.table-size-popover.show{display:block}
+.table-size-popover .grid{
+  display:grid;grid-template-columns:repeat(8,18px);grid-auto-rows:18px;
+  gap:3px;
+}
+.table-size-popover .cell{
+  width:18px;height:18px;border:1px solid var(--line);border-radius:2px;
+  background:var(--bg);cursor:pointer;box-sizing:border-box;
+}
+.table-size-popover .cell.hot{background:#F6C54A;border-color:#C99017}
+.table-size-popover .label{
+  margin-top:8px;text-align:center;font-size:12px;color:var(--mute);
+  font-variant-numeric:tabular-nums;
+}
+.table-action-bar{
+  position:absolute;z-index:40;
+  display:none;gap:2px;padding:4px;background:var(--panel);
+  border:1px solid var(--line);border-radius:6px;
+  box-shadow:0 4px 12px rgba(0,0,0,.10);
+}
+.table-action-bar.show{display:inline-flex}
+.table-action-bar button{
+  min-width:28px;height:26px;padding:0 6px;border:1px solid transparent;
+  border-radius:4px;background:transparent;color:var(--ink);font-size:12px;
+  cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:3px;
+}
+.table-action-bar button:hover{background:var(--soft);border-color:var(--line)}
+.table-action-bar button.danger{color:#B33B2E}
+.table-action-bar .sep{width:1px;background:var(--line);margin:2px 2px}
+
+/* 표 편집 중 현재 셀을 살짝 강조 — ProseMirror selectedCell 보강 */
+.ProseMirror .selectedCell{background:rgba(246,197,74,.18)}
 
 .sub-top{
   position:sticky;top:0;z-index:30;
@@ -1694,14 +1764,16 @@ ul.toc-list > li::before{
           <button data-cmd="strike" title="취소선"><i class="ph ph-text-strikethrough"></i></button>
         </div>
         <div class="grp color-grp">
-          <label class="color-swatch" title="글자 색 (sRGB)">
+          <button type="button" class="color-swatch" data-cmd="color-open" title="글자 색 (sRGB)" style="color:#1A1A1A">
             <i class="ph ph-text-aa"></i>
-            <input type="color" data-cmd="color" value="#1A1A1A">
-          </label>
-          <label class="color-swatch" title="음영 (형광펜, sRGB)">
+            <span class="color-dot" style="background:#1A1A1A"></span>
+          </button>
+          <input type="color" class="color-picker-hidden" data-cmd="color" value="#1A1A1A" tabindex="-1" aria-hidden="true">
+          <button type="button" class="color-swatch" data-cmd="highlight-open" title="음영 (형광펜, sRGB)">
             <i class="ph ph-highlighter"></i>
-            <input type="color" data-cmd="highlight" value="#FFF59D">
-          </label>
+            <span class="color-dot" style="background:#FFF59D"></span>
+          </button>
+          <input type="color" class="color-picker-hidden" data-cmd="highlight" value="#FFF59D" tabindex="-1" aria-hidden="true">
           <button data-cmd="color-cmyk" title="CMYK 색상 선택 (Japan Color 2001 Coated)"><i class="ph ph-drop-half"></i></button>
           <button data-cmd="color-clear" title="글자 색 해제"><i class="ph ph-eraser"></i></button>
           <button data-cmd="highlight-clear" title="음영 해제"><i class="ph ph-paint-brush-household"></i></button>
@@ -1709,7 +1781,12 @@ ul.toc-list > li::before{
         <div class="grp">
           <button data-cmd="bullet" title="글머리 기호"><i class="ph ph-list-bullets"></i></button>
           <button data-cmd="ordered" title="번호"><i class="ph ph-list-numbers"></i></button>
-          <button data-cmd="quote" title="인용문"><i class="ph ph-quotes"></i></button>
+          <button data-cmd="quote" title="인용문 (블록 — 문단 전체)"><i class="ph ph-quotes"></i></button>
+          <button data-cmd="inline-quote" title="인라인 인용 (선택 텍스트만, Q 태그)"><i class="ph ph-quotes-fill"></i></button>
+        </div>
+        <div class="grp">
+          <button data-cmd="outdent" title="내어쓰기 (문단 여백 감소)"><i class="ph ph-text-outdent"></i></button>
+          <button data-cmd="indent" title="들여쓰기 (문단 여백 증가)"><i class="ph ph-text-indent"></i></button>
         </div>
         <div class="grp">
           <button data-cmd="auto-classify" class="auto-classify" title="키워드 규칙으로 제목/소제목/그림 자동 분류">
@@ -2068,11 +2145,14 @@ ul.toc-list > li::before{
         <input type="number" id="cmyk-k-n" min="0" max="100" step="1" value="90">
       </div>
     </div>
-    <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
-      <label style="font-size:11.5px;color:var(--mute);flex:0 0 auto">HEX (sRGB 근사)</label>
-      <input type="text" id="cmyk-hex" value="#1A1A1A" style="font-family:var(--ui-family);text-transform:uppercase;letter-spacing:.5px">
-      <label style="font-size:11.5px;color:var(--mute);flex:0 0 auto">프로필</label>
-      <select id="cmyk-profile" style="flex:0 0 auto">
+    <!-- 2026-04-24: HEX + 프로필 두 행 분리 — 한 행에 몰면 480px 카드를
+         초과해 select 가 바깥으로 삐져나오는 문제가 있었다. -->
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-bottom:14px;font-size:11.5px;color:var(--mute)">
+      <label for="cmyk-hex" style="white-space:nowrap">HEX (sRGB 근사)</label>
+      <input type="text" id="cmyk-hex" value="#1A1A1A"
+             style="font-family:var(--ui-family);text-transform:uppercase;letter-spacing:.5px;min-width:0;width:100%">
+      <label for="cmyk-profile" style="white-space:nowrap">프로필</label>
+      <select id="cmyk-profile" style="min-width:0;width:100%">
         <option value="japan2001" selected>Japan Color 2001 Coated</option>
         <option value="srgb">sRGB (프로필 미적용)</option>
       </select>
@@ -2098,12 +2178,33 @@ ul.toc-list > li::before{
   </div>
 </div>
 
+<!-- 표 크기 선택 팝오버 (툴바 표 버튼 클릭 시 표시) -->
+<div id="table-size-popover" class="table-size-popover" role="dialog" aria-label="표 크기 선택">
+  <div class="grid" id="table-size-grid"></div>
+  <div class="label" id="table-size-label">0 × 0</div>
+</div>
+
+<!-- 표 내부 액션바 (커서가 표 안에 있을 때 표시) -->
+<div id="table-action-bar" class="table-action-bar" role="toolbar" aria-label="표 편집">
+  <button type="button" data-ta="row-before" title="위에 행 추가"><i class="ph ph-arrow-line-up"></i></button>
+  <button type="button" data-ta="row-after"  title="아래에 행 추가"><i class="ph ph-arrow-line-down"></i></button>
+  <button type="button" data-ta="row-del"    title="행 삭제" class="danger"><i class="ph ph-minus"></i>행</button>
+  <span class="sep"></span>
+  <button type="button" data-ta="col-before" title="왼쪽에 열 추가"><i class="ph ph-arrow-line-left"></i></button>
+  <button type="button" data-ta="col-after"  title="오른쪽에 열 추가"><i class="ph ph-arrow-line-right"></i></button>
+  <button type="button" data-ta="col-del"    title="열 삭제" class="danger"><i class="ph ph-minus"></i>열</button>
+  <span class="sep"></span>
+  <button type="button" data-ta="header-toggle" title="헤더 행 토글"><i class="ph ph-rows"></i></button>
+  <button type="button" data-ta="merge" title="셀 병합/분할"><i class="ph ph-squares-four"></i></button>
+  <span class="sep"></span>
+  <button type="button" data-ta="table-del" title="표 삭제" class="danger"><i class="ph ph-trash"></i></button>
+</div>
 
 <script type="module">
 /* ============================================================
    Tiptap imports (CDN ESM)
    ============================================================ */
-import { Editor } from 'https://esm.sh/@tiptap/core@2.6.6';
+import { Editor, Extension, Mark, mergeAttributes } from 'https://esm.sh/@tiptap/core@2.6.6';
 import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.6.6';
 import Underline from 'https://esm.sh/@tiptap/extension-underline@2.6.6';
 import Image from 'https://esm.sh/@tiptap/extension-image@2.6.6';
@@ -2116,6 +2217,74 @@ import TextStyle from 'https://esm.sh/@tiptap/extension-text-style@2.6.6';
 import { Color } from 'https://esm.sh/@tiptap/extension-color@2.6.6';
 import Highlight from 'https://esm.sh/@tiptap/extension-highlight@2.6.6';
 import JSZip from 'https://esm.sh/jszip@3.10.1';
+
+/* ============================================================
+   Custom TipTap extensions
+   ============================================================ */
+
+/* Paragraph/Heading 에 `indent` 속성 추가 — 인라인 text-indent 와 함께
+   마진-left 도 동반 조절해 "첫 줄 들여쓰기" 와 "문단 전체 들여쓰기(내어쓰기)"
+   를 한 번에 처리. 값은 em 단위 정수(0/1/2/3) 로 단순화. */
+const IndentExtension = Extension.create({
+  name: 'indent',
+  addOptions(){ return { types: ['paragraph', 'heading'], max: 6 }; },
+  addGlobalAttributes(){
+    return [{
+      types: this.options.types,
+      attributes: {
+        indent: {
+          default: 0,
+          parseHTML: el => {
+            const ml = parseFloat(el.style.marginLeft) || 0;
+            /* 1em 단위로 반올림 (import 된 HWPX/DOCX 가 px 로 올 때도 근사) */
+            return Math.max(0, Math.min(this?.options?.max ?? 6, Math.round(ml)));
+          },
+          renderHTML: attrs => {
+            const n = parseInt(attrs.indent, 10) || 0;
+            if (!n) return {};
+            return { style: `margin-left:${n}em` };
+          },
+        },
+      },
+    }];
+  },
+  addCommands(){
+    const apply = (delta) => ({ editor, commands }) => {
+      const types = this.options.types;
+      const max = this.options.max;
+      let ok = false;
+      types.forEach(type => {
+        const cur = parseInt(editor.getAttributes(type).indent, 10) || 0;
+        const next = Math.max(0, Math.min(max, cur + delta));
+        if (next !== cur){
+          if (commands.updateAttributes(type, { indent: next })) ok = true;
+        }
+      });
+      return ok;
+    };
+    return {
+      increaseIndent: () => apply(+1),
+      decreaseIndent: () => apply(-1),
+    };
+  },
+});
+
+/* 인라인 인용 (InlineQuote) — TipTap 기본 blockquote 는 블록 레벨 노드라
+   드래그 선택한 텍스트만 인용 처리가 불가능하다. 책에서는 "본문 중 일부를
+   인용"하는 관행이 흔하므로 별도 마크를 둔다. <q> 엘리먼트로 시맨틱 유지. */
+const InlineQuote = Mark.create({
+  name: 'inlineQuote',
+  inclusive: false,
+  parseHTML(){ return [{ tag: 'q' }, { tag: 'span[data-inline-quote]' }]; },
+  renderHTML({ HTMLAttributes }){
+    return ['q', mergeAttributes(HTMLAttributes, { 'data-inline-quote': 'true' }), 0];
+  },
+  addCommands(){
+    return {
+      toggleInlineQuote: () => ({ commands }) => commands.toggleMark(this.name),
+    };
+  },
+});
 /* pdfjs-dist — lazy-loaded on first PDF upload.
    CMap + standardFontDataUrl 지정은 오래된 CID 폰트(한자·특수 문자) PDF 에서
    텍스트 추출이 깨지는 것을 방지한다. 모던 PDF(OTF/TTF 서브셋 임베드)는
@@ -2842,6 +3011,8 @@ const editor = window.editor = new Editor({
     TextStyle,
     Color.configure({ types: ['textStyle'] }),
     Highlight.configure({ multicolor: true }),
+    IndentExtension,
+    InlineQuote,
   ],
   editorProps: {
     transformPastedHTML(html){
@@ -2867,8 +3038,8 @@ const editor = window.editor = new Editor({
     <h2>3. WYSIWYG 조판</h2>
     <p>용지 크기, 여백, 단 구성, 본문 서체·크기·행간, 도곽 머리말/꼬리말 — 왼쪽 사이드바에서 조정하면 에디터 영역에 즉시 반영됩니다. "내보내기 → PDF"를 누르면 같은 모습으로 출력됩니다.</p>
   `,
-  onUpdate({ editor }){ scheduleStatusUpdate(editor); scheduleReflow(); scheduleTocHyperlinks(); scheduleSidebarFromCursor(); schedulePreviewSyncFromCursor(); try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch(_){} },
-  onSelectionUpdate({ editor }){ updateToolbar(editor); scheduleSidebarFromCursor(); schedulePreviewSyncFromCursor(); }
+  onUpdate({ editor }){ scheduleStatusUpdate(editor); scheduleReflow(); scheduleTocHyperlinks(); scheduleSidebarFromCursor(); schedulePreviewSyncFromCursor(); try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch(_){} try { if (typeof repositionTableActionBar === 'function') repositionTableActionBar(); } catch(_){} },
+  onSelectionUpdate({ editor }){ updateToolbar(editor); scheduleSidebarFromCursor(); schedulePreviewSyncFromCursor(); try { if (typeof repositionTableActionBar === 'function') repositionTableActionBar(); } catch(_){} }
 });
 
 /* 에디터 업데이트가 빈번하므로 debounce */
@@ -4133,8 +4304,43 @@ function applyHeaderFooter(){
 
 /* ============================================================
    Toolbar bindings
-   ============================================================ */
+   ============================================================
+   선택 영역 보존 패턴 (중요):
+   - 네이티브 <input type="color"> 피커는 열릴 때 포커스를 훔쳐 에디터
+     선택이 풀려버린다. mousedown 직전에 에디터 selection 을 저장하고,
+     값 변경 이벤트에서 복원한 뒤 색을 적용해야 "드래그한 범위만" 색이
+     바뀐다. CMYK 모달도 같은 방식으로 저장/복원.
+   - 저장은 from/to 숫자로만 → doc 업데이트로 위치가 무효화돼도 clamp
+     으로 복구 가능. */
+let __savedEditorSel = null;
+function saveEditorSel(){
+  try {
+    const s = editor?.state?.selection;
+    if (s){ __savedEditorSel = { from: s.from, to: s.to }; }
+  } catch(_){ __savedEditorSel = null; }
+}
+function restoreEditorSel(){
+  try {
+    if (!__savedEditorSel || !editor) return false;
+    const size = editor.state.doc.content.size;
+    const from = Math.max(0, Math.min(size, __savedEditorSel.from|0));
+    const to   = Math.max(0, Math.min(size, __savedEditorSel.to|0));
+    editor.commands.focus();
+    editor.commands.setTextSelection({ from, to });
+    return true;
+  } catch(_){ return false; }
+}
+
 const tb = $('#toolbar');
+
+/* 숨겨진 color input 을 열기 전에 에디터 선택을 저장 — 피커가 포커스를
+   가져가도 input 이벤트에서 복원 가능하도록. mousedown 단계에서 처리해야
+   네이티브 피커가 뜨기 전에 잡을 수 있다. */
+tb.addEventListener('mousedown', e=>{
+  const opener = e.target.closest('button[data-cmd="color-open"], button[data-cmd="highlight-open"], button[data-cmd="color-cmyk"]');
+  if (opener) saveEditorSel();
+});
+
 tb.addEventListener('click', e=>{
   const btn = e.target.closest('button[data-cmd]');
   if (!btn) return;
@@ -4154,35 +4360,64 @@ tb.addEventListener('click', e=>{
     case 'bullet': ch.toggleBulletList().run(); break;
     case 'ordered': ch.toggleOrderedList().run(); break;
     case 'quote': ch.toggleBlockquote().run(); break;
+    case 'inline-quote': ch.toggleInlineQuote().run(); break;
+    case 'indent': ch.increaseIndent().run(); break;
+    case 'outdent': ch.decreaseIndent().run(); break;
     case 'align-left': ch.setTextAlign('left').run(); break;
     case 'align-center': ch.setTextAlign('center').run(); break;
     case 'align-right': ch.setTextAlign('right').run(); break;
-    case 'table': ch.insertTable({rows:3,cols:3,withHeaderRow:true}).run(); break;
+    case 'table': openTableSizePicker(btn); break;
     case 'image': triggerImageInsert(); break;
-    case 'color-clear': ch.unsetColor().run(); break;
-    case 'highlight-clear': ch.unsetHighlight().run(); break;
-    case 'color-cmyk': openCmykPicker(); break;
+    case 'color-clear': ch.unsetColor().run(); try{ scheduleReflow && scheduleReflow(); }catch(_){}; break;
+    case 'highlight-clear': ch.unsetHighlight().run(); try{ scheduleReflow && scheduleReflow(); }catch(_){}; break;
+    case 'color-open': {
+      /* 숨겨진 <input type="color"> 를 프로그램적으로 열기. mousedown 에서
+         이미 selection 저장됨. 피커 닫히고 값 확정되면 'input' 핸들러에서 복원. */
+      const inp = tb.querySelector('input.color-picker-hidden[data-cmd="color"]');
+      if (inp) inp.click();
+      return; /* updateToolbar 스킵 — 값 적용은 'input' 이벤트에서 */
+    }
+    case 'highlight-open': {
+      const inp = tb.querySelector('input.color-picker-hidden[data-cmd="highlight"]');
+      if (inp) inp.click();
+      return;
+    }
+    case 'color-cmyk': openCmykPicker(); return;
     case 'auto-classify': runAutoClassifyFromToolbar(); break;
   }
   updateToolbar(editor);
 });
-/* 색상 · 음영: <input type="color"> 값이 바뀌면 즉시 선택 영역에 적용.
+
+/* 색상 · 음영: <input type="color"> 값이 바뀌면 선택 영역 복원 후 적용.
    color/highlight 는 "마크만 바뀌는" 변경이라 TipTap 의 onUpdate 가
    안정적으로 불리지 않는 경우가 있어 scheduleReflow 를 명시 호출해
    프리뷰·인쇄가 즉시 따라오게 한다. */
 tb.addEventListener('input', e=>{
   const inp = e.target.closest('input[type=color][data-cmd]');
   if (!inp) return;
+  /* 네이티브 피커가 포커스를 훔쳐 selection 이 풀렸을 수 있음 — 복원 */
+  restoreEditorSel();
   const ch = editor.chain().focus();
-  if (inp.dataset.cmd === 'color'){ ch.setColor(inp.value).run(); }
-  else if (inp.dataset.cmd === 'highlight'){ ch.toggleHighlight({ color: inp.value }).run(); }
+  if (inp.dataset.cmd === 'color'){
+    ch.setColor(inp.value).run();
+    /* 툴바 스와치 색상 dot 동기화 */
+    const swatch = tb.querySelector('button.color-swatch[data-cmd="color-open"]');
+    if (swatch){
+      swatch.style.color = inp.value;
+      const dot = swatch.querySelector('.color-dot');
+      if (dot) dot.style.background = inp.value;
+    }
+  }
+  else if (inp.dataset.cmd === 'highlight'){
+    ch.toggleHighlight({ color: inp.value }).run();
+    const swatch = tb.querySelector('button.color-swatch[data-cmd="highlight-open"]');
+    if (swatch){
+      const dot = swatch.querySelector('.color-dot');
+      if (dot) dot.style.background = inp.value;
+    }
+  }
   try { if (typeof scheduleReflow === 'function') scheduleReflow(); } catch(_){}
-});
-/* clear 계열도 프리뷰에 즉시 반영 */
-tb.addEventListener('click', e=>{
-  const b = e.target.closest('button[data-cmd="color-clear"], button[data-cmd="highlight-clear"]');
-  if (!b) return;
-  try { if (typeof scheduleReflow === 'function') scheduleReflow(); } catch(_){}
+  updateToolbar(editor);
 });
 
 /* ============================================================
@@ -4264,6 +4499,8 @@ function hexToRgb(hex){
 function openCmykPicker(){
   const modal = document.getElementById('cmyk-modal');
   if (!modal) return;
+  /* 모달이 포커스를 가져가기 전에 에디터 선택을 저장 — 적용(Apply) 시 복원. */
+  try { if (typeof saveEditorSel === 'function') saveEditorSel(); } catch(_){}
   /* 현재 선택 영역의 글자색을 초기값으로 — TipTap attrs.color 우선, 없으면 K=90 */
   const curColor = editor?.getAttributes('textStyle')?.color || '#1A1A1A';
   const rgb = hexToRgb(curColor) || { r:26, g:26, b:26 };
@@ -4359,6 +4596,8 @@ function _cmykUpdatePreview(){
     window.__cmykByHex = window.__cmykByHex || {};
     window.__cmykByHex[hex] = { c: s.c, m: s.m, y: s.y, k: s.k, profile: s.profile };
     if (editor){
+      /* 모달이 포커스를 가져갔으므로 사전에 저장해 둔 선택을 복원 후 색상 적용 */
+      try { if (typeof restoreEditorSel === 'function') restoreEditorSel(); } catch(_){}
       editor.chain().focus().setColor(hex).run();
       /* 마크 변경만 발생했을 때 TipTap 의 onUpdate 가 확실히 트리거되지 않는
          케이스가 있어, 프리뷰(paginate) 재렌더를 명시 호출 → 선택 영역의
@@ -4368,10 +4607,156 @@ function _cmykUpdatePreview(){
     /* 색상 스와치(input type=color) 값도 동기화 */
     const inp = document.querySelector('.edit-toolbar input[type=color][data-cmd="color"]');
     if (inp) inp.value = hex;
+    /* 툴바 swatch 의 dot 도 시각 동기화 */
+    const sw = document.querySelector('.edit-toolbar button.color-swatch[data-cmd="color-open"]');
+    if (sw){ sw.style.color = hex; const d = sw.querySelector('.color-dot'); if (d) d.style.background = hex; }
     toast(`CMYK ${s.c}/${s.m}/${s.y}/${s.k} 적용 (${s.profile === 'japan2001' ? 'Japan Color 2001 Coated' : 'sRGB'})`, 'ok');
     document.getElementById('cmyk-modal').classList.remove('show');
   });
 })();
+
+/* ============================================================
+   표 크기 선택 팝오버 + 표 내부 액션바
+   ============================================================
+   - 8×8 그리드 한 번 빌드하고 hover 좌표 기반으로 하이라이트
+   - 팝오버 바깥 클릭 or Esc 로 닫힘
+   - 표 내부로 커서가 들어오면 표 상단에 floating action bar 표시
+     (addColumn/Row, delete, header toggle, merge)
+   ============================================================ */
+(function buildTableSizeGrid(){
+  const grid = document.getElementById('table-size-grid');
+  if (!grid) return;
+  const MAX_R = 8, MAX_C = 8;
+  for (let r = 1; r <= MAX_R; r++){
+    for (let c = 1; c <= MAX_C; c++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r; cell.dataset.c = c;
+      grid.appendChild(cell);
+    }
+  }
+})();
+function openTableSizePicker(anchorBtn){
+  const pop = document.getElementById('table-size-popover');
+  const grid = document.getElementById('table-size-grid');
+  const label = document.getElementById('table-size-label');
+  if (!pop || !grid || !anchorBtn) return;
+  /* 앵커 버튼 아래에 띄움 — 화면 우측 넘치면 좌측 정렬로 전환 */
+  const rect = anchorBtn.getBoundingClientRect();
+  pop.style.visibility = 'hidden';
+  pop.classList.add('show');
+  const pw = pop.offsetWidth;
+  let left = rect.left;
+  if (left + pw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - pw - 8);
+  pop.style.left = left + 'px';
+  pop.style.top  = (rect.bottom + 6) + 'px';
+  pop.style.visibility = '';
+  /* hover 상태 초기화 */
+  grid.querySelectorAll('.cell').forEach(c => c.classList.remove('hot'));
+  label.textContent = '0 × 0';
+}
+function closeTableSizePicker(){
+  const pop = document.getElementById('table-size-popover');
+  if (pop) pop.classList.remove('show');
+}
+(function bindTableSizePicker(){
+  const pop = document.getElementById('table-size-popover');
+  const grid = document.getElementById('table-size-grid');
+  const label = document.getElementById('table-size-label');
+  if (!pop || !grid) return;
+  let selR = 0, selC = 0;
+  grid.addEventListener('mousemove', e => {
+    const t = e.target.closest('.cell');
+    if (!t) return;
+    selR = parseInt(t.dataset.r, 10) || 0;
+    selC = parseInt(t.dataset.c, 10) || 0;
+    grid.querySelectorAll('.cell').forEach(c => {
+      const r = parseInt(c.dataset.r, 10), col = parseInt(c.dataset.c, 10);
+      c.classList.toggle('hot', r <= selR && col <= selC);
+    });
+    label.textContent = `${selR} × ${selC}`;
+  });
+  grid.addEventListener('click', e => {
+    const t = e.target.closest('.cell');
+    if (!t) return;
+    const r = parseInt(t.dataset.r, 10) || 0;
+    const c = parseInt(t.dataset.c, 10) || 0;
+    if (r < 1 || c < 1) return;
+    closeTableSizePicker();
+    try {
+      editor.chain().focus().insertTable({ rows: r, cols: c, withHeaderRow: true }).run();
+      toast(`${r}행 × ${c}열 표 삽입`, 'ok');
+      scheduleReflow && scheduleReflow();
+    } catch(err){
+      console.warn('insertTable:', err);
+      toast('표 삽입 실패', 'err');
+    }
+  });
+  /* 바깥 클릭으로 닫기 */
+  document.addEventListener('mousedown', e => {
+    if (!pop.classList.contains('show')) return;
+    if (pop.contains(e.target)) return;
+    if (e.target.closest('button[data-cmd="table"]')) return;
+    closeTableSizePicker();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && pop.classList.contains('show')) closeTableSizePicker();
+  });
+})();
+
+/* 표 액션바 — 커서가 표 안에 있을 때 뜸 */
+(function bindTableActionBar(){
+  const bar = document.getElementById('table-action-bar');
+  if (!bar) return;
+  bar.addEventListener('mousedown', e => {
+    /* 버튼 클릭이 에디터 blur 를 일으키면 안 되므로 preventDefault */
+    if (e.target.closest('button[data-ta]')) e.preventDefault();
+  });
+  bar.addEventListener('click', e => {
+    const b = e.target.closest('button[data-ta]');
+    if (!b) return;
+    const ch = editor.chain().focus();
+    switch(b.dataset.ta){
+      case 'row-before': ch.addRowBefore().run(); break;
+      case 'row-after':  ch.addRowAfter().run(); break;
+      case 'row-del':    ch.deleteRow().run(); break;
+      case 'col-before': ch.addColumnBefore().run(); break;
+      case 'col-after':  ch.addColumnAfter().run(); break;
+      case 'col-del':    ch.deleteColumn().run(); break;
+      case 'header-toggle': ch.toggleHeaderRow().run(); break;
+      case 'merge':      ch.mergeOrSplit().run(); break;
+      case 'table-del':  ch.deleteTable().run(); break;
+    }
+    /* 동작 직후 위치 재계산 */
+    setTimeout(repositionTableActionBar, 0);
+    scheduleReflow && scheduleReflow();
+  });
+})();
+
+function repositionTableActionBar(){
+  const bar = document.getElementById('table-action-bar');
+  if (!bar || !editor) return;
+  const inTable = editor.isActive('table');
+  if (!inTable){ bar.classList.remove('show'); return; }
+  /* 현재 선택이 속한 가장 가까운 table DOM 요소 탐색 */
+  let el = null;
+  try {
+    const dom = editor.view.domAtPos(editor.state.selection.from).node;
+    el = (dom.nodeType === 1 ? dom : dom.parentElement)?.closest('table');
+  } catch(_){ el = null; }
+  if (!el){ bar.classList.remove('show'); return; }
+  /* 액션바를 body 기준 absolute 로 — 스크롤도 함께 계산 */
+  if (bar.parentElement !== document.body) document.body.appendChild(bar);
+  const r = el.getBoundingClientRect();
+  const top = Math.max(8, window.scrollY + r.top - 34);
+  const left = window.scrollX + r.left;
+  bar.style.top = top + 'px';
+  bar.style.left = left + 'px';
+  bar.classList.add('show');
+}
+/* selection/transaction 때마다 액션바 위치 갱신 */
+document.addEventListener('scroll', () => { repositionTableActionBar(); }, true);
+window.addEventListener('resize', () => { repositionTableActionBar(); });
 
 /* 툴바의 "자동 분류" 버튼 — 키워드 규칙으로 즉시 태그 재지정 */
 function runAutoClassifyFromToolbar(){
@@ -4553,6 +4938,13 @@ function updateSidebarFromCursor(){
 }
 
 function updateToolbar(ed){
+  /* 현재 문단 indent 값 (0..max) — 내어쓰기 버튼 disabled 판정에 사용 */
+  let curIndent = 0;
+  try {
+    const p = ed.getAttributes('paragraph');
+    const h = ed.getAttributes('heading');
+    curIndent = parseInt((p && p.indent) || (h && h.indent) || 0, 10) || 0;
+  } catch(_){}
   const map = {
     bold: ed.isActive('bold'),
     italic: ed.isActive('italic'),
@@ -4564,14 +4956,30 @@ function updateToolbar(ed){
     bullet: ed.isActive('bulletList'),
     ordered: ed.isActive('orderedList'),
     quote: ed.isActive('blockquote'),
+    'inline-quote': ed.isActive('inlineQuote'),
     'align-left': ed.isActive({textAlign:'left'}),
     'align-center': ed.isActive({textAlign:'center'}),
     'align-right': ed.isActive({textAlign:'right'}),
+    indent: curIndent > 0,      /* 들여쓰기 적용된 문단에서 하이라이트 */
   };
   $$('.toolbar button[data-cmd]').forEach(b=>{
     const k = b.dataset.cmd;
     if (map[k] !== undefined) b.classList.toggle('active', !!map[k]);
   });
+  /* 내어쓰기: indent 0 일 때 시각적으로 비활성 */
+  const outB = $('.toolbar button[data-cmd="outdent"]');
+  if (outB){
+    outB.disabled = (curIndent <= 0);
+    outB.style.opacity = outB.disabled ? '0.45' : '';
+  }
+  /* 현재 글자색 스와치 dot 동기화 (커서 이동 시 색 표시 갱신) */
+  try {
+    const cur = ed.getAttributes('textStyle')?.color;
+    if (cur){
+      const sw = document.querySelector('.toolbar button.color-swatch[data-cmd="color-open"]');
+      if (sw){ sw.style.color = cur; const d = sw.querySelector('.color-dot'); if (d) d.style.background = cur; }
+    }
+  } catch(_){}
 }
 updateToolbar(editor);
 setTimeout(() => { try { updateSidebarFromCursor(); } catch(e){} }, 200);
