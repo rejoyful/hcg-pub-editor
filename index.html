@@ -1078,6 +1078,55 @@ body.show-printer-marks .page-marks{ display:block; }
      주황 하이라이트. 클릭하면 해당 rows/cols 로 insertTable.
    - 액션바: 커서가 표 안에 있을 때 표 위에 floating 으로 뜸. 행/열 추가·
      삭제, 표 전체 삭제, 헤더 토글. */
+/* 글자색·음영 팝오버 — 네이티브 color picker 를 피한 커스텀 UI.
+   포커스가 에디터에서 팝오버 쪽 input 으로 이동해도, Apply 클릭 시
+   editor.chain().focus().setTextSelection().setColor().run() 로 한 번에
+   복원+적용하므로 selection 이 유실되지 않는다. */
+.color-popover{
+  position:fixed;z-index:2500;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;
+  box-shadow:0 12px 36px rgba(0,0,0,.15);
+  padding:12px;width:340px;max-width:94vw;
+  display:none;
+}
+.color-popover.show{display:block}
+.color-popover .cp-tabs{
+  display:flex;gap:4px;margin-bottom:10px;
+  border-bottom:1px solid var(--line);padding-bottom:6px;
+}
+.color-popover .cp-tab{
+  flex:1;padding:6px 8px;font-size:12px;background:transparent;
+  border:1px solid transparent;border-radius:4px;cursor:pointer;color:var(--mute);
+}
+.color-popover .cp-tab.active{background:var(--soft);color:var(--ink);border-color:var(--line)}
+.color-popover .cp-panel{margin-top:4px}
+.color-popover .cp-panel[hidden]{display:none !important}
+.color-popover .cp-preview-row{
+  display:flex;gap:12px;align-items:center;margin-bottom:10px;
+}
+.color-popover .cp-preview{
+  width:64px;height:64px;border:1px solid var(--line);border-radius:6px;
+  flex:0 0 auto;background:#1A1A1A;
+}
+.color-popover input[type=text],
+.color-popover input[type=number]{
+  padding:5px 8px;border:1px solid var(--line);border-radius:4px;
+  background:var(--bg);color:var(--ink);font-size:12px;
+}
+.color-popover input[type=range]{accent-color:var(--accent)}
+.color-popover .cp-swatches{
+  display:grid;grid-template-columns:repeat(9,1fr);gap:5px;margin-top:6px;
+}
+.color-popover .cp-swatch{
+  aspect-ratio:1;border:1px solid var(--line);border-radius:4px;
+  cursor:pointer;padding:0;background:#ccc;
+}
+.color-popover .cp-swatch:hover{outline:2px solid var(--accent);outline-offset:1px}
+.color-popover .cp-foot{
+  display:flex;gap:6px;align-items:center;
+  margin-top:12px;padding-top:10px;border-top:1px solid var(--line);
+}
+
 .table-size-popover{
   position:fixed;z-index:2500;background:var(--panel);
   border:1px solid var(--line);border-radius:8px;
@@ -1764,19 +1813,16 @@ ul.toc-list > li::before{
           <button data-cmd="strike" title="취소선"><i class="ph ph-text-strikethrough"></i></button>
         </div>
         <div class="grp color-grp">
-          <button type="button" class="color-swatch" data-cmd="color-open" title="글자 색 (sRGB)" style="color:#1A1A1A">
+          <!-- 글자 색 — 하나의 버튼에서 팝오버로 HEX/CMYK 선택 + 해제 내장 -->
+          <button type="button" class="color-swatch" data-cmd="color-open" title="글자 색 (HEX · CMYK)" style="color:#1A1A1A">
             <i class="ph ph-text-aa"></i>
             <span class="color-dot" style="background:#1A1A1A"></span>
           </button>
-          <input type="color" class="color-picker-hidden" data-cmd="color" value="#1A1A1A" tabindex="-1" aria-hidden="true">
-          <button type="button" class="color-swatch" data-cmd="highlight-open" title="음영 (형광펜, sRGB)">
+          <!-- 음영 — 팝오버 내에 해제 버튼 내장 -->
+          <button type="button" class="color-swatch" data-cmd="highlight-open" title="음영 (형광펜)">
             <i class="ph ph-highlighter"></i>
             <span class="color-dot" style="background:#FFF59D"></span>
           </button>
-          <input type="color" class="color-picker-hidden" data-cmd="highlight" value="#FFF59D" tabindex="-1" aria-hidden="true">
-          <button data-cmd="color-cmyk" title="CMYK 색상 선택 (Japan Color 2001 Coated)"><i class="ph ph-drop-half"></i></button>
-          <button data-cmd="color-clear" title="글자 색 해제"><i class="ph ph-eraser"></i></button>
-          <button data-cmd="highlight-clear" title="음영 해제"><i class="ph ph-paint-brush-household"></i></button>
         </div>
         <div class="grp">
           <button data-cmd="bullet" title="글머리 기호"><i class="ph ph-list-bullets"></i></button>
@@ -2120,61 +2166,112 @@ ul.toc-list > li::before{
   </div>
 </div>
 
-<!-- CMYK 색상 선택 모달 — Japan Color 2001 Coated 근사 프리뷰 + CMYK/RGB 양방향 입력 -->
-<div class="modal" id="cmyk-modal">
-  <div class="card" style="max-width:480px;width:92vw">
-    <h4><i class="ph ph-drop-half"></i> 색상 (CMYK · Japan Color 2001 Coated)</h4>
-    <p style="font-size:11.5px;color:var(--mute);margin:4px 0 14px;line-height:1.55">
-      화면은 sRGB 로 근사 표시합니다 (브라우저는 CMYK 를 직접 렌더할 수 없음).
-      저장되는 값은 <b>CMYK 원본</b>이며, PDF 내보내기 시 그대로 반영되도록 마크 메타데이터에 함께 기록됩니다.
-    </p>
-    <div style="display:flex;gap:16px;align-items:center;margin-bottom:14px">
-      <div id="cmyk-preview" style="width:96px;height:96px;border:1px solid var(--line);border-radius:6px;background:#1A1A1A"></div>
-      <div style="flex:1;display:grid;grid-template-columns:32px 1fr 52px;gap:6px 8px;align-items:center;font-size:12px">
-        <label for="cmyk-c" style="font-weight:600;color:#00A2E8">C</label>
-        <input type="range" id="cmyk-c" min="0" max="100" step="1" value="0">
-        <input type="number" id="cmyk-c-n" min="0" max="100" step="1" value="0">
-        <label for="cmyk-m" style="font-weight:600;color:#E3007F">M</label>
-        <input type="range" id="cmyk-m" min="0" max="100" step="1" value="0">
-        <input type="number" id="cmyk-m-n" min="0" max="100" step="1" value="0">
-        <label for="cmyk-y" style="font-weight:600;color:#FFDD00">Y</label>
-        <input type="range" id="cmyk-y" min="0" max="100" step="1" value="0">
-        <input type="number" id="cmyk-y-n" min="0" max="100" step="1" value="0">
-        <label for="cmyk-k" style="font-weight:600">K</label>
-        <input type="range" id="cmyk-k" min="0" max="100" step="1" value="90">
-        <input type="number" id="cmyk-k-n" min="0" max="100" step="1" value="90">
+<!-- 글자 색 팝오버 — HEX(sRGB) / CMYK(Japan Color 2001 Coated) 두 탭으로 통합.
+     네이티브 <input type="color"> 가 포커스를 훔쳐 에디터 selection 이 풀리는
+     이슈를 근본적으로 없애기 위해 전부 수동 입력(hex/슬라이더/스와치) + Apply
+     버튼 클릭 시 setTextSelection+setColor 를 atomic chain 으로 실행한다. -->
+<div id="color-popover" class="color-popover" role="dialog" aria-label="글자 색">
+  <div class="cp-tabs" role="tablist">
+    <button type="button" class="cp-tab active" data-mode="hex" role="tab" aria-selected="true">HEX · sRGB</button>
+    <button type="button" class="cp-tab"        data-mode="cmyk" role="tab" aria-selected="false">CMYK · Japan 2001</button>
+  </div>
+  <!-- HEX / sRGB 패널 -->
+  <div class="cp-panel" data-panel="hex">
+    <div class="cp-preview-row">
+      <div class="cp-preview" id="cp-preview"></div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+        <label style="font-size:11px;color:var(--mute)">HEX</label>
+        <input type="text" id="cp-hex-input" value="#1A1A1A" maxlength="7"
+               style="font-family:var(--ui-family);text-transform:uppercase;letter-spacing:.5px">
       </div>
     </div>
-    <!-- 2026-04-24: HEX + 프로필 두 행 분리 — 한 행에 몰면 480px 카드를
-         초과해 select 가 바깥으로 삐져나오는 문제가 있었다. -->
-    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;margin-bottom:14px;font-size:11.5px;color:var(--mute)">
-      <label for="cmyk-hex" style="white-space:nowrap">HEX (sRGB 근사)</label>
-      <input type="text" id="cmyk-hex" value="#1A1A1A"
-             style="font-family:var(--ui-family);text-transform:uppercase;letter-spacing:.5px;min-width:0;width:100%">
-      <label for="cmyk-profile" style="white-space:nowrap">프로필</label>
-      <select id="cmyk-profile" style="min-width:0;width:100%">
+    <div class="cp-swatches" id="cp-hex-swatches">
+      <!-- 자주 쓰는 sRGB 색 9개 -->
+      <button type="button" class="cp-swatch" data-hex="#1A1A1A" title="검정 #1A1A1A"></button>
+      <button type="button" class="cp-swatch" data-hex="#555555" title="회색 #555555"></button>
+      <button type="button" class="cp-swatch" data-hex="#999999" title="연회색 #999999"></button>
+      <button type="button" class="cp-swatch" data-hex="#D32F2F" title="빨강 #D32F2F"></button>
+      <button type="button" class="cp-swatch" data-hex="#E67E22" title="주황 #E67E22"></button>
+      <button type="button" class="cp-swatch" data-hex="#F1C40F" title="노랑 #F1C40F"></button>
+      <button type="button" class="cp-swatch" data-hex="#2E6B52" title="초록 #2E6B52"></button>
+      <button type="button" class="cp-swatch" data-hex="#2E6BD6" title="파랑 #2E6BD6"></button>
+      <button type="button" class="cp-swatch" data-hex="#7B3FA0" title="보라 #7B3FA0"></button>
+    </div>
+  </div>
+  <!-- CMYK 패널 -->
+  <div class="cp-panel" data-panel="cmyk" hidden>
+    <div class="cp-preview-row">
+      <div class="cp-preview" id="cp-cmyk-preview"></div>
+      <div style="flex:1;display:grid;grid-template-columns:24px 1fr 42px;gap:5px 8px;align-items:center;font-size:12px">
+        <label for="cp-c" style="font-weight:600;color:#00A2E8">C</label>
+        <input type="range" id="cp-c" min="0" max="100" step="1" value="0">
+        <input type="number" id="cp-c-n" min="0" max="100" step="1" value="0">
+        <label for="cp-m" style="font-weight:600;color:#E3007F">M</label>
+        <input type="range" id="cp-m" min="0" max="100" step="1" value="0">
+        <input type="number" id="cp-m-n" min="0" max="100" step="1" value="0">
+        <label for="cp-y" style="font-weight:600;color:#CA8A00">Y</label>
+        <input type="range" id="cp-y" min="0" max="100" step="1" value="0">
+        <input type="number" id="cp-y-n" min="0" max="100" step="1" value="0">
+        <label for="cp-k" style="font-weight:600">K</label>
+        <input type="range" id="cp-k" min="0" max="100" step="1" value="90">
+        <input type="number" id="cp-k-n" min="0" max="100" step="1" value="90">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;margin:10px 0;font-size:11.5px;color:var(--mute)">
+      <label for="cp-profile" style="white-space:nowrap">프로필</label>
+      <select id="cp-profile" style="min-width:0;width:100%">
         <option value="japan2001" selected>Japan Color 2001 Coated</option>
         <option value="srgb">sRGB (프로필 미적용)</option>
       </select>
     </div>
-    <!-- 자주 쓰는 CMYK 스와치 (인쇄 표준) -->
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-      <span style="font-size:11px;color:var(--mute);margin-right:4px;align-self:center">스와치</span>
-      <button type="button" class="cmyk-swatch" data-cmyk="0,0,0,100"   title="Process Black 0/0/0/100"   style="background:#1A1A1A"></button>
-      <button type="button" class="cmyk-swatch" data-cmyk="0,0,0,80"    title="짙은 회색 0/0/0/80"        style="background:#404040"></button>
-      <button type="button" class="cmyk-swatch" data-cmyk="100,0,0,0"   title="Process Cyan 100/0/0/0"   style="background:#00A2E8"></button>
-      <button type="button" class="cmyk-swatch" data-cmyk="0,100,0,0"   title="Process Magenta 0/100/0/0" style="background:#E3007F"></button>
-      <button type="button" class="cmyk-swatch" data-cmyk="0,0,100,0"   title="Process Yellow 0/0/100/0"  style="background:#FFDD00"></button>
-      <button type="button" class="cmyk-swatch" data-cmyk="0,20,100,10" title="따뜻한 황금 0/20/100/10"    style="background:#E7C300"></button>
-      <button type="button" class="cmyk-swatch" data-cmyk="60,40,0,0"   title="인디고 60/40/0/0"          style="background:#697CCB"></button>
-      <button type="button" class="cmyk-swatch" data-cmyk="20,80,80,0"  title="진홍 20/80/80/0"           style="background:#BE3F31"></button>
-      <button type="button" class="cmyk-swatch" data-cmyk="80,0,60,20"  title="짙은 청록 80/0/60/20"      style="background:#287064"></button>
+    <div class="cp-swatches" id="cp-cmyk-swatches">
+      <button type="button" class="cp-swatch" data-cmyk="0,0,0,100"   title="Process Black 0/0/0/100" style="background:#1A1A1A"></button>
+      <button type="button" class="cp-swatch" data-cmyk="0,0,0,80"    title="짙은 회색 0/0/0/80" style="background:#404040"></button>
+      <button type="button" class="cp-swatch" data-cmyk="100,0,0,0"   title="Cyan 100/0/0/0" style="background:#00A2E8"></button>
+      <button type="button" class="cp-swatch" data-cmyk="0,100,0,0"   title="Magenta 0/100/0/0" style="background:#E3007F"></button>
+      <button type="button" class="cp-swatch" data-cmyk="0,0,100,0"   title="Yellow 0/0/100/0" style="background:#FFDD00"></button>
+      <button type="button" class="cp-swatch" data-cmyk="0,20,100,10" title="따뜻한 황금" style="background:#E7C300"></button>
+      <button type="button" class="cp-swatch" data-cmyk="60,40,0,0"   title="인디고" style="background:#697CCB"></button>
+      <button type="button" class="cp-swatch" data-cmyk="20,80,80,0"  title="진홍" style="background:#BE3F31"></button>
+      <button type="button" class="cp-swatch" data-cmyk="80,0,60,20"  title="짙은 청록" style="background:#287064"></button>
     </div>
-    <div class="foot">
-      <button class="btn" id="cmyk-cancel" type="button">취소</button>
-      <div style="flex:1"></div>
-      <button class="btn primary" id="cmyk-apply" type="button"><i class="ph ph-check"></i> 적용</button>
+  </div>
+  <div class="cp-foot">
+    <button type="button" class="btn" id="cp-clear"><i class="ph ph-eraser"></i> 해제</button>
+    <div style="flex:1"></div>
+    <button type="button" class="btn" id="cp-cancel">취소</button>
+    <button type="button" class="btn primary" id="cp-apply"><i class="ph ph-check"></i> 적용</button>
+  </div>
+</div>
+
+<!-- 음영(Highlight) 팝오버 — sRGB 만. 형광펜 용도이므로 CMYK 없음. -->
+<div id="highlight-popover" class="color-popover" role="dialog" aria-label="음영">
+  <div class="cp-panel" data-panel="hex" style="margin-top:0">
+    <div class="cp-preview-row">
+      <div class="cp-preview" id="hp-preview" style="background:#FFF59D"></div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+        <label style="font-size:11px;color:var(--mute)">HEX</label>
+        <input type="text" id="hp-hex-input" value="#FFF59D" maxlength="7"
+               style="font-family:var(--ui-family);text-transform:uppercase;letter-spacing:.5px">
+      </div>
     </div>
+    <div class="cp-swatches">
+      <button type="button" class="cp-swatch" data-hex="#FFF59D" title="노랑"></button>
+      <button type="button" class="cp-swatch" data-hex="#FFE082" title="진한 노랑"></button>
+      <button type="button" class="cp-swatch" data-hex="#FFAB91" title="연주황"></button>
+      <button type="button" class="cp-swatch" data-hex="#C5E1A5" title="연초록"></button>
+      <button type="button" class="cp-swatch" data-hex="#80DEEA" title="연청록"></button>
+      <button type="button" class="cp-swatch" data-hex="#90CAF9" title="연파랑"></button>
+      <button type="button" class="cp-swatch" data-hex="#CE93D8" title="연보라"></button>
+      <button type="button" class="cp-swatch" data-hex="#EF9A9A" title="연빨강"></button>
+      <button type="button" class="cp-swatch" data-hex="#E0E0E0" title="연회색"></button>
+    </div>
+  </div>
+  <div class="cp-foot">
+    <button type="button" class="btn" id="hp-clear"><i class="ph ph-eraser"></i> 해제</button>
+    <div style="flex:1"></div>
+    <button type="button" class="btn" id="hp-cancel">취소</button>
+    <button type="button" class="btn primary" id="hp-apply"><i class="ph ph-check"></i> 적용</button>
   </div>
 </div>
 
@@ -4305,40 +4402,24 @@ function applyHeaderFooter(){
 /* ============================================================
    Toolbar bindings
    ============================================================
-   선택 영역 보존 패턴 (중요):
-   - 네이티브 <input type="color"> 피커는 열릴 때 포커스를 훔쳐 에디터
-     선택이 풀려버린다. mousedown 직전에 에디터 selection 을 저장하고,
-     값 변경 이벤트에서 복원한 뒤 색을 적용해야 "드래그한 범위만" 색이
-     바뀐다. CMYK 모달도 같은 방식으로 저장/복원.
-   - 저장은 from/to 숫자로만 → doc 업데이트로 위치가 무효화돼도 clamp
-     으로 복구 가능. */
-let __savedEditorSel = null;
-function saveEditorSel(){
-  try {
-    const s = editor?.state?.selection;
-    if (s){ __savedEditorSel = { from: s.from, to: s.to }; }
-  } catch(_){ __savedEditorSel = null; }
-}
-function restoreEditorSel(){
-  try {
-    if (!__savedEditorSel || !editor) return false;
-    const size = editor.state.doc.content.size;
-    const from = Math.max(0, Math.min(size, __savedEditorSel.from|0));
-    const to   = Math.max(0, Math.min(size, __savedEditorSel.to|0));
-    editor.commands.focus();
-    editor.commands.setTextSelection({ from, to });
-    return true;
-  } catch(_){ return false; }
-}
-
+   2026-04-24 재설계: 색상/음영은 커스텀 팝오버 (openTextColorPopover /
+   openHighlightPopover) 로 처리해 네이티브 <input type="color"> 이슈를
+   원천 제거. 팝오버 로직은 아래 bindColorPopover / bindHighlightPopover
+   에서 관리. */
 const tb = $('#toolbar');
 
-/* 숨겨진 color input 을 열기 전에 에디터 선택을 저장 — 피커가 포커스를
-   가져가도 input 이벤트에서 복원 가능하도록. mousedown 단계에서 처리해야
-   네이티브 피커가 뜨기 전에 잡을 수 있다. */
-tb.addEventListener('mousedown', e=>{
-  const opener = e.target.closest('button[data-cmd="color-open"], button[data-cmd="highlight-open"], button[data-cmd="color-cmyk"]');
-  if (opener) saveEditorSel();
+/* 툴바 버튼 mousedown → preventDefault — 이게 "기울임/밑줄/인용 등이
+   동작 안 되는 것처럼 보이는" 근본 원인 해결. 버튼이 포커스를 가져가면
+   에디터의 DOM selection 이 끊기고 ProseMirror 가 다음 트랜잭션에서
+   selection 을 caret 으로 collapse 시켜 toggleItalic 등이 "한 글자"에만
+   적용되는 듯 보이거나 아예 반영이 안 된다. mousedown 단계에서 기본
+   포커스 이동을 막으면 에디터 포커스+selection 이 그대로 유지됨. */
+tb.addEventListener('mousedown', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  /* text/number input (팝오버 이후에 배치) 은 제외 */
+  if (e.target.matches('input[type=text], input[type=number]')) return;
+  e.preventDefault();
 });
 
 tb.addEventListener('click', e=>{
@@ -4366,57 +4447,15 @@ tb.addEventListener('click', e=>{
     case 'align-left': ch.setTextAlign('left').run(); break;
     case 'align-center': ch.setTextAlign('center').run(); break;
     case 'align-right': ch.setTextAlign('right').run(); break;
-    case 'table': openTableSizePicker(btn); break;
-    case 'image': triggerImageInsert(); break;
-    case 'color-clear': ch.unsetColor().run(); try{ scheduleReflow && scheduleReflow(); }catch(_){}; break;
-    case 'highlight-clear': ch.unsetHighlight().run(); try{ scheduleReflow && scheduleReflow(); }catch(_){}; break;
-    case 'color-open': {
-      /* 숨겨진 <input type="color"> 를 프로그램적으로 열기. mousedown 에서
-         이미 selection 저장됨. 피커 닫히고 값 확정되면 'input' 핸들러에서 복원. */
-      const inp = tb.querySelector('input.color-picker-hidden[data-cmd="color"]');
-      if (inp) inp.click();
-      return; /* updateToolbar 스킵 — 값 적용은 'input' 이벤트에서 */
-    }
-    case 'highlight-open': {
-      const inp = tb.querySelector('input.color-picker-hidden[data-cmd="highlight"]');
-      if (inp) inp.click();
-      return;
-    }
-    case 'color-cmyk': openCmykPicker(); return;
+    case 'table': openTableSizePicker(btn); return;
+    case 'image': triggerImageInsert(); return;
+    case 'color-open': openTextColorPopover(btn); return;
+    case 'highlight-open': openHighlightPopover(btn); return;
     case 'auto-classify': runAutoClassifyFromToolbar(); break;
   }
-  updateToolbar(editor);
-});
-
-/* 색상 · 음영: <input type="color"> 값이 바뀌면 선택 영역 복원 후 적용.
-   color/highlight 는 "마크만 바뀌는" 변경이라 TipTap 의 onUpdate 가
-   안정적으로 불리지 않는 경우가 있어 scheduleReflow 를 명시 호출해
-   프리뷰·인쇄가 즉시 따라오게 한다. */
-tb.addEventListener('input', e=>{
-  const inp = e.target.closest('input[type=color][data-cmd]');
-  if (!inp) return;
-  /* 네이티브 피커가 포커스를 훔쳐 selection 이 풀렸을 수 있음 — 복원 */
-  restoreEditorSel();
-  const ch = editor.chain().focus();
-  if (inp.dataset.cmd === 'color'){
-    ch.setColor(inp.value).run();
-    /* 툴바 스와치 색상 dot 동기화 */
-    const swatch = tb.querySelector('button.color-swatch[data-cmd="color-open"]');
-    if (swatch){
-      swatch.style.color = inp.value;
-      const dot = swatch.querySelector('.color-dot');
-      if (dot) dot.style.background = inp.value;
-    }
-  }
-  else if (inp.dataset.cmd === 'highlight'){
-    ch.toggleHighlight({ color: inp.value }).run();
-    const swatch = tb.querySelector('button.color-swatch[data-cmd="highlight-open"]');
-    if (swatch){
-      const dot = swatch.querySelector('.color-dot');
-      if (dot) dot.style.background = inp.value;
-    }
-  }
-  try { if (typeof scheduleReflow === 'function') scheduleReflow(); } catch(_){}
+  /* 마크 변경도 프리뷰에 즉시 반영되도록 강제 paginate — onUpdate 가
+     mark-only 트랜잭션에 대해 늦게 불리는 케이스를 방지. */
+  try { if (typeof paginate === 'function') paginate(); } catch(_){}
   updateToolbar(editor);
 });
 
@@ -4496,122 +4535,338 @@ function hexToRgb(hex){
 }
 
 /* ── CMYK 모달 컨트롤러 ── */
-function openCmykPicker(){
-  const modal = document.getElementById('cmyk-modal');
-  if (!modal) return;
-  /* 모달이 포커스를 가져가기 전에 에디터 선택을 저장 — 적용(Apply) 시 복원. */
-  try { if (typeof saveEditorSel === 'function') saveEditorSel(); } catch(_){}
-  /* 현재 선택 영역의 글자색을 초기값으로 — TipTap attrs.color 우선, 없으면 K=90 */
-  const curColor = editor?.getAttributes('textStyle')?.color || '#1A1A1A';
-  const rgb = hexToRgb(curColor) || { r:26, g:26, b:26 };
-  const profile = 'japan2001';
-  const cmyk = rgbToCmyk(rgb.r, rgb.g, rgb.b, profile);
-  _cmykSetState(cmyk.c, cmyk.m, cmyk.y, cmyk.k, profile);
-  modal.classList.add('show');
-}
-function _cmykSetState(c, m, y, k, profile){
-  const get = (id) => document.getElementById(id);
-  const set = (id, v) => { const el = get(id); if (el) el.value = String(v); };
-  set('cmyk-c', c); set('cmyk-c-n', c);
-  set('cmyk-m', m); set('cmyk-m-n', m);
-  set('cmyk-y', y); set('cmyk-y-n', y);
-  set('cmyk-k', k); set('cmyk-k-n', k);
-  const profSel = get('cmyk-profile');
-  if (profSel && profile) profSel.value = profile;
-  _cmykUpdatePreview();
-}
-function _cmykReadState(){
-  const n = (id, d=0) => {
+/* openCmykPicker / _cmykSetState / _cmykReadState / _cmykUpdatePreview 는
+   2026-04-24 색상 팝오버 통합으로 제거됨. cmykToRgb/rgbToCmyk/hexToRgb/
+   rgbToHex 헬퍼는 아래 팝오버 로직에서 그대로 재사용. */
+/* ============================================================
+   글자 색 팝오버 — HEX / CMYK 통합 (2026-04-24 재설계)
+   ============================================================
+   설계 원칙:
+   1. 네이티브 <input type="color"> 완전 제거 — 포커스 훔침으로 인한
+      selection loss 를 원천 차단.
+   2. 팝오버 내 모든 입력 컨트롤의 mousedown 은 preventDefault —
+      에디터의 ProseMirror selection 이 DOM 상에서 끊어지지 않음.
+   3. Apply 시점에 atomic chain:
+        editor.chain().focus().setTextSelection({from,to}).setColor(hex).run()
+      이 한 줄로 복원+적용이 한 트랜잭션으로 묶여, 도중에 selection
+      이 유실될 여지가 없다.
+   4. Apply 후 paginate() 즉시 1회 호출 — 프리뷰가 debounce 없이
+      바로 갱신.
+   ============================================================ */
+
+/* 팝오버 상태 */
+const __cp = {
+  mode: 'hex',                 /* 'hex' | 'cmyk' */
+  hex: '#1A1A1A',
+  cmyk: { c:0, m:0, y:0, k:90 },
+  profile: 'japan2001',
+  savedSel: null,              /* { from, to } — 팝오버 열릴 때 capture */
+};
+
+function _cpReadCmyk(){
+  const n = (id) => {
     const el = document.getElementById(id);
-    const v = el ? parseFloat(el.value) : d;
-    return Math.max(0, Math.min(100, Number.isFinite(v) ? v : d));
+    const v = el ? parseFloat(el.value) : 0;
+    return Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0));
   };
-  return {
-    c: n('cmyk-c-n'), m: n('cmyk-m-n'),
-    y: n('cmyk-y-n'), k: n('cmyk-k-n'),
-    profile: document.getElementById('cmyk-profile')?.value || 'japan2001',
-  };
+  return { c: n('cp-c-n'), m: n('cp-m-n'), y: n('cp-y-n'), k: n('cp-k-n') };
 }
-function _cmykUpdatePreview(){
-  const s = _cmykReadState();
-  const rgb = cmykToRgb(s.c, s.m, s.y, s.k, s.profile);
-  const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
-  const pv = document.getElementById('cmyk-preview');
-  if (pv) pv.style.background = hex;
-  const hx = document.getElementById('cmyk-hex');
-  if (hx) hx.value = hex;
+function _cpWriteCmyk(c, m, y, k){
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  set('cp-c', c); set('cp-c-n', c);
+  set('cp-m', m); set('cp-m-n', m);
+  set('cp-y', y); set('cp-y-n', y);
+  set('cp-k', k); set('cp-k-n', k);
 }
-/* CMYK 모달 바인딩 — range ↔ number 동기화, swatch 클릭, HEX 역입력, 적용 */
-(function bindCmykModal(){
-  const modal = document.getElementById('cmyk-modal');
-  if (!modal) return;
-  /* slider ↔ numeric 양방향 */
-  const pairs = [['cmyk-c','cmyk-c-n'],['cmyk-m','cmyk-m-n'],['cmyk-y','cmyk-y-n'],['cmyk-k','cmyk-k-n']];
-  for (const [r, n] of pairs){
-    const rr = document.getElementById(r);
-    const nn = document.getElementById(n);
-    if (!rr || !nn) continue;
-    rr.addEventListener('input', () => { nn.value = rr.value; _cmykUpdatePreview(); });
+function _cpSyncPreviews(){
+  /* 현재 모드에 맞는 hex 를 구해 preview + hex input 갱신 */
+  let hex;
+  if (__cp.mode === 'hex'){
+    hex = __cp.hex;
+    const rgb = hexToRgb(hex);
+    if (rgb){
+      const cmyk = rgbToCmyk(rgb.r, rgb.g, rgb.b, __cp.profile);
+      __cp.cmyk = cmyk;
+      _cpWriteCmyk(cmyk.c, cmyk.m, cmyk.y, cmyk.k);
+    }
+  } else {
+    const s = _cpReadCmyk();
+    __cp.cmyk = s;
+    const rgb = cmykToRgb(s.c, s.m, s.y, s.k, __cp.profile);
+    hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+    __cp.hex = hex;
+    const hi = document.getElementById('cp-hex-input'); if (hi) hi.value = hex;
+  }
+  const pv1 = document.getElementById('cp-preview');      if (pv1) pv1.style.background = hex;
+  const pv2 = document.getElementById('cp-cmyk-preview'); if (pv2) pv2.style.background = hex;
+}
+
+function _cpSwitchMode(mode){
+  __cp.mode = mode;
+  document.querySelectorAll('#color-popover .cp-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.mode === mode);
+    t.setAttribute('aria-selected', t.dataset.mode === mode ? 'true' : 'false');
+  });
+  document.querySelectorAll('#color-popover .cp-panel').forEach(p => {
+    p.hidden = p.dataset.panel !== mode;
+  });
+  _cpSyncPreviews();
+}
+
+function openTextColorPopover(anchorBtn){
+  const pop = document.getElementById('color-popover');
+  if (!pop) return;
+  /* 현재 선택 저장 — 이 시점에 에디터가 여전히 포커스를 갖고 있음 */
+  try {
+    const s = editor?.state?.selection;
+    __cp.savedSel = s ? { from: s.from, to: s.to } : null;
+  } catch(_){ __cp.savedSel = null; }
+  /* 초기값: 현재 선택의 글자색 */
+  const cur = editor?.getAttributes('textStyle')?.color || '#1A1A1A';
+  __cp.hex = cur;
+  const hi = document.getElementById('cp-hex-input'); if (hi) hi.value = cur;
+  /* 위치: 앵커 버튼 아래 */
+  pop.style.visibility = 'hidden';
+  pop.classList.add('show');
+  const rect = anchorBtn.getBoundingClientRect();
+  const pw = pop.offsetWidth;
+  let left = rect.left;
+  if (left + pw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - pw - 8);
+  pop.style.left = left + 'px';
+  pop.style.top  = (rect.bottom + 6) + 'px';
+  pop.style.visibility = '';
+  _cpSwitchMode('hex');
+}
+function closeTextColorPopover(){
+  const pop = document.getElementById('color-popover');
+  if (pop) pop.classList.remove('show');
+}
+
+/* 선택 영역을 atomic 으로 복원하면서 색 적용/해제 */
+function applyColorToSelection(hex){
+  if (!editor) return;
+  const sel = __cp.savedSel;
+  const ch = editor.chain().focus();
+  if (sel) ch.setTextSelection({ from: sel.from, to: sel.to });
+  ch.setColor(hex).run();
+  /* CMYK 메타 기록 (export 시 원본 CMYK 참조용) */
+  if (__cp.mode === 'cmyk'){
+    const s = __cp.cmyk;
+    window.__cmykByHex = window.__cmykByHex || {};
+    window.__cmykByHex[hex] = { c:s.c, m:s.m, y:s.y, k:s.k, profile: __cp.profile };
+  }
+  /* 툴바 스와치 dot 동기화 */
+  const sw = document.querySelector('.edit-toolbar button.color-swatch[data-cmd="color-open"]');
+  if (sw){ sw.style.color = hex; const d = sw.querySelector('.color-dot'); if (d) d.style.background = hex; }
+  /* 프리뷰 즉시 반영 (debounce 우회) */
+  try { if (typeof paginate === 'function') paginate(); } catch(_){}
+  try { if (typeof scheduleReflow === 'function') scheduleReflow(); } catch(_){}
+}
+function clearColorSelection(){
+  if (!editor) return;
+  const sel = __cp.savedSel;
+  const ch = editor.chain().focus();
+  if (sel) ch.setTextSelection({ from: sel.from, to: sel.to });
+  ch.unsetColor().run();
+  const sw = document.querySelector('.edit-toolbar button.color-swatch[data-cmd="color-open"]');
+  if (sw){ sw.style.color = '#1A1A1A'; const d = sw.querySelector('.color-dot'); if (d) d.style.background = '#1A1A1A'; }
+  try { if (typeof paginate === 'function') paginate(); } catch(_){}
+}
+
+(function bindColorPopover(){
+  const pop = document.getElementById('color-popover');
+  if (!pop) return;
+
+  /* 팝오버 내부의 어떤 컨트롤이든 mousedown 시 에디터 blur 를 유발하지
+     않도록 preventDefault — input/select/button 전부. */
+  pop.addEventListener('mousedown', e => {
+    /* text input 은 preventDefault 하면 typing/focus 가 안 되니 예외 */
+    if (e.target.matches('input[type=text], input[type=number]')) return;
+    e.preventDefault();
+  });
+
+  /* 모드 탭 */
+  pop.querySelectorAll('.cp-tab').forEach(t => {
+    t.addEventListener('click', () => _cpSwitchMode(t.dataset.mode));
+  });
+
+  /* HEX input */
+  document.getElementById('cp-hex-input')?.addEventListener('input', e => {
+    let v = String(e.target.value || '').trim();
+    if (!v.startsWith('#')) v = '#' + v;
+    if (/^#[0-9a-f]{6}$/i.test(v)){
+      __cp.hex = v.toUpperCase();
+      _cpSyncPreviews();
+    }
+  });
+
+  /* HEX swatches */
+  document.getElementById('cp-hex-swatches')?.querySelectorAll('.cp-swatch').forEach(b => {
+    b.style.background = b.dataset.hex;
+    b.addEventListener('click', () => {
+      __cp.hex = b.dataset.hex;
+      const hi = document.getElementById('cp-hex-input'); if (hi) hi.value = __cp.hex;
+      _cpSyncPreviews();
+    });
+  });
+
+  /* CMYK sliders ↔ numeric */
+  [['cp-c','cp-c-n'],['cp-m','cp-m-n'],['cp-y','cp-y-n'],['cp-k','cp-k-n']].forEach(([r, n]) => {
+    const rr = document.getElementById(r), nn = document.getElementById(n);
+    if (!rr || !nn) return;
+    rr.addEventListener('input', () => { nn.value = rr.value; _cpSyncPreviews(); });
     nn.addEventListener('input', () => {
       let v = parseFloat(nn.value);
       if (!Number.isFinite(v)) return;
       v = Math.max(0, Math.min(100, v));
       rr.value = String(v);
-      _cmykUpdatePreview();
+      _cpSyncPreviews();
     });
-  }
+  });
+
   /* 프로필 변경 */
-  document.getElementById('cmyk-profile')?.addEventListener('change', _cmykUpdatePreview);
-  /* HEX 역입력 → 현재 프로필로 CMYK 추정 */
-  document.getElementById('cmyk-hex')?.addEventListener('change', (e) => {
-    const hex = e.target.value.trim();
-    const rgb = hexToRgb(hex);
-    if (!rgb) return;
-    const profile = document.getElementById('cmyk-profile')?.value || 'japan2001';
-    const cmyk = rgbToCmyk(rgb.r, rgb.g, rgb.b, profile);
-    _cmykSetState(cmyk.c, cmyk.m, cmyk.y, cmyk.k, profile);
+  document.getElementById('cp-profile')?.addEventListener('change', (e) => {
+    __cp.profile = e.target.value || 'japan2001';
+    _cpSyncPreviews();
   });
-  /* 스와치 클릭 */
-  modal.querySelectorAll('.cmyk-swatch').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const raw = btn.dataset.cmyk || '0,0,0,0';
-      const [c,m,y,k] = raw.split(',').map(n => parseInt(n, 10) || 0);
-      const profile = document.getElementById('cmyk-profile')?.value || 'japan2001';
-      _cmykSetState(c, m, y, k, profile);
+
+  /* CMYK swatches */
+  document.getElementById('cp-cmyk-swatches')?.querySelectorAll('.cp-swatch').forEach(b => {
+    b.addEventListener('click', () => {
+      const [c,m,y,k] = (b.dataset.cmyk || '0,0,0,0').split(',').map(n => parseInt(n, 10) || 0);
+      _cpWriteCmyk(c, m, y, k);
+      _cpSyncPreviews();
     });
   });
-  /* 취소·적용 */
-  document.getElementById('cmyk-cancel')?.addEventListener('click', () => modal.classList.remove('show'));
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('show'); });
-  document.getElementById('cmyk-apply')?.addEventListener('click', () => {
-    const s = _cmykReadState();
-    const rgb = cmykToRgb(s.c, s.m, s.y, s.k, s.profile);
-    const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
-    /* TipTap 에 setColor 로 sRGB 적용. CMYK 메타는 별도 보관
-       (향후 PDF export 에서 참조 가능하도록 window 레벨 map 에 기록).
-       현재 선택의 고유 식별이 복잡하므로, 색상을 키로 한 LUT 를 유지:
-       `__cmykByHex[hex] = {c,m,y,k,profile}` — 같은 sRGB 근사를 쓴 다른
-       CMYK 조합 2개를 섞어 쓰면 최근 것이 우선. 실무상 한 문서 안에서
-       동일 sRGB 에 서로 다른 CMYK 를 의도적으로 매핑하는 경우는 거의 없다. */
-    window.__cmykByHex = window.__cmykByHex || {};
-    window.__cmykByHex[hex] = { c: s.c, m: s.m, y: s.y, k: s.k, profile: s.profile };
-    if (editor){
-      /* 모달이 포커스를 가져갔으므로 사전에 저장해 둔 선택을 복원 후 색상 적용 */
-      try { if (typeof restoreEditorSel === 'function') restoreEditorSel(); } catch(_){}
-      editor.chain().focus().setColor(hex).run();
-      /* 마크 변경만 발생했을 때 TipTap 의 onUpdate 가 확실히 트리거되지 않는
-         케이스가 있어, 프리뷰(paginate) 재렌더를 명시 호출 → 선택 영역의
-         색이 프리뷰·분리창·인쇄에 즉시 반영. */
-      try { if (typeof scheduleReflow === 'function') scheduleReflow(); } catch(_){}
+
+  /* 버튼: 해제 / 취소 / 적용 */
+  document.getElementById('cp-clear')?.addEventListener('click', () => {
+    clearColorSelection();
+    closeTextColorPopover();
+    toast('글자 색 해제', 'info');
+  });
+  document.getElementById('cp-cancel')?.addEventListener('click', closeTextColorPopover);
+  document.getElementById('cp-apply')?.addEventListener('click', () => {
+    applyColorToSelection(__cp.hex);
+    closeTextColorPopover();
+    if (__cp.mode === 'cmyk'){
+      const s = __cp.cmyk;
+      toast(`CMYK ${s.c}/${s.m}/${s.y}/${s.k} 적용`, 'ok');
+    } else {
+      toast(`글자 색 ${__cp.hex}`, 'ok');
     }
-    /* 색상 스와치(input type=color) 값도 동기화 */
-    const inp = document.querySelector('.edit-toolbar input[type=color][data-cmd="color"]');
-    if (inp) inp.value = hex;
-    /* 툴바 swatch 의 dot 도 시각 동기화 */
-    const sw = document.querySelector('.edit-toolbar button.color-swatch[data-cmd="color-open"]');
-    if (sw){ sw.style.color = hex; const d = sw.querySelector('.color-dot'); if (d) d.style.background = hex; }
-    toast(`CMYK ${s.c}/${s.m}/${s.y}/${s.k} 적용 (${s.profile === 'japan2001' ? 'Japan Color 2001 Coated' : 'sRGB'})`, 'ok');
-    document.getElementById('cmyk-modal').classList.remove('show');
+  });
+
+  /* 바깥 클릭으로 닫기 */
+  document.addEventListener('mousedown', e => {
+    if (!pop.classList.contains('show')) return;
+    if (pop.contains(e.target)) return;
+    if (e.target.closest('button[data-cmd="color-open"]')) return;
+    closeTextColorPopover();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && pop.classList.contains('show')) closeTextColorPopover();
+  });
+})();
+
+/* ============================================================
+   음영(Highlight) 팝오버 — sRGB 만
+   ============================================================ */
+const __hp = { hex: '#FFF59D', savedSel: null };
+
+function openHighlightPopover(anchorBtn){
+  const pop = document.getElementById('highlight-popover');
+  if (!pop) return;
+  try {
+    const s = editor?.state?.selection;
+    __hp.savedSel = s ? { from: s.from, to: s.to } : null;
+  } catch(_){ __hp.savedSel = null; }
+  /* 현재 highlight 색을 초기값으로 */
+  const cur = editor?.getAttributes('highlight')?.color || '#FFF59D';
+  __hp.hex = cur;
+  const hi = document.getElementById('hp-hex-input'); if (hi) hi.value = cur;
+  const pv = document.getElementById('hp-preview'); if (pv) pv.style.background = cur;
+  pop.style.visibility = 'hidden';
+  pop.classList.add('show');
+  const rect = anchorBtn.getBoundingClientRect();
+  const pw = pop.offsetWidth;
+  let left = rect.left;
+  if (left + pw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - pw - 8);
+  pop.style.left = left + 'px';
+  pop.style.top  = (rect.bottom + 6) + 'px';
+  pop.style.visibility = '';
+}
+function closeHighlightPopover(){
+  const pop = document.getElementById('highlight-popover');
+  if (pop) pop.classList.remove('show');
+}
+function applyHighlight(hex){
+  if (!editor) return;
+  const sel = __hp.savedSel;
+  const ch = editor.chain().focus();
+  if (sel) ch.setTextSelection({ from: sel.from, to: sel.to });
+  /* setHighlight (toggle 이 아님) — Apply 는 무조건 적용. */
+  ch.setHighlight({ color: hex }).run();
+  const sw = document.querySelector('.edit-toolbar button.color-swatch[data-cmd="highlight-open"]');
+  if (sw){ const d = sw.querySelector('.color-dot'); if (d) d.style.background = hex; }
+  try { if (typeof paginate === 'function') paginate(); } catch(_){}
+}
+function clearHighlight(){
+  if (!editor) return;
+  const sel = __hp.savedSel;
+  const ch = editor.chain().focus();
+  if (sel) ch.setTextSelection({ from: sel.from, to: sel.to });
+  ch.unsetHighlight().run();
+  try { if (typeof paginate === 'function') paginate(); } catch(_){}
+}
+
+(function bindHighlightPopover(){
+  const pop = document.getElementById('highlight-popover');
+  if (!pop) return;
+
+  pop.addEventListener('mousedown', e => {
+    if (e.target.matches('input[type=text], input[type=number]')) return;
+    e.preventDefault();
+  });
+
+  document.getElementById('hp-hex-input')?.addEventListener('input', e => {
+    let v = String(e.target.value || '').trim();
+    if (!v.startsWith('#')) v = '#' + v;
+    if (/^#[0-9a-f]{6}$/i.test(v)){
+      __hp.hex = v.toUpperCase();
+      const pv = document.getElementById('hp-preview'); if (pv) pv.style.background = __hp.hex;
+    }
+  });
+
+  pop.querySelectorAll('.cp-swatch').forEach(b => {
+    if (b.dataset.hex) b.style.background = b.dataset.hex;
+    b.addEventListener('click', () => {
+      __hp.hex = b.dataset.hex;
+      const hi = document.getElementById('hp-hex-input'); if (hi) hi.value = __hp.hex;
+      const pv = document.getElementById('hp-preview'); if (pv) pv.style.background = __hp.hex;
+    });
+  });
+
+  document.getElementById('hp-clear')?.addEventListener('click', () => {
+    clearHighlight();
+    closeHighlightPopover();
+    toast('음영 해제', 'info');
+  });
+  document.getElementById('hp-cancel')?.addEventListener('click', closeHighlightPopover);
+  document.getElementById('hp-apply')?.addEventListener('click', () => {
+    applyHighlight(__hp.hex);
+    closeHighlightPopover();
+    toast(`음영 ${__hp.hex}`, 'ok');
+  });
+
+  document.addEventListener('mousedown', e => {
+    if (!pop.classList.contains('show')) return;
+    if (pop.contains(e.target)) return;
+    if (e.target.closest('button[data-cmd="highlight-open"]')) return;
+    closeHighlightPopover();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && pop.classList.contains('show')) closeHighlightPopover();
   });
 })();
 
