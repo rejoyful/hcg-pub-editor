@@ -1432,6 +1432,13 @@ ul.toc-list > li::before{
   .app{display:block !important;height:auto !important;overflow:visible !important}
   .main{display:block !important;grid-template-columns:none !important;overflow:visible !important;height:auto !important}
   .stage{padding:0 !important;margin:0 !important;overflow:visible !important;background:#fff !important;display:block !important;height:auto !important}
+  /* body.dock-mode-right .stage 가 0,2,1 specificity 로 위 0,1,1 규칙을
+     이긴다(둘 다 !important 일 때 specificity 가 결정자). 동일 specificity
+     로 dock-mode-* 변종을 명시 reset 해서 인쇄 시 도크 폭만큼의 padding 이
+     남아 본문이 페이지 밖으로 밀리는 현상을 차단한다. */
+  body.dock-mode-right .stage,
+  body.dock-mode-bottom .stage,
+  body.dock-mode-float .stage{padding:0 !important;margin:0 !important;}
   .book{gap:0 !important;padding:0 !important;margin:0 !important;min-width:0 !important;display:block !important}
   .spread{
     display:block !important;
@@ -6145,6 +6152,30 @@ async function runExport(kind){
     const base = safeFilename();
     if (kind === 'pdf'){
       toast('PDF 인쇄 창을 엽니다', 'info');
+      /* 페이지네이션 race 가드 ────────────────────────────────────────
+         scheduleReflow() 는 45–70ms debounce + 1 rAF 로 늦게 paginate 하기
+         때문에, 페이지 진입 직후(~100–500ms) 또는 사이드바 설정 변경 직후
+         사용자가 빠르게 PDF 내보내기를 누르면 #book .page-content 가
+         비어있는 상태에서 print iframe 이 캡처되어 "텍스트는 있지만
+         (머리말/꼬리말) 본문은 없는 흰 페이지" 가 떴다.
+         게다가 이미지 드래그 중에는 setReflowSuspended(true) 로 paginate
+         가 막혀있을 수 있어, 여기서 명시적으로 풀고 동기 paginate 1회를
+         보장한 뒤, 두 번의 rAF 와 폰트 로딩 완료까지 기다린다. */
+      try { setReflowSuspended(false); } catch(_){}
+      try { paginate(); } catch(e){ console.warn('[HCG] pre-print paginate:', e); }
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch(_){}
+      /* paginate 결과 검증 — 모든 .page-content 가 비어있으면 abort.
+         (front-matter 자동 섹션은 .page-content 의 자식이 없어도 텍스트가
+         있을 수 있으므로 children 만 검사하지 않고 textContent 도 확인.) */
+      const pageContents = document.querySelectorAll('#book .page-content');
+      const hasAnyContent = Array.from(pageContents).some(el =>
+        el.children.length > 0 || (el.textContent || '').trim().length > 0
+      );
+      if (pageContents.length === 0 || !hasAnyContent){
+        toast('조판이 아직 끝나지 않았습니다. 잠시 후 다시 시도해주세요.', 'err');
+        return;
+      }
       syncPrintPageSize();
       await printRenderedBook();
       return;
@@ -6213,7 +6244,16 @@ table{border-collapse:collapse;width:100%;margin:10pt 0}td,th{border:1px solid #
 
 function buildPrintHtml(){
   const title = ($('#doc-title').value || 'HCG typesetting editor').trim();
-  const bodyClasses = document.body.className || '';
+  /* body class 화이트리스트 ──────────────────────────────────────────
+     document.body 의 모든 클래스를 그대로 iframe 에 넘기면 dock-mode-right /
+     dock-mode-bottom 같은 UI 전용 클래스가 따라와서 .stage 에 도크 폭만큼의
+     padding(예: padding-right: calc(--edit-dock-w + 32px) ≈ 512px) 이 잔류,
+     본문이 페이지 영역 밖으로 밀려 인쇄 미리보기가 비거나 어긋날 수 있다.
+     iframe 은 에디터 UI 가 없으므로 dock-mode-* 클래스는 제거한다. */
+  const bodyClasses = (document.body.className || '')
+    .split(/\s+/)
+    .filter(c => c && !/^dock-mode-/.test(c))
+    .join(' ');
   /* 인쇄 iframe 의 head 자산은 *동일 출처* 의 <style> 만 인라인한다.
      (1) 책 본문은 Phosphor 아이콘을 한 번도 사용하지 않는다 — toolbar 전용.
      (2) cross-origin <link> (예: unpkg CDN) 을 srcdoc 안에 박으면
