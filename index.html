@@ -747,8 +747,19 @@ body.facing-pages .page-right .page-foot{
   padding-right: var(--page-outer);
 }
 /* 마주보기 시각화: spine 쪽 그림자 강조 — .spread::after 는 이미 중앙에 drop shadow 를
-   주고 있으므로 그대로 둠. 추가로 facing-pages 일 때 페이지 간 간격을 0 으로 강제. */
+   주고 있으므로 그대로 둠. 추가로 facing-pages 일 때 페이지 간 간격을 0 으로 강제.
+   단, 재단선/도련 가이드/맞춤표 중 하나라도 켜져 있으면 도련(--page-bleed) 영역이
+   페이지 외곽으로 뻗기 때문에, 좌측 페이지 우측 마크와 우측 페이지 좌측 마크가
+   gap=0 인 상태에서 정확히 겹친다(오버랩). 이 때만 도련 폭 X 2 + 여유(4mm) 만큼
+   gap 을 자동으로 두어 마크가 명확히 보이게 한다. 마크가 다 꺼져있으면 책 등(spine)
+   시각화를 위해 그대로 0. spread::before 의 centerline 은 left:50% 라 gap 가운데에
+   그려져 책 등 표현은 유지된다. */
 body.facing-pages .spread{ gap:0; }
+body.facing-pages.show-crop-marks .spread,
+body.facing-pages.show-bleed-guide .spread,
+body.facing-pages.show-printer-marks .spread{
+  gap: calc(var(--page-bleed) * 2 + 4mm);
+}
 
 /* ============================================================
    Printer's Marks — 인디자인식 인쇄용 마크
