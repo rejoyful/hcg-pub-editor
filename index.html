@@ -50,6 +50,16 @@
   --page-mark-len: 5mm;
   --page-mark-thick: 0.25mm;
   --page-mark-color: #222;
+  /* 마크 영역(슬러그/마크 마진) — trim 외곽으로 sheet 가장자리까지의 거리.
+     인쇄소 표준 PDF (예: InDesign 출력) 의 sheet 사이즈는 다음과 같다.
+        sheet = trim + 2 × mark-margin
+     이 영역 안에:
+        · 도련(--page-bleed)  : trim 외곽 3mm — 본문 이미지가 흘러나가는 영역
+        · 재단선(crop marks)  : trim 모서리 기준 mark-len 외향
+        · 맞춤표·컬러바      : sheet 가장자리 / mark area 안 정중앙
+     기본 9mm = 도련 3mm + 마크 여유 6mm. 신국판(152×225) PDF 출력 시
+     sheet ≈ 170×243mm (= 483×690pt) 으로 인디자인 표준 출력값과 정합. */
+  --page-mark-margin: 9mm;
 
   /* Printer's marks (인디자인 인쇄용 마크) */
   --reg-mark-size: 6mm;        /* 맞춤표 지름 */
@@ -653,18 +663,23 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
 }
 
 /* 재단선 (crop marks) — 각 페이지 4모서리에 L자 형태로 표시.
-   body.show-crop-marks 가 켜졌을 때만 가시화. 도련(--page-bleed) 만큼 바깥으로 뻗음.
-   단일 ::before 에서 8개 선분을 linear-gradient 로 그려낸다. */
+   body.show-crop-marks 가 켜졌을 때만 가시화.
+   ::before 자체를 sheet 가장자리(= -mark-margin) 까지 확장하고, background-position
+   에서 trim 모서리(= mark-margin) 기준으로 마크를 그린다. 결과:
+     · 마크 안쪽 끝 = trim 모서리 (책 재단 위치)
+     · 마크 바깥 끝 = trim 외향 mark-len (= 5mm)
+     · sheet 가장자리까지 여유 = mark-margin − mark-len (= 4mm)
+   이로써 sheet 의 정 가운데에 trim 이 위치하고, 4면 균등 마진 안에 마크가 배치됨. */
 .page::before{
   content:"";
   position:absolute;
   pointer-events:none;
   z-index:4;
   display:none;
-  top:calc(-1 * var(--page-bleed));
-  right:calc(-1 * var(--page-bleed));
-  bottom:calc(-1 * var(--page-bleed));
-  left:calc(-1 * var(--page-bleed));
+  top:calc(-1 * var(--page-mark-margin));
+  right:calc(-1 * var(--page-mark-margin));
+  bottom:calc(-1 * var(--page-mark-margin));
+  left:calc(-1 * var(--page-mark-margin));
   background-image:
     linear-gradient(var(--page-mark-color),var(--page-mark-color)),
     linear-gradient(var(--page-mark-color),var(--page-mark-color)),
@@ -685,22 +700,27 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
     var(--page-mark-len) var(--page-mark-thick),
     var(--page-mark-thick) var(--page-mark-len);
   background-position:
-    /* TL 가로 — 트림 상단(= bleed)에, 왼쪽 끝에서 mark-len 만큼 */
-    0 var(--page-bleed),
-    /* TL 세로 — 트림 좌측(= bleed)에, 상단에서 mark-len 만큼 */
-    var(--page-bleed) 0,
-    /* TR 가로 */
-    100% var(--page-bleed),
-    /* TR 세로 */
-    calc(100% - var(--page-bleed)) 0,
-    /* BL 가로 */
-    0 calc(100% - var(--page-bleed)),
-    /* BL 세로 */
-    var(--page-bleed) 100%,
+    /* 모든 마크는 trim 모서리 외부(트림 영역 밖) 에 위치하도록 mark-thick 보정.
+       가로선의 경우 Y 좌표를 mark-thick 만큼 위로 올려서 마크의 아래쪽 가장자리가
+       정확히 trim 모서리에 일치(trim 안쪽으로 0.25mm 도 침범하지 않게).
+       세로선도 X 좌표 동일하게 보정. */
+    /* TL 가로 — 마크 X: trim 좌측 외향 mark-len ~ trim 좌측 모서리.
+                마크 Y: trim 상단 외향 mark-thick ~ trim 상단 모서리. */
+    calc(var(--page-mark-margin) - var(--page-mark-len)) calc(var(--page-mark-margin) - var(--page-mark-thick)),
+    /* TL 세로 — X: trim 좌측 외향 mark-thick ~ 모서리. Y: trim 상단 외향 mark-len ~ 모서리. */
+    calc(var(--page-mark-margin) - var(--page-mark-thick)) calc(var(--page-mark-margin) - var(--page-mark-len)),
+    /* TR 가로 — X: trim 우측 모서리(=100%-mark-margin) ~ 외향 mark-len. Y: trim 상단 외향. */
+    calc(100% - var(--page-mark-margin)) calc(var(--page-mark-margin) - var(--page-mark-thick)),
+    /* TR 세로 — X: trim 우측 모서리 ~ 외향 mark-thick. Y: trim 상단 외향 mark-len. */
+    calc(100% - var(--page-mark-margin)) calc(var(--page-mark-margin) - var(--page-mark-len)),
+    /* BL 가로 — X: trim 좌측 외향 mark-len. Y: trim 하단 모서리(=100%-mark-margin) ~ 외향. */
+    calc(var(--page-mark-margin) - var(--page-mark-len)) calc(100% - var(--page-mark-margin)),
+    /* BL 세로 — X: trim 좌측 외향 mark-thick. Y: trim 하단 모서리 ~ 외향. */
+    calc(var(--page-mark-margin) - var(--page-mark-thick)) calc(100% - var(--page-mark-margin)),
     /* BR 가로 */
-    100% calc(100% - var(--page-bleed)),
+    calc(100% - var(--page-mark-margin)) calc(100% - var(--page-mark-margin)),
     /* BR 세로 */
-    calc(100% - var(--page-bleed)) 100%;
+    calc(100% - var(--page-mark-margin)) calc(100% - var(--page-mark-margin));
 }
 body.show-crop-marks .page::before{ display:block; }
 
@@ -746,9 +766,19 @@ body.facing-pages .page-right .page-foot{
   padding-left: var(--page-inner);
   padding-right: var(--page-outer);
 }
-/* 마주보기 시각화: spine 쪽 그림자 강조 — .spread::after 는 이미 중앙에 drop shadow 를
-   주고 있으므로 그대로 둠. 추가로 facing-pages 일 때 페이지 간 간격을 0 으로 강제. */
+/* 마주보기 시각화: spine 쪽 그림자 강조 — .spread::after 는 이미 중앙에 drop shadow
+   를 주고 있으므로 그대로 둠. 추가로 facing-pages 일 때 페이지 간 간격을 0 으로 강제.
+   단, 재단선/도련 가이드/맞춤표 중 하나라도 켜져 있으면 마크 영역(--page-mark-margin)
+   이 페이지 외곽으로 뻗기 때문에, 좌측 페이지 우측 마크와 우측 페이지 좌측 마크가
+   gap=0 인 상태에서 정확히 겹친다(오버랩). 이 때만 마크 영역 폭 × 2 + 여유(4mm)
+   만큼 gap 을 자동으로 두어 마크가 명확히 보이게 한다. spread::before 의 centerline
+   은 left:50% 기준이라 늘어난 gap 가운데에 그려져 책 등 표현은 그대로 유지된다. */
 body.facing-pages .spread{ gap:0; }
+body.facing-pages.show-crop-marks .spread,
+body.facing-pages.show-bleed-guide .spread,
+body.facing-pages.show-printer-marks .spread{
+  gap: calc(var(--page-mark-margin) * 2 + 4mm);
+}
 
 /* ============================================================
    Printer's Marks — 인디자인식 인쇄용 마크
@@ -761,10 +791,13 @@ body.facing-pages .spread{ gap:0; }
   position:absolute;
   pointer-events:none;
   z-index:5;
-  top:calc(-1 * var(--page-bleed));
-  right:calc(-1 * var(--page-bleed));
-  bottom:calc(-1 * var(--page-bleed));
-  left:calc(-1 * var(--page-bleed));
+  /* sheet 가장자리까지 확장 — trim 외각 mark-margin 만큼.
+     맞춤표/컬러바는 이 컨테이너의 외곽(=sheet 가장자리) 에 정렬되어,
+     bleed 영역(이미지가 흘러나가는 영역) 과 겹치지 않는다. */
+  top:calc(-1 * var(--page-mark-margin));
+  right:calc(-1 * var(--page-mark-margin));
+  bottom:calc(-1 * var(--page-mark-margin));
+  left:calc(-1 * var(--page-mark-margin));
   display:none;
 }
 body.show-printer-marks .page-marks{ display:block; }
@@ -786,13 +819,14 @@ body.show-printer-marks .page-marks{ display:block; }
 .page-marks .reg.left{   left:0;                       top:50%;  transform:translate(-50%, -50%); }
 .page-marks .reg.right{  right:0;                      top:50%;  transform:translate(50%, -50%); }
 
-/* 컬러바 — 페이지 하단, bleed 영역 바깥(@page 내부) 에 CMYK + 주요 프로세스 색을
-   나란히 배치. 실제 인쇄소에서 색 기준선으로 사용. */
+/* 컬러바 — 페이지 하단의 마크 영역(slug-like) 안 중앙에 CMYK + 주요 프로세스 색
+   을 나란히 배치. bleed(이미지가 흘러나가는 영역) 와는 겹치지 않게 sheet 가장자리
+   쪽으로 들어간 위치. 실제 인쇄소에서 색 기준선으로 사용. */
 .page-marks .color-bar{
   position:absolute;
-  left:calc(var(--page-bleed) + 14mm);   /* 왼쪽 맞춤표와 겹치지 않게 */
-  right:calc(var(--page-bleed) + 14mm);
-  bottom:calc((var(--page-bleed) - var(--color-bar-h)) / 2);
+  left:calc(var(--page-mark-margin) + 14mm);   /* 왼쪽 맞춤표와 겹치지 않게 */
+  right:calc(var(--page-mark-margin) + 14mm);
+  bottom:calc((var(--page-mark-margin) - var(--color-bar-h)) / 2);
   height:var(--color-bar-h);
   display:flex;
   gap:0;
@@ -817,12 +851,12 @@ body.show-printer-marks .page-marks{ display:block; }
 .page-marks .color-bar .sw.k50{ background:#808080; }
 .page-marks .color-bar .sw.k75{ background:#404040; }
 
-/* 페이지 번호 라벨(가이드용) — 작은 글자로 bleed 영역 우하단 바깥 표시.
+/* 페이지 번호 라벨(가이드용) — 작은 글자로 sheet 우하단 마크 영역에 표시.
    실제 인쇄 시 유용. */
 .page-marks .slug{
   position:absolute;
-  bottom:calc(var(--page-bleed) * 0.25);
-  right:calc(var(--page-bleed) * 0.25);
+  bottom:calc(var(--page-mark-margin) * 0.25);
+  right:calc(var(--page-mark-margin) * 0.25);
   font-size:6pt;
   color:#222;
   font-family:var(--ui-family);
@@ -1670,6 +1704,10 @@ ul.toc-list > li::before{
             <b style="color:var(--ink)">인쇄소 납품용</b> = 재단선·맞춤표 ON ·
             <b style="color:var(--ink)">검토용</b> = 둘 다 OFF.
             PDF 내보내기 시 토스트와 저장 파일명에 현재 용도가 표시됩니다.
+            <br>
+            <span style="display:inline-block;margin-top:3px">PDF sheet 사이즈 = 용지 + 4면 9mm 마크 영역 (인디자인 표준).
+            예: 신국판 152×225 → <b style="color:var(--ink)">170×243mm</b> (= 483×690pt).
+            마크는 sheet 안 trim 모서리 기준, 4면 균등 배치.</span>
           </small>
         </div>
       </div>
@@ -6341,11 +6379,22 @@ function buildPrintHtml(){
   const pageW = parseFloat(getComputedStyle(root).getPropertyValue('--page-w')) || 152;
   const pageH = parseFloat(getComputedStyle(root).getPropertyValue('--page-h')) || 225;
   const bleed = Math.max(0, parseFloat(getComputedStyle(root).getPropertyValue('--page-bleed')) || 0);
-  const sheetW = `${pageW + bleed * 2}mm`;
-  const sheetH = `${pageH + bleed * 2}mm`;
+  /* mark-margin: sheet 가장자리부터 trim 까지의 거리.
+     PDF sheet = trim + 2 × mark-margin. 인쇄소가 받는 PDF 의 실제 페이지 크기.
+     인디자인 표준 PDF 출력의 신국판 = 170×243mm (= trim 152×225 + 양쪽 9mm) 와
+     정합. mark-margin 이 정의되지 않은 경우 bleed 와 동일하게 폴백 — 단, 그
+     상황에서는 마크가 sheet 가장자리에 붙어 인쇄소 검수 신뢰도가 떨어진다는
+     점에 유의(첨부 표준 PDF 와 어긋남). */
+  const markMargin = Math.max(
+    bleed,
+    parseFloat(getComputedStyle(root).getPropertyValue('--page-mark-margin')) || 0
+  );
+  const sheetW = `${pageW + markMargin * 2}mm`;
+  const sheetH = `${pageH + markMargin * 2}mm`;
   const trimW = `${pageW}mm`;
   const trimH = `${pageH}mm`;
   const bleedMm = `${bleed}mm`;
+  const markMarginMm = `${markMargin}mm`;
   const vars = [
     '--page-w',
     '--page-h',
@@ -6356,6 +6405,7 @@ function buildPrintHtml(){
     '--page-inner',
     '--page-outer',
     '--page-bleed',
+    '--page-mark-margin',
     '--page-mark-len',
     '--page-mark-thick',
     '--page-mark-color',
@@ -6451,7 +6501,10 @@ body{overflow:visible !important;}
 .print-root .print-sheet{
   width:${sheetW} !important;
   height:${sheetH} !important;
-  padding:${bleedMm} !important;
+  /* padding = mark-margin → trim 이 sheet 정 가운데에 위치, 4면 균등 마진.
+     이 영역 안에 재단선/맞춤표/컬러바가 배치되어 첨부 표준 PDF (483×690pt) 와
+     동일한 시각 배치를 만든다. */
+  padding:${markMarginMm} !important;
   box-sizing:border-box !important;
   display:block !important;
   position:relative !important;
