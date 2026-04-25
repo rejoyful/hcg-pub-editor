@@ -50,6 +50,11 @@
   --page-mark-len: 5mm;
   --page-mark-thick: 0.25mm;
   --page-mark-color: #222;
+  /* 재단선 mark offset — 인디자인 기본값(InDesign 표준 ≈ 6pt = 2.117mm).
+     마크의 안쪽 끝이 trim 모서리에서 이만큼 떨어진다(= 마크와 트림 사이 여유).
+     첨부된 표준 PDF(화타 앞부속.pdf) 의 재단선이 모서리에 붙어있지 않고
+     살짝 떨어져 그려진 것과 정합. */
+  --page-mark-offset: 2mm;
   /* 마크 영역(슬러그/마크 마진) — trim 외곽으로 sheet 가장자리까지의 거리.
      인쇄소 표준 PDF (예: InDesign 출력) 의 sheet 사이즈는 다음과 같다.
         sheet = trim + 2 × mark-margin
@@ -194,6 +199,57 @@ button:focus-visible,.btn:focus-visible{outline-offset:2px}
 }
 .side .seg button:last-child{border-right:0}
 .side .seg button.active{background:var(--ink);color:#fff}
+
+/* ─── 인쇄 마크 토글 — 한 줄 한 옵션 (디자이너 친화) ───
+   각 토글이 자체 줄을 가져 어색한 줄바꿈 없이 [✓] 한글명 (영문) … 보조설명
+   순으로 가로 정렬된다. 기존 "라벨 + 인라인 checkbox" 방식은 폭이 좁을 때
+   2~3 줄로 깨지는 문제가 있어 폐기. */
+.side .row.mark-row{
+  align-items:flex-start;
+  margin-bottom:6px;
+}
+.side .row > label.chk-line:first-child,
+.side .chk-line{
+  display:flex;align-items:center;gap:8px;
+  width:100%;flex:1 1 auto;min-width:0;cursor:pointer;
+  padding:5px 8px;
+  border:1px solid var(--line);border-radius:4px;background:#fff;
+  font-size:12px;line-height:1.35;
+  white-space:normal;
+  transition:border-color .12s, background .12s;
+}
+.side .chk-line:hover{ border-color:var(--ink); background:var(--panel); }
+.side .chk-line input[type=checkbox]{ flex:0 0 auto; margin:0; }
+.side .chk-line .lbl{
+  flex:1 1 auto; min-width:0;
+  color:var(--ink);font-weight:600;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.side .chk-line .lbl small{
+  display:block;
+  font-size:10.5px; font-weight:400; color:var(--meta);
+  margin-top:1px; letter-spacing:.2px;
+}
+.side .chk-line .tag{
+  flex:0 0 auto;
+  font-size:10px; line-height:1;
+  padding:2px 5px; border-radius:2px;
+  white-space:nowrap;
+  font-weight:600;
+}
+.side .chk-line .tag.ok{ color:#1f5f3f; background:#dff5e3; border:1px solid #b7e4c0; }
+.side .chk-line .tag.screen{ color:#5a4a1f; background:#fff4d2; border:1px solid #f0d97e; }
+
+/* 정보 표시 — 작업 영역(트림+도련 합산) 크기 안내 */
+.side .row.info{ align-items:center; }
+.side .row.info .info-val{
+  flex:1; padding:4px 8px;
+  background:var(--soft); border:1px dashed var(--line); border-radius:3px;
+  font-size:11.5px; color:var(--ink); font-weight:600; line-height:1.35;
+}
+.side .row.info .info-val em{
+  font-style:normal; font-weight:400; color:var(--meta); font-size:10.5px;
+}
 /* 용지 프리셋 저장·삭제 버튼 — 사이드바 톤 맞춤 (얇은 outline) */
 .side .btn-preset{
   padding:5px 10px;background:#fff;border:1px solid var(--line);border-radius:4px;
@@ -651,6 +707,32 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
   pointer-events:none;z-index:1;
 }
 
+/* ============================================================
+   Cover spread (중철제본 첫 페이지 = recto/우면 단일).
+   spread.cover 는 좌측에 .page-blank 를 두고 우측만 실제 페이지.
+   - centerline / gutter shadow 제거 (책등 없음 = 표지 자유 배치).
+   - .page-blank 은 흰 빈 칸으로 두되 box-shadow 와 마크 모두 미표시.
+   facing-pages 와 무관하게 적용 (saddle-stitched 는 항상 첫 페이지가 우면).
+   ============================================================ */
+.spread.cover{
+  background:transparent;
+  box-shadow:none;
+}
+.spread.cover::before,
+.spread.cover::after{ display:none; }
+.spread.cover .page-blank{
+  width:var(--page-w);
+  height:var(--page-h);
+  background:transparent;
+  visibility:hidden;
+  /* 자식이 없어도 grid 셀을 차지해 우측 recto 의 절대 좌표가 일반 spread 와
+     동일한 위치(우측 column) 에 머문다 → stage 의 가로 레이아웃이 흔들리지 않음. */
+}
+/* 빈 좌측 placeholder 에는 어떤 마크도 그리지 않는다. */
+.spread.cover .page-blank::before,
+.spread.cover .page-blank::after{ display:none !important; }
+.spread.cover .page-blank .page-marks{ display:none !important; }
+
 /* Single page card */
 .page{
   width:var(--page-w);
@@ -701,26 +783,28 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
     var(--page-mark-thick) var(--page-mark-len);
   background-position:
     /* 모든 마크는 trim 모서리 외부(트림 영역 밖) 에 위치하도록 mark-thick 보정.
+       또한 mark-offset(인디자인 표준) 만큼 trim 모서리에서 추가로 떨어진다 —
+       마크의 안쪽 끝과 trim 모서리 사이에 offset 폭의 여유가 생긴다.
+       (첨부된 표준 PDF 의 재단선이 모서리에 붙지 않고 살짝 떨어진 모습과 정합.)
        가로선의 경우 Y 좌표를 mark-thick 만큼 위로 올려서 마크의 아래쪽 가장자리가
-       정확히 trim 모서리에 일치(trim 안쪽으로 0.25mm 도 침범하지 않게).
-       세로선도 X 좌표 동일하게 보정. */
-    /* TL 가로 — 마크 X: trim 좌측 외향 mark-len ~ trim 좌측 모서리.
-                마크 Y: trim 상단 외향 mark-thick ~ trim 상단 모서리. */
-    calc(var(--page-mark-margin) - var(--page-mark-len)) calc(var(--page-mark-margin) - var(--page-mark-thick)),
-    /* TL 세로 — X: trim 좌측 외향 mark-thick ~ 모서리. Y: trim 상단 외향 mark-len ~ 모서리. */
-    calc(var(--page-mark-margin) - var(--page-mark-thick)) calc(var(--page-mark-margin) - var(--page-mark-len)),
-    /* TR 가로 — X: trim 우측 모서리(=100%-mark-margin) ~ 외향 mark-len. Y: trim 상단 외향. */
-    calc(100% - var(--page-mark-margin)) calc(var(--page-mark-margin) - var(--page-mark-thick)),
-    /* TR 세로 — X: trim 우측 모서리 ~ 외향 mark-thick. Y: trim 상단 외향 mark-len. */
-    calc(100% - var(--page-mark-margin)) calc(var(--page-mark-margin) - var(--page-mark-len)),
-    /* BL 가로 — X: trim 좌측 외향 mark-len. Y: trim 하단 모서리(=100%-mark-margin) ~ 외향. */
-    calc(var(--page-mark-margin) - var(--page-mark-len)) calc(100% - var(--page-mark-margin)),
-    /* BL 세로 — X: trim 좌측 외향 mark-thick. Y: trim 하단 모서리 ~ 외향. */
-    calc(var(--page-mark-margin) - var(--page-mark-thick)) calc(100% - var(--page-mark-margin)),
-    /* BR 가로 */
-    calc(100% - var(--page-mark-margin)) calc(100% - var(--page-mark-margin)),
-    /* BR 세로 */
-    calc(100% - var(--page-mark-margin)) calc(100% - var(--page-mark-margin));
+       정확히 trim 모서리(에서 mark-offset 만큼 위) 에 일치하게 한다. */
+    /* TL 가로 — 마크 X: trim 좌측 외향 (mark-len + offset) ~ (offset).
+                마크 Y: trim 상단 외향 mark-thick. */
+    calc(var(--page-mark-margin) - var(--page-mark-len) - var(--page-mark-offset)) calc(var(--page-mark-margin) - var(--page-mark-thick)),
+    /* TL 세로 — X: trim 좌측 외향 mark-thick. Y: trim 상단 외향 (mark-len + offset). */
+    calc(var(--page-mark-margin) - var(--page-mark-thick)) calc(var(--page-mark-margin) - var(--page-mark-len) - var(--page-mark-offset)),
+    /* TR 가로 — X: trim 우측 모서리 + offset ~ + offset + mark-len. Y: trim 상단 외향. */
+    calc(100% - var(--page-mark-margin) + var(--page-mark-offset)) calc(var(--page-mark-margin) - var(--page-mark-thick)),
+    /* TR 세로 — X: trim 우측 모서리. Y: trim 상단 외향 (mark-len + offset). */
+    calc(100% - var(--page-mark-margin)) calc(var(--page-mark-margin) - var(--page-mark-len) - var(--page-mark-offset)),
+    /* BL 가로 — X: trim 좌측 외향 (mark-len + offset). Y: trim 하단 모서리. */
+    calc(var(--page-mark-margin) - var(--page-mark-len) - var(--page-mark-offset)) calc(100% - var(--page-mark-margin)),
+    /* BL 세로 — X: trim 좌측 외향 mark-thick. Y: trim 하단 모서리 + offset. */
+    calc(var(--page-mark-margin) - var(--page-mark-thick)) calc(100% - var(--page-mark-margin) + var(--page-mark-offset)),
+    /* BR 가로 — X: trim 우측 모서리 + offset. Y: trim 하단 모서리. */
+    calc(100% - var(--page-mark-margin) + var(--page-mark-offset)) calc(100% - var(--page-mark-margin)),
+    /* BR 세로 — X: trim 우측 모서리. Y: trim 하단 모서리 + offset. */
+    calc(100% - var(--page-mark-margin)) calc(100% - var(--page-mark-margin) + var(--page-mark-offset));
 }
 body.show-crop-marks .page::before{ display:block; }
 
@@ -767,16 +851,16 @@ body.facing-pages .page-right .page-foot{
   padding-right: var(--page-outer);
 }
 /* 마주보기 시각화: spine 쪽 그림자 강조 — .spread::after 는 이미 중앙에 drop shadow
-   를 주고 있으므로 그대로 둠. 추가로 facing-pages 일 때 페이지 간 간격을 0 으로 강제.
-   단, 재단선/도련 가이드/맞춤표 중 하나라도 켜져 있으면 마크 영역(--page-mark-margin)
-   이 페이지 외곽으로 뻗기 때문에, 좌측 페이지 우측 마크와 우측 페이지 좌측 마크가
-   gap=0 인 상태에서 정확히 겹친다(오버랩). 이 때만 마크 영역 폭 × 2 + 여유(4mm)
-   만큼 gap 을 자동으로 두어 마크가 명확히 보이게 한다. spread::before 의 centerline
-   은 left:50% 기준이라 늘어난 gap 가운데에 그려져 책 등 표현은 그대로 유지된다. */
-body.facing-pages .spread{ gap:0; }
-body.facing-pages.show-crop-marks .spread,
-body.facing-pages.show-bleed-guide .spread,
-body.facing-pages.show-printer-marks .spread{
+   를 주고 있으므로 그대로 둠.
+   ──────────────────────────────────────────────────────────────────────
+   gap 정책 (2026-04-25 정정): 이전엔 마크 토글 시점에 gap 이 0 ↔ 22mm 로 변해
+   .book 이 가로 폭이 출렁여 페이지가 좌·우로 흔들리는 시각 사고가 있었다(편집자
+   의 시점 추적이 깨짐). 따라서 토글 상태와 무관하게 gap 을 항상 동일하게 둔다 —
+   마크 영역(2 × mark-margin) + 여유 4mm. 이렇게 하면 .book 의 총 폭이 고정돼,
+   사이드바 토글이 무엇이든 페이지 위치가 그대로 유지된다(stage 가 책모양에 끼어
+   맞추듯 좁아지지 않음). spread::before 의 centerline 은 left:50% 기준이므로
+   늘어난 gap 가운데에 그려져 책등 표현은 그대로 유지된다. */
+body.facing-pages .spread{
   gap: calc(var(--page-mark-margin) * 2 + 4mm);
 }
 
@@ -1632,11 +1716,11 @@ ul.toc-list > li::before{
         </div>
       </div>
 
-      <h3 data-sec="paper"><span><i class="ph ph-file ic"></i><span class="title-text">용지 · 여백</span></span></h3>
+      <h3 data-sec="paper"><span><i class="ph ph-file ic"></i><span class="title-text">판형 · 여백</span></span></h3>
       <div class="sec">
         <div class="row">
-          <label>용지</label>
-          <select id="sel-paper">
+          <label title="Trim Size — 재단 후 실제 책의 크기">판형</label>
+          <select id="sel-paper" title="판형(Trim Size) — 재단 후 실제 책 크기. 신국판은 한국 단행본 표준.">
             <option value="Shinkook" selected>신국판 (152×225)</option>
             <option value="B5">B5 (182×257)</option>
             <option value="A4">A4 (210×297)</option>
@@ -1644,70 +1728,87 @@ ul.toc-list > li::before{
             <option value="46">46판 (127×188)</option>
           </select>
         </div>
-        <div class="row paper-preset-ctrl" title="현재 용지·도련·여백·단·Facing Pages 설정을 프리셋으로 저장합니다. 저장된 프리셋은 이 브라우저의 로컬 저장소에 남아 다음 세션에도 복원됩니다.">
+        <div class="row info" title="작업 영역(Work Area) = 트림 + 도련. 인디자인의 'Document Setup' 기준 페이지 크기. 본문이 흘러나가는 이미지·배경은 도련까지 채워야 재단 후 흰 가장자리가 생기지 않습니다.">
+          <label style="flex:0 0 90px;min-width:90px;opacity:.7;white-space:nowrap">작업 영역</label>
+          <span class="info-val" id="info-work-size">158 × 231 mm <em id="info-work-detail">(= 152 × 225 + 도련 3mm)</em></span>
+        </div>
+        <div class="row paper-preset-ctrl" title="현재 판형·도련·여백·단·펼침 페이지 설정을 프리셋으로 저장합니다. 이 브라우저의 로컬 저장소에 남아 다음 세션에도 복원됩니다.">
           <label style="opacity:.7">프리셋</label>
           <button type="button" class="btn-preset" id="btn-paper-save" title="현재 설정을 프리셋으로 저장">＋ 저장</button>
           <button type="button" class="btn-preset" id="btn-paper-delete" disabled title="내장 프리셋은 삭제할 수 없습니다">− 삭제</button>
         </div>
         <div class="row">
-          <label>단</label>
+          <label title="Columns — 한 페이지 안 본문 단(컬럼) 수">단</label>
           <div class="seg" id="seg-columns">
             <button data-val="1" class="active">1단</button>
             <button data-val="2">2단</button>
           </div>
         </div>
-        <div class="row">
-          <label>상·하</label>
-          <input type="number" id="m-top" value="20" min="0" max="60" step="1">
-          <input type="number" id="m-bot" value="20" min="0" max="60" step="1">
+        <div class="row" title="Top · Bottom Margin — 위·아래 본문 여백 (mm)">
+          <label>위·아래</label>
+          <input type="number" id="m-top" value="20" min="0" max="60" step="1" title="Top Margin — 위 여백 (mm)">
+          <input type="number" id="m-bot" value="20" min="0" max="60" step="1" title="Bottom Margin — 아래 여백 (mm)">
         </div>
-        <div class="row" id="row-margin-lr">
+        <div class="row" id="row-margin-lr" title="Left · Right Margin — 좌·우 본문 여백 (mm). 펼침 페이지 OFF 일 때만 사용.">
           <label>좌·우</label>
-          <input type="number" id="m-left" value="20" min="0" max="60" step="1">
-          <input type="number" id="m-right" value="20" min="0" max="60" step="1">
+          <input type="number" id="m-left" value="20" min="0" max="60" step="1" title="Left Margin — 왼쪽 여백 (mm)">
+          <input type="number" id="m-right" value="20" min="0" max="60" step="1" title="Right Margin — 오른쪽 여백 (mm)">
         </div>
-        <div class="row">
-          <label>마주보기</label>
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer" title="책 제본용 — 홀/짝 페이지를 좌우 대칭으로 배치하고, 안쪽(제본) 여백을 따로 설정합니다">
-            <input type="checkbox" id="chk-facing-pages" checked> Facing Pages
+        <div class="row" title="Facing Pages — 책 제본용 펼침 페이지. 홀/짝 페이지를 좌우 대칭으로 배치하고 안쪽(제본) 여백을 따로 설정합니다.">
+          <label>펼침 페이지</label>
+          <label class="chk-line" style="font-size:11.5px" title="Facing Pages — 마주보기 펼침 배치">
+            <input type="checkbox" id="chk-facing-pages" checked>
+            <span class="lbl">Facing Pages <small>좌·우 대칭 + 안쪽/바깥쪽 여백</small></span>
           </label>
         </div>
-        <div class="row" id="row-margin-io">
-          <label title="안쪽(Inner/Gutter) · 바깥쪽(Outer) — 제본 시 안쪽을 바깥보다 넓게 잡는 것이 일반적입니다.">안·바깥(mm)</label>
-          <input type="number" id="m-inner" value="25" min="0" max="60" step="1" title="안쪽(Inner / Gutter) — 제본 쪽 여백">
-          <input type="number" id="m-outer" value="15" min="0" max="60" step="1" title="바깥쪽(Outer) — 책장 바깥 쪽 여백">
+        <div class="row" id="row-margin-io" title="Inner (Gutter) · Outer Margin — 안쪽(제본) · 바깥쪽 여백 (mm). 펼침 페이지에서 안쪽을 바깥보다 넓게 잡는 것이 일반적.">
+          <label>안·바깥</label>
+          <input type="number" id="m-inner" value="25" min="0" max="60" step="1" title="Inner / Gutter — 안쪽(제본) 여백 (mm)">
+          <input type="number" id="m-outer" value="15" min="0" max="60" step="1" title="Outer — 바깥쪽 여백 (mm)">
         </div>
-        <div class="row">
-          <label>도련(mm)</label>
-          <input type="number" id="in-bleed" value="3" min="0" max="10" step="0.5" title="재단 시 잘려나가는 여분(일반적으로 3mm)">
-          <label style="min-width:72px;margin-left:4px;font-size:11.5px;color:var(--meta)">bleed</label>
+        <div class="row" title="Bleed — 재단 시 잘려나가는 여분. 한국 단행본 표준 3mm. 작업 영역 = 트림 + 도련.">
+          <label>도련</label>
+          <input type="number" id="in-bleed" value="3" min="0" max="10" step="0.5" title="Bleed (mm) — 재단 여분, 표준 3mm">
+          <label style="min-width:72px;margin-left:4px;font-size:11.5px;color:var(--meta)">mm · Bleed</label>
         </div>
-        <div class="row">
-          <label>재단선</label>
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer" title="Crop Marks — 페이지 4모서리에 L자 재단 기준선. PDF 인쇄 시 그대로 출력되어 인쇄소가 재단(트림) 위치를 잡는 기준이 됩니다. 인쇄소 납품용 PDF 에서는 반드시 ON.">
-            <input type="checkbox" id="chk-crop-marks" checked> 표시 <small style="color:var(--meta);font-size:10.5px">· PDF 출력 ✓</small>
+      </div>
+
+      <h3 data-sec="marks"><span><i class="ph ph-crosshair ic"></i><span class="title-text">인쇄 마크 (Printer's Marks)</span></span></h3>
+      <div class="sec" title="인디자인 출력 표준의 인쇄 마크. 인쇄소가 재단·색·정합 검수에 사용합니다.">
+        <div class="row mark-row">
+          <label class="chk-line" title="Crop Marks — 페이지 4모서리 L자 재단 기준선. 인쇄소가 트림 위치를 잡는 기준입니다. 납품용 PDF 에는 반드시 ON.">
+            <input type="checkbox" id="chk-crop-marks" checked>
+            <span class="lbl">재단선 <small>Crop Marks · 4모서리 L자</small></span>
+            <span class="tag ok">PDF 포함</span>
           </label>
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer;margin-left:8px" title="Bleed Guide — 도련 영역의 점선 표시. 편집 화면 보조용이며 PDF 인쇄 시에는 출력되지 않습니다(실제 인쇄물에는 불필요).">
-            <input type="checkbox" id="chk-bleed-guide" checked> 도련 가이드 <small style="color:var(--meta);font-size:10.5px">· 편집용</small>
+        </div>
+        <div class="row mark-row">
+          <label class="chk-line" title="Bleed Guide — 도련 영역을 점선으로 시각화. 편집 화면 보조용이며 PDF 출력에는 표시되지 않습니다.">
+            <input type="checkbox" id="chk-bleed-guide" checked>
+            <span class="lbl">도련 가이드 <small>Bleed Guide · 편집 보조선</small></span>
+            <span class="tag screen">화면용</span>
           </label>
         </div>
-        <div class="row">
-          <label>인쇄 마크</label>
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer" title="Printer's Marks — 맞춤표(Registration) + CMYK 컬러바(Color Bars). 인쇄소가 색상·견양 정합성을 검수하는 기준입니다. PDF 인쇄 시 그대로 출력되어 인쇄소 납품용 PDF 에서는 ON 권장.">
-            <input type="checkbox" id="chk-printer-marks" checked> 맞춤표·컬러바 <small style="color:var(--meta);font-size:10.5px">· PDF 출력 ✓</small>
+        <div class="row mark-row">
+          <label class="chk-line" title="Registration Marks + Color Bars — 맞춤표(원형 +) 와 CMYK 컬러바. 인쇄소가 견양·색 정합성을 검수하는 기준입니다.">
+            <input type="checkbox" id="chk-printer-marks" checked>
+            <span class="lbl">맞춤표·컬러바 <small>Reg Marks + Color Bars</small></span>
+            <span class="tag ok">PDF 포함</span>
           </label>
         </div>
         <!-- 편집부 실무 가이드: 토글 조합에 따라 PDF 산출물의 용도가 결정됨을 명시.
              신규 편집자가 토글을 깜빡 잊고 잘못된 PDF 를 발송하는 사고를 방지. -->
-        <div class="row" style="margin-top:-2px">
-          <small style="font-size:10.5px;line-height:1.4;color:var(--meta);display:block;padding:4px 6px;background:var(--soft);border-radius:4px;width:100%">
-            <b style="color:var(--ink)">인쇄소 납품용</b> = 재단선·맞춤표 ON ·
-            <b style="color:var(--ink)">검토용</b> = 둘 다 OFF.
-            PDF 내보내기 시 토스트와 저장 파일명에 현재 용도가 표시됩니다.
+        <div class="row" style="margin-top:2px">
+          <small style="font-size:10.5px;line-height:1.5;color:var(--meta);display:block;padding:6px 8px;background:var(--soft);border-radius:4px;width:100%">
+            <b style="color:var(--ink)">인쇄소 납품용</b> — 재단선·맞춤표 ON.<br>
+            <b style="color:var(--ink)">검토용 (Review)</b> — 둘 다 OFF.<br>
+            <span style="display:inline-block;margin-top:4px">PDF 내보내기 시 토스트와 저장 파일명에 현재 용도가 자동 표기됩니다.</span>
             <br>
-            <span style="display:inline-block;margin-top:3px">PDF sheet 사이즈 = 용지 + 4면 9mm 마크 영역 (인디자인 표준).
-            예: 신국판 152×225 → <b style="color:var(--ink)">170×243mm</b> (= 483×690pt).
-            마크는 sheet 안 trim 모서리 기준, 4면 균등 배치.</span>
+            <span style="display:inline-block;margin-top:4px;padding-top:4px;border-top:1px dashed var(--line)">
+              <b style="color:var(--ink)">PDF Sheet 크기</b> = 트림 + 4면 9mm 마크 영역 (InDesign 표준).<br>
+              예) 신국판 152×225 → <b style="color:var(--ink)">170×243 mm</b> (= 483×690 pt).<br>
+              재단선은 트림 모서리에서 2mm 떨어져 그려지며, 마크는 4면 균등 배치됩니다.
+            </span>
           </small>
         </div>
       </div>
@@ -1801,9 +1902,12 @@ ul.toc-list > li::before{
       <!-- 툴바는 #edit-pane 안으로 이동했습니다 (에디터 영역 전용). 프리뷰에는 도구 모음이 표시되지 않습니다. -->
       <div class="book" id="book">
         <!-- Spreads are populated by the pagination engine.
-             Each page has .page-content where chunked blocks are placed. -->
-        <div class="spread" data-spread-idx="0">
-          <div class="page page-left" data-page-idx="0">
+             첫 spread 는 cover spread — 중철제본(saddle-stitched) 표준에 따라
+             첫 페이지는 우면(recto)으로 시작한다. 좌측은 .page-blank 자리잡이로
+             grid 위치를 유지해 stage 가로 레이아웃이 흔들리지 않게 한다. -->
+        <div class="spread cover" data-spread-idx="0">
+          <div class="page page-blank" aria-hidden="true"></div>
+          <div class="page page-right" data-page-idx="0">
             <div class="page-head center" data-head></div>
             <div class="page-inner">
               <div class="page-clip">
@@ -1820,25 +1924,6 @@ ul.toc-list > li::before{
                 <div class="sw k25"></div><div class="sw k50"></div><div class="sw k75"></div>
               </div>
               <div class="slug">page 1</div>
-            </div>
-          </div>
-          <div class="page page-right" data-page-idx="1">
-            <div class="page-head center" data-head></div>
-            <div class="page-inner">
-              <div class="page-clip">
-                <div class="page-content" data-page-idx="1"></div>
-              </div>
-            </div>
-            <div class="page-foot center" data-foot><span class="pagenum">2</span></div>
-            <div class="page-marks" aria-hidden="true">
-              <div class="reg top"></div><div class="reg bottom"></div>
-              <div class="reg left"></div><div class="reg right"></div>
-              <div class="color-bar">
-                <div class="sw c"></div><div class="sw m"></div><div class="sw y"></div><div class="sw k"></div>
-                <div class="sw r"></div><div class="sw g"></div><div class="sw b"></div>
-                <div class="sw k25"></div><div class="sw k50"></div><div class="sw k75"></div>
-              </div>
-              <div class="slug">page 2</div>
             </div>
           </div>
         </div>
@@ -3700,13 +3785,17 @@ function paginate(){
   if (pages.length === 0 || (pages.length === 1 && pages[0].length === 0)){
     pages[0] = [];
   }
-  if (pages.length % 2 === 1) pages.push([]);
+  /* 중철제본(saddle-stitched) 정합 — 첫 페이지(idx=0) 는 cover spread 의 우면 단독.
+     이후엔 (verso, recto) 쌍으로 묶여야 하므로, 총 페이지 수는 1 또는 홀수여야 한다.
+     pages.length 가 짝수면 빈 페이지 1장을 더해 홀수로 맞춘다(마지막 spread 의 우면).
+     spreadsNeeded = (pages.length + 1) / 2 — 1+(N-1)/2 와 동치, cover 1 + 일반쌍 (N-1)/2. */
+  if (pages.length > 1 && pages.length % 2 === 0) pages.push([]);
 
   /* 버킷 비움 — 불필요한 DOM 유지로 리플로우를 늘리지 않도록 */
   clip.innerHTML = '';
   clip.classList.remove('is-front-matter');
 
-  const spreadsNeeded = pages.length / 2;
+  const spreadsNeeded = (pages.length + 1) / 2;
   syncSpreads(spreadsNeeded);
 
   /* 페이지별로 DocumentFragment 에 먼저 조립한 뒤 한 번에 교체 — innerHTML 비우고
@@ -4441,12 +4530,32 @@ function printerMarksHtml(pageIdx){
   </div>`;
 }
 
+/* spread → page idx 매핑 (중철제본 표준):
+     spread 0 (cover)        : right = 0           (단일 우면)
+     spread N (N ≥ 1)        : left  = 2N − 1, right = 2N
+   결과적으로 짝수 idx(0,2,4,…) = recto(우면), 홀수 idx(1,3,5,…) = verso(좌면).
+   첫 페이지가 우면 단독으로 시작하므로 booklet/saddle-stitched binding 의
+   페이지 흐름과 정합 (첨부된 인디자인 출력본의 첫 페이지 위치와 동일). */
 function createExtraSpread(spreadIdx){
-  const leftIdx  = spreadIdx * 2;
-  const rightIdx = spreadIdx * 2 + 1;
   const sp = document.createElement('div');
-  sp.className = 'spread';
   sp.dataset.spreadIdx = String(spreadIdx);
+  if (spreadIdx === 0){
+    sp.className = 'spread cover';
+    sp.innerHTML = `
+      <div class="page page-blank" aria-hidden="true"></div>
+      <div class="page page-right" data-page-idx="0">
+        <div class="page-head center" data-head></div>
+        <div class="page-inner"><div class="page-clip">
+          <div class="page-content" data-page-idx="0"></div>
+        </div></div>
+        <div class="page-foot center" data-foot><span class="pagenum">1</span></div>
+        ${printerMarksHtml(0)}
+      </div>`;
+    return sp;
+  }
+  const leftIdx  = spreadIdx * 2 - 1;
+  const rightIdx = spreadIdx * 2;
+  sp.className = 'spread';
   sp.innerHTML = `
     <div class="page page-left" data-page-idx="${leftIdx}">
       <div class="page-head center" data-head></div>
@@ -5556,6 +5665,7 @@ function applyPaper(key){
     }
   }
   syncPrintPageSize();
+  if (typeof updateWorkSizeInfo === 'function') updateWorkSizeInfo();
   scheduleReflow();
 }
 /* ── 용지 select option 렌더 ──
@@ -5663,7 +5773,23 @@ function applyBleed(){
   const inp = $('#in-bleed');
   const v = inp ? Math.max(0, parseFloat(inp.value || '0') || 0) : 3;
   root.style.setProperty('--page-bleed', `${v}mm`);
+  updateWorkSizeInfo();
   scheduleReflow();
+}
+
+/* 작업 영역(Work Area) 표시 갱신 — 트림 + 도련 사방 합산.
+   디자이너가 사이드바에서 "현재 작업 사이즈" 를 한눈에 확인 가능. */
+function updateWorkSizeInfo(){
+  const el = document.getElementById('info-work-size');
+  if (!el) return;
+  const cs = getComputedStyle(root);
+  const w = parseFloat(cs.getPropertyValue('--page-w')) || 152;
+  const h = parseFloat(cs.getPropertyValue('--page-h')) || 225;
+  const b = parseFloat(cs.getPropertyValue('--page-bleed')) || 0;
+  const ww = (w + b * 2);
+  const wh = (h + b * 2);
+  const fmt = n => (Number.isInteger(n) ? n.toString() : n.toFixed(1));
+  el.innerHTML = `${fmt(ww)} × ${fmt(wh)} mm <em>(= ${fmt(w)} × ${fmt(h)} + 도련 ${fmt(b)}mm)</em>`;
 }
 function applyCropMarksToggle(){
   const on = !!($('#chk-crop-marks') && $('#chk-crop-marks').checked);
@@ -6447,6 +6573,10 @@ function buildPrintHtml(){
   }).filter(Boolean).join('');
   const bookNode = document.getElementById('book')?.cloneNode(true);
   if (bookNode){
+    /* cover spread 의 좌측 placeholder(.page-blank) 는 화면 레이아웃 안정용 — PDF
+       에는 빈 흰 페이지로 출력되면 안 되므로 sheet 으로 래핑하기 전에 제거한다.
+       (제거 후 cover spread 안에는 .page-right 한 장만 남아 PDF 첫 장 = 우면 = 1쪽.) */
+    Array.from(bookNode.querySelectorAll('.page-blank')).forEach(b => b.remove());
     Array.from(bookNode.querySelectorAll('.page')).forEach(page => {
       const sheet = document.createElement('div');
       sheet.className = 'print-sheet';
