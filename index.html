@@ -695,12 +695,16 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
   padding:14px 0 40px;min-width:max-content;
 }
 
-/* Spread = a pair of facing pages (좌·우 페이지) */
+/* Spread = a pair of facing pages (좌·우 페이지)
+   spread 자체는 단순 layout 컨테이너 — 배경·그림자 없음.
+   각 .page 가 자기 sheet 의 흰 배경 + 그림자를 가짐 → 좌·우 페이지가
+   서로 독립된 종이로 보이고 가운데(spine/세네카) 는 stage 배경이 그대로
+   드러나 빈 공간이 된다. 사용자 요구(2026-04-26): "가운데 영역은 용지가
+   아예 없어야 한다, 좌·우 페이지가 단일로 보이고 가운데만 비워진 모양". */
 .spread{
   display:grid;
   grid-template-columns:var(--page-w) var(--page-w);
-  background:#fff;
-  box-shadow:var(--page-shadow);
+  background:transparent;
   position:relative;
 }
 /* 세네카(책등/spine) 영역은 비워둔다 — 사용자가 표지·내지 모두 가운데를
@@ -730,6 +734,7 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
   width:var(--page-w);
   height:var(--page-h);
   background:transparent;
+  box-shadow:none;       /* .page 의 sheet 그림자도 placeholder 에선 제거 */
   visibility:hidden;
   /* 자식이 없어도 grid 셀을 차지해 우측 recto 의 절대 좌표가 일반 spread 와
      동일한 위치(우측 column) 에 머문다 → stage 의 가로 레이아웃이 흔들리지 않음. */
@@ -739,11 +744,12 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
 .spread.cover .page-blank::after{ display:none !important; }
 .spread.cover .page-blank .page-marks{ display:none !important; }
 
-/* Single page card */
+/* Single page card — 각 페이지가 독립 sheet (흰 종이 + 드롭 섀도) */
 .page{
   width:var(--page-w);
   height:var(--page-h);
   background:#fff;
+  box-shadow:var(--page-shadow);
   position:relative;
   /* 재단선(crop marks)은 페이지 바깥으로 뻗어야 하므로 overflow:visible.
      실제 콘텐츠 잘림은 내부 .page-clip 이 전담한다. */
@@ -903,23 +909,39 @@ body.facing-pages .spread{
 }
 
 /* ============================================================
-   Facing Pages — Spine(세네카) 영역 비우기 (2026-04-26).
+   Facing Pages — Spine(세네카) 영역 비우기 (2026-04-26 v2).
    마주보기 모드에서 두 페이지의 inner edge 는 책등에 해당하므로 실제 재단·
    인쇄 핀트 검수의 대상이 아니다. InDesign 도 facing pages 출력 시 inner-side
-   crop mark 와 reg mark 는 자동 생략 — 인쇄소 작업자도 spine 영역에 마크가
-   있으면 오히려 헷갈린다.
+   crop mark 와 reg mark 는 자동 생략.
 
-   처리 방식:
-     · crop marks (.page::before): inner-side 의 mark area 를 0 으로 줄여
-       해당 모서리의 마크 이미지를 element box 밖으로 밀어 painting 차단.
-     · reg marks (.page-marks .reg.{left|right}): display:none.
+   ⚠️ 좌표계 사고 정정 (2026-04-26 v2):
+   v1 에선 .page-left::before { right:0 } 로 element box 를 줄여 inner 마크를
+   밀어내려 했으나, background-position 의 좌표는 element box 기준이라
+   element 가 줄어들면 outer 모서리(TR/BR for left, TL/BL for right) 마크가
+   원래 좌표 그대로 박힌 상태에서 element 가 그 좌표를 더 이상 포함하지 않게
+   되거나, 반대로 안쪽으로 들어와 페이지 위에 그려지는 사고가 났다. 사용자
+   피드백: "에디터 영역의 프리뷰에서 우측 상하단 도련마크가 깨져있다."
+
+   v2 는 element box 를 그대로 두고 clip-path 로 inner 쪽 mark area 만
+   잘라낸다. background-position 좌표계는 변하지 않으므로 outer 마크는
+   완벽히 자기 자리에 남고, inner 마크는 visible region 밖으로 잘려 painting
+   되지 않는다.
 
    결과:
-     · 좌(verso): 우측 mark area 비활성 → TR/BR crop mark 와 right reg mark 미표시
-     · 우(recto): 좌측 mark area 비활성 → TL/BL crop mark 와 left reg mark 미표시
-   gap 자체는 그대로 유지(mark-margin × 2 + 4mm) — stage 안정성 보존. */
-body.facing-pages .page-left::before{  right:0; }
-body.facing-pages .page-right::before{ left:0;  }
+     · 좌(verso) ::before  : 우측 mark-margin 폭 clip → TR/BR/우측 모서리 미표시
+     · 우(recto) ::before  : 좌측 mark-margin 폭 clip → TL/BL/좌측 모서리 미표시
+     · 좌 reg.right / 우 reg.left : display:none
+   gap 자체는 그대로(mark-margin × 2 + 4mm) — stage 안정성 보존. */
+body.facing-pages .page-left::before{
+  /* inset 폭 = mark-margin + thick/2 — TR/BR 의 vertical segment 이미지가
+     trim 선을 중앙으로 두께 thick(0.25mm) 만큼 펴져있어, 단순히
+     mark-margin 만 inset 하면 trim 선의 페이지 쪽 절반(thick/2 = 0.125mm)
+     이 sliver 로 남는다. thick/2 를 더해 완전히 잘라낸다. */
+  clip-path: inset(0 calc(var(--page-mark-margin) + var(--page-mark-thick) / 2) 0 0);
+}
+body.facing-pages .page-right::before{
+  clip-path: inset(0 0 0 calc(var(--page-mark-margin) + var(--page-mark-thick) / 2));
+}
 body.facing-pages .page-left  .page-marks .reg.right{ display:none; }
 body.facing-pages .page-right .page-marks .reg.left{  display:none; }
 /* 컬러바도 inner-side 로 흘러나가지 않게 page 안쪽까지로 제한.
@@ -6776,10 +6798,14 @@ body.show-printer-marks .page-marks{display:block !important;}
 /* PDF export 는 페이지마다 별도 sheet 으로 출력된다. 화면(.spread) 처럼
    facing-pages 시 inner-side 마크를 숨기면 인쇄소가 받는 PDF 의 각 sheet
    에서 일부 모서리 마크가 빠져 위험하다. export 에선 4 모서리 풀세트 복구. */
-body.facing-pages .print-root .page-left::before{  right:calc(-1 * var(--page-mark-margin)) !important; }
-body.facing-pages .print-root .page-right::before{ left: calc(-1 * var(--page-mark-margin)) !important; }
+body.facing-pages .print-root .page-left::before,
+body.facing-pages .print-root .page-right::before{ clip-path: none !important; }
 body.facing-pages .print-root .page-left  .page-marks .reg.right{ display:block !important; }
 body.facing-pages .print-root .page-right .page-marks .reg.left{  display:block !important; }
+/* export 시엔 spread 가 layout 컨테이너로만 쓰이고 각 .page 가 독립 sheet 로
+   래핑되므로, 화면 모드에서 .spread 의 background:transparent / .page 의
+   box-shadow 는 그대로 둬도 인쇄에 영향 없음 (.print-sheet 가 자기 background:#fff
+   를 갖고 .page 의 box-shadow 는 PDF 출력에 노출되지 않는다). */
 @media screen{
   body{display:flex;justify-content:center;padding:24px;background:#d9d9d2;}
 }
