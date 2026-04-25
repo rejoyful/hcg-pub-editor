@@ -6444,10 +6444,20 @@ function printRenderedBook(){
         if (!w || !doc) throw new Error('print window unavailable');
         const cleanup = () => setTimeout(() => { try { iframe.remove(); } catch(_){} }, 400);
         w.addEventListener('afterprint', cleanup, { once: true });
-        /* 외부 stylesheet (Phosphor CDN 등) 로딩 대기 */
+        /* 외부 stylesheet (Phosphor CDN 등) 로딩 대기.
+           크로스 오리진 stylesheet 에서 .cssRules 접근은 SecurityError 를
+           던지므로, 이미 로드된 시트는 단순히 link.sheet 존재로만 판정. */
+        const isLoaded = (link) => {
+          try {
+            if (!link.sheet) return false;
+            /* sheet 가 있으면 로드된 것으로 간주. cssRules 접근 자체가
+               cross-origin 일 때 throw 하므로 굳이 호출하지 않는다. */
+            return true;
+          } catch (_) { return false; }
+        };
         const linkEls = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'));
         const linksReady = Promise.all(linkEls.map(link => {
-          if (link.sheet && link.sheet.cssRules !== undefined) return Promise.resolve();
+          if (isLoaded(link)) return Promise.resolve();
           return new Promise(r => {
             const done = () => r();
             link.addEventListener('load', done, { once: true });
