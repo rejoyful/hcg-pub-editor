@@ -61,10 +61,13 @@
      이 영역 안에:
         · 도련(--page-bleed)  : trim 외곽 3mm — 본문 이미지가 흘러나가는 영역
         · 재단선(crop marks)  : trim 모서리 기준 mark-len 외향
-        · 맞춤표·컬러바      : sheet 가장자리 / mark area 안 정중앙
-     기본 9mm = 도련 3mm + 마크 여유 6mm. 신국판(152×225) PDF 출력 시
-     sheet ≈ 170×243mm (= 483×690pt) 으로 인디자인 표준 출력값과 정합. */
-  --page-mark-margin: 9mm;
+        · 맞춤표(reg)         : 슬러그 영역(=mark-margin − bleed) 한가운데
+        · 컬러바              : 하단 슬러그 영역 한가운데
+     12mm = 도련 3mm + 슬러그 9mm. 신국판(152×225) PDF 출력 시
+     sheet = 176×249mm 로, reg 6mm + 여유 1.5mm × 2 가 슬러그 안에 안전하게 자리.
+     이전 9mm 는 슬러그 6mm 가 reg 6mm 와 동일해 마크가 sheet 가장자리에 닿아
+     출력 시 절반이 잘리는 시각 사고가 있었다 (사용자 피드백 2026-04-26). */
+  --page-mark-margin: 12mm;
 
   /* Printer's marks (인디자인 인쇄용 마크) */
   --reg-mark-size: 6mm;        /* 맞춤표 지름 */
@@ -681,7 +684,14 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
 
 /* Book container — vertical stack of spreads */
 .book{
-  display:flex;flex-direction:column;align-items:center;gap:28px;
+  display:flex;flex-direction:column;align-items:center;
+  /* gap = 2 × mark-margin + 8mm 여유. 이전 28px(=7.4mm) 는 mark-margin 12mm
+     의 두 슬러그(=24mm) 가 인접 spread 사이에서 겹쳐, 윗 spread 의 하단
+     컬러바·맞춤표가 아래 spread 의 상단 슬러그와 시각적으로 충돌했다
+     (사용자 피드백 2026-04-26: "맞춤표가 두개로 보여진다"). 이렇게 하면
+     아래 spread 의 상단 마크와 윗 spread 의 하단 마크가 분리돼 각자 독립
+     슬러그 안에 깔린다. */
+  gap: calc(var(--page-mark-margin) * 2 + 8mm);
   padding:14px 0 40px;min-width:max-content;
 }
 
@@ -893,6 +903,31 @@ body.facing-pages .spread{
 }
 
 /* ============================================================
+   Facing Pages — Spine(세네카) 영역 비우기 (2026-04-26).
+   마주보기 모드에서 두 페이지의 inner edge 는 책등에 해당하므로 실제 재단·
+   인쇄 핀트 검수의 대상이 아니다. InDesign 도 facing pages 출력 시 inner-side
+   crop mark 와 reg mark 는 자동 생략 — 인쇄소 작업자도 spine 영역에 마크가
+   있으면 오히려 헷갈린다.
+
+   처리 방식:
+     · crop marks (.page::before): inner-side 의 mark area 를 0 으로 줄여
+       해당 모서리의 마크 이미지를 element box 밖으로 밀어 painting 차단.
+     · reg marks (.page-marks .reg.{left|right}): display:none.
+
+   결과:
+     · 좌(verso): 우측 mark area 비활성 → TR/BR crop mark 와 right reg mark 미표시
+     · 우(recto): 좌측 mark area 비활성 → TL/BL crop mark 와 left reg mark 미표시
+   gap 자체는 그대로 유지(mark-margin × 2 + 4mm) — stage 안정성 보존. */
+body.facing-pages .page-left::before{  right:0; }
+body.facing-pages .page-right::before{ left:0;  }
+body.facing-pages .page-left  .page-marks .reg.right{ display:none; }
+body.facing-pages .page-right .page-marks .reg.left{  display:none; }
+/* 컬러바도 inner-side 로 흘러나가지 않게 page 안쪽까지로 제한.
+   기본 .page-marks .color-bar 는 left/right: calc(mark-margin + 14mm) 로
+   sheet 가장자리 양쪽에서 들어와 있으므로 outer-side 는 그대로, inner-side 는
+   page 모서리 가까이까지 — 14mm 마진을 그대로 유지. (별도 override 불필요.) */
+
+/* ============================================================
    Printer's Marks — 인디자인식 인쇄용 마크
    재단선(crop marks): 기존 .page::before — 그대로 사용
    도련 가이드(bleed guide): 기존 .page::after — 그대로 사용
@@ -925,11 +960,39 @@ body.show-printer-marks .page-marks{ display:block; }
   background-repeat:no-repeat;
   background-size:100% 100%;
 }
-/* 마크는 bleed 외곽(즉 .page-marks 경계) 바로 위/아래/좌/우 중앙. */
-.page-marks .reg.top{    top:0;                        left:50%; transform:translate(-50%, -50%); }
-.page-marks .reg.bottom{ bottom:0;                     left:50%; transform:translate(-50%, 50%); }
-.page-marks .reg.left{   left:0;                       top:50%;  transform:translate(-50%, -50%); }
-.page-marks .reg.right{  right:0;                      top:50%;  transform:translate(50%, -50%); }
+/* 맞춤표 위치 정정 (2026-04-26 — 인쇄소 표준):
+   이전 코드는 마크 중심을 sheet 가장자리(top:0/bottom:0/...) 에 두어
+   마크의 절반이 sheet 밖으로 나가 출력 시 잘려 보였다(사용자 피드백:
+   "맞춤표가 두개로 보여진다" — 잘린 반쪽 마크가 다른 마크처럼 인식됨).
+
+   표준은 슬러그 영역(= bleed 와 sheet 가장자리 사이) 한가운데에
+   온전한 원 + 십자가 들어가야 함. .page-marks 좌표계에서:
+     · 슬러그 시작(=bleed 외곽) = mark-margin − bleed     [.page-marks 안쪽]
+     · 슬러그 끝(=sheet 가장자리) = 0                      [.page-marks 모서리]
+     · 슬러그 정중앙 = (mark-margin − bleed) / 2          (mark-margin=12mm,
+                                                          bleed=3mm → 4.5mm)
+   따라서 reg.top 의 중심은 sheet 상단에서 4.5mm 안쪽 = trim 상단에서
+   외향 7.5mm. 6mm 마크가 슬러그 9mm 한가운데 자리잡고 1.5mm 씩 여유. */
+.page-marks .reg.top{
+  top:    calc((var(--page-mark-margin) - var(--page-bleed)) / 2);
+  left:   50%;
+  transform:translate(-50%, -50%);
+}
+.page-marks .reg.bottom{
+  bottom: calc((var(--page-mark-margin) - var(--page-bleed)) / 2);
+  left:   50%;
+  transform:translate(-50%, 50%);
+}
+.page-marks .reg.left{
+  left:   calc((var(--page-mark-margin) - var(--page-bleed)) / 2);
+  top:    50%;
+  transform:translate(-50%, -50%);
+}
+.page-marks .reg.right{
+  right:  calc((var(--page-mark-margin) - var(--page-bleed)) / 2);
+  top:    50%;
+  transform:translate(50%, -50%);
+}
 
 /* 컬러바 — 페이지 하단의 마크 영역(slug-like) 안 중앙에 CMYK + 주요 프로세스 색
    을 나란히 배치. bleed(이미지가 흘러나가는 영역) 와는 겹치지 않게 sheet 가장자리
@@ -1833,9 +1896,9 @@ ul.toc-list > li::before{
             <span style="display:inline-block;margin-top:4px">PDF 내보내기 시 토스트와 저장 파일명에 현재 용도가 자동 표기됩니다.</span>
             <br>
             <span style="display:inline-block;margin-top:4px;padding-top:4px;border-top:1px dashed var(--line)">
-              <b style="color:var(--ink)">PDF Sheet 크기</b> = 트림 + 4면 9mm 마크 영역 (InDesign 표준).<br>
-              예) 신국판 152×225 → <b style="color:var(--ink)">170×243 mm</b> (= 483×690 pt).<br>
-              재단선은 트림 모서리에서 2mm 떨어져 그려지며, 마크는 4면 균등 배치됩니다.
+              <b style="color:var(--ink)">PDF Sheet 크기</b> = 트림 + 4면 12mm 마크 영역 (도련 3mm + 슬러그 9mm).<br>
+              예) 신국판 152×225 → <b style="color:var(--ink)">176×249 mm</b> (= 499×706 pt).<br>
+              재단선은 트림 모서리에서 2mm 떨어져 그려지며, 맞춤표는 슬러그 한가운데에 놓입니다.
             </span>
           </small>
         </div>
@@ -6535,10 +6598,11 @@ function buildPrintHtml(){
   const bleed = Math.max(0, parseFloat(getComputedStyle(root).getPropertyValue('--page-bleed')) || 0);
   /* mark-margin: sheet 가장자리부터 trim 까지의 거리.
      PDF sheet = trim + 2 × mark-margin. 인쇄소가 받는 PDF 의 실제 페이지 크기.
-     인디자인 표준 PDF 출력의 신국판 = 170×243mm (= trim 152×225 + 양쪽 9mm) 와
-     정합. mark-margin 이 정의되지 않은 경우 bleed 와 동일하게 폴백 — 단, 그
-     상황에서는 마크가 sheet 가장자리에 붙어 인쇄소 검수 신뢰도가 떨어진다는
-     점에 유의(첨부 표준 PDF 와 어긋남). */
+     기본 12mm = 도련 3mm + 슬러그 9mm. 신국판(152×225) 출력 시 sheet = 176×249mm
+     (= 499×706 pt). 슬러그 9mm 안에 6mm 맞춤표가 위·아래·여유 1.5mm 씩으로 안전히
+     자리잡고, 컬러바(높이 3.2mm) 도 슬러그 한가운데에 깔린다. mark-margin 이
+     정의되지 않은 경우 bleed 와 동일하게 폴백 — 단, 그 상황에선 마크가 sheet
+     가장자리에 붙어 출력 시 절반이 잘리는 문제가 발생한다. */
   const markMargin = Math.max(
     bleed,
     parseFloat(getComputedStyle(root).getPropertyValue('--page-mark-margin')) || 0
@@ -6709,6 +6773,13 @@ body.facing-pages .print-root .page-right .page-foot{
 body.show-crop-marks .page::before{display:block !important;}
 body.show-bleed-guide .page::after{display:block !important;}
 body.show-printer-marks .page-marks{display:block !important;}
+/* PDF export 는 페이지마다 별도 sheet 으로 출력된다. 화면(.spread) 처럼
+   facing-pages 시 inner-side 마크를 숨기면 인쇄소가 받는 PDF 의 각 sheet
+   에서 일부 모서리 마크가 빠져 위험하다. export 에선 4 모서리 풀세트 복구. */
+body.facing-pages .print-root .page-left::before{  right:calc(-1 * var(--page-mark-margin)) !important; }
+body.facing-pages .print-root .page-right::before{ left: calc(-1 * var(--page-mark-margin)) !important; }
+body.facing-pages .print-root .page-left  .page-marks .reg.right{ display:block !important; }
+body.facing-pages .print-root .page-right .page-marks .reg.left{  display:block !important; }
 @media screen{
   body{display:flex;justify-content:center;padding:24px;background:#d9d9d2;}
 }
