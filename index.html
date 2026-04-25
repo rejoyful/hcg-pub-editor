@@ -2452,11 +2452,35 @@ function stepDone(name){
 }
 function pipelineHide(){ setTimeout(()=>{ pipelineEl.style.display='none'; }, 1500); }
 
+/* Browser-internal noise filter ──────────────────────────────
+   Some Chromium flows (notably iframe print()) walk every stylesheet
+   and emit SecurityError("Failed to read the 'cssRules' property …")
+   for cross-origin sheets such as the Phosphor CDN. The app never
+   touches cssRules itself, so these rejections are not actionable —
+   surfacing them as a toast blocks the export entry point on PCs
+   where the CDN sheet is treated as opaque. Swallow them silently.
+   Same heuristic applied for sync 'error' events. */
+function isBenignBrowserNoise(msg){
+  if (!msg) return false;
+  return /cssRules|Cannot access rules|CSSStyleSheet|opaque response|SecurityError.*stylesheet/i.test(String(msg));
+}
 window.addEventListener('error', e=>{
+  const msg = e.message || (e.error && e.error.message) || '';
+  if (isBenignBrowserNoise(msg)){
+    if (e.preventDefault) e.preventDefault();
+    console.warn('[HCG] suppressed benign error:', msg);
+    return;
+  }
   console.error('[HCG]', e.error || e.message);
   setStatus('오류: ' + (e.message || 'unknown'), 'err');
 });
 window.addEventListener('unhandledrejection', e=>{
+  const msg = e.reason?.message || (typeof e.reason === 'string' ? e.reason : '');
+  if (isBenignBrowserNoise(msg)){
+    if (e.preventDefault) e.preventDefault();
+    console.warn('[HCG] suppressed benign rejection:', msg);
+    return;
+  }
   console.error('[HCG] unhandled', e.reason);
   setStatus('오류: ' + (e.reason?.message || 'async error'), 'err');
 });
