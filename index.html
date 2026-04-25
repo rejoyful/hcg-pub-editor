@@ -6270,7 +6270,30 @@ function buildPrintHtml(){
     '--body-indent',
     '--body-weight',
     '--columns',
-  ].map(name => `${name}:${getComputedStyle(root).getPropertyValue(name).trim()};`).join('');
+    /* 색상 변수도 명시적으로 인라인한다.
+       이 PC 에선 <style> 의 :root{--ink:#1A1A1A} 가 정상 cascade 되지만,
+       다른 데스크탑에선 print iframe 의 srcdoc 환경에서 cascade 가 어긋나
+       --ink 가 빈 값으로 평가 → color:var(--ink) 가 fallback(흰색에 가까운
+       시스템 기본) 로 가서 본문이 보이지 않는 케이스가 보고됐다.
+       fallback 까지 명시해 어느 환경에서든 #1A1A1A 로 잠근다. */
+    '--ink',
+    '--bg',
+    '--soft',
+    '--line',
+    '--mute',
+  ].map(name => {
+    const v = getComputedStyle(root).getPropertyValue(name).trim();
+    /* 빈 값으로 들어가면 var() 평가가 fallback 으로 새므로 강제 기본값 박는다. */
+    const fallback = {
+      '--ink': '#1A1A1A',
+      '--bg': '#FFFFFF',
+      '--soft': '#F5F5F0',
+      '--line': '#E0E0DA',
+      '--mute': '#888888',
+    }[name];
+    const safe = v || fallback || '';
+    return safe ? `${name}:${safe};` : '';
+  }).filter(Boolean).join('');
   const bookNode = document.getElementById('book')?.cloneNode(true);
   if (bookNode){
     Array.from(bookNode.querySelectorAll('.page')).forEach(page => {
@@ -6291,8 +6314,26 @@ ${headAssets}
 <style>
 @page{size:${sheetW} ${sheetH};margin:0}
 :root{${vars}}
-html,body{margin:0;padding:0;background:#fff;}
+html,body{margin:0;padding:0;background:#fff;color:#1A1A1A;}
 body{overflow:visible !important;}
+/* 본문 색상 안전망 — var(--ink) 평가가 어긋나도 직접 #1A1A1A 가 박혀
+   "흰 종이에 흰 글자" 케이스를 차단한다. inline color 마크(빨강 강조,
+   CMYK 적용 등) 는 더 구체적인 셀렉터로 그대로 우선 적용되므로 영향 없음. */
+.print-root,
+.print-root .page,
+.print-root .page-head,
+.print-root .page-foot,
+.print-root .page-inner,
+.print-root .page-content{color:#1A1A1A;}
+.print-root .page-content p,
+.print-root .page-content li,
+.print-root .page-content h1,
+.print-root .page-content h2,
+.print-root .page-content h3,
+.print-root .page-content h4,
+.print-root .page-content h5,
+.print-root .page-content h6,
+.print-root .page-content blockquote{color:inherit;}
 .print-root{display:block !important;background:#fff !important;}
 .print-root .main,
 .print-root .stage,
