@@ -6127,7 +6127,11 @@ async function runExport(kind){
       /* 메인 문서의 웹폰트 로드를 대기 — 다른 데스크탑에서 폰트 캐시가
          없을 때 첫 인쇄가 시스템 폴백 폰트로 나가는 현상을 방지. */
       try {
-        if (document.fonts && document.fonts.ready) await document.fonts.ready;
+        if (document.fonts && document.fonts.ready) {
+          /* cross-origin stylesheet 평가 중 SecurityError 가 reject 로 올라오는
+             케이스를 흡수. 폰트 대기는 best-effort. */
+          await Promise.resolve(document.fonts.ready).catch(() => {});
+        }
       } catch(_){}
       syncPrintPageSize();
       await printRenderedBook();
@@ -6437,51 +6441,61 @@ function printRenderedBook(){
 
     const printHtml = buildPrintHtml();
 
+    /* 어떤 단계에서도 reject 가 main flow 까지 올라가지 않도록 강력하게
+       방어. cross-origin stylesheet (@phosphor-icons CDN) 의 cssRules 를
+       Chromium 내부가 fonts.ready 등에서 자체 평가하다 SecurityError 를
+       던지는 사례가 있어, 모든 비동기 단계를 .catch(() => {}) 로 감싼다. */
+    const safe = (p) => Promise.resolve(p).catch(() => {});
     const onFrameReady = () => {
+      let w, doc;
       try {
-        const w = iframe.contentWindow;
-        const doc = w && w.document;
-        if (!w || !doc) throw new Error('print window unavailable');
-        const cleanup = () => setTimeout(() => { try { iframe.remove(); } catch(_){} }, 400);
-        w.addEventListener('afterprint', cleanup, { once: true });
-        /* 외부 stylesheet (Phosphor CDN 등) 로딩 대기.
-           크로스 오리진 stylesheet 에서 .cssRules 접근은 SecurityError 를
-           던지므로, 이미 로드된 시트는 단순히 link.sheet 존재로만 판정. */
-        const isLoaded = (link) => {
+        w = iframe.contentWindow;
+        doc = w && w.document;
+      } catch(_){ /* ignore */ }
+      if (!w || !doc) { reject(new Error('print window unavailable')); return; }
+      const cleanup = () => setTimeout(() => { try { iframe.remove(); } catch(_){} }, 400);
+      try { w.addEventListener('afterprint', cleanup, { once: true }); } catch(_){}
+
+      /* 외부 stylesheet 대기 — link.sheet 존재만 확인, 절대 cssRules 접근 X */
+      const linkEls = (() => { try { return Array.from(doc.querySelectorAll('link[rel="stylesheet"]')); } catch(_){ return []; } })();
+      const linksReady = safe(Promise.all(linkEls.map(link => {
+        try { if (link.sheet) return Promise.resolve(); } catch(_){}
+        return new Promise(r => {
+          const done = () => r();
           try {
-            if (!link.sheet) return false;
-            /* sheet 가 있으면 로드된 것으로 간주. cssRules 접근 자체가
-               cross-origin 일 때 throw 하므로 굳이 호출하지 않는다. */
-            return true;
-          } catch (_) { return false; }
-        };
-        const linkEls = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'));
-        const linksReady = Promise.all(linkEls.map(link => {
-          if (isLoaded(link)) return Promise.resolve();
-          return new Promise(r => {
-            const done = () => r();
             link.addEventListener('load', done, { once: true });
             link.addEventListener('error', done, { once: true });
-            /* 안전 타임아웃 — CDN 이 막혀도 본문은 시스템 폰트로라도 보이게 */
-            setTimeout(done, 2500);
-          });
-        }));
-        const fontsReady = (doc.fonts && doc.fonts.ready) ? doc.fonts.ready : Promise.resolve();
-        const imgs = Array.from(doc.images || []);
-        const imagesReady = Promise.all(imgs.map(img => {
-          if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-          return new Promise(r => {
+          } catch(_){ done(); return; }
+          setTimeout(done, 2500);
+        });
+      })));
+
+      /* fonts.ready 는 일부 Chromium 빌드에서 cross-origin stylesheet 의
+         @font-face 평가 도중 SecurityError 를 던질 수 있다. 방어적으로 감싼다. */
+      let fontsReady;
+      try {
+        fontsReady = safe(doc.fonts && doc.fonts.ready ? doc.fonts.ready : Promise.resolve());
+      } catch(_){ fontsReady = Promise.resolve(); }
+
+      const imgs = (() => { try { return Array.from(doc.images || []); } catch(_){ return []; } })();
+      const imagesReady = safe(Promise.all(imgs.map(img => {
+        try { if (img.complete && img.naturalWidth > 0) return Promise.resolve(); } catch(_){}
+        return new Promise(r => {
+          try {
             img.addEventListener('load', r, { once: true });
             img.addEventListener('error', r, { once: true });
-            setTimeout(r, 4000);
-          });
-        }));
-        Promise.all([linksReady, fontsReady, imagesReady]).then(() => {
-          /* 두 번의 rAF + 한 박자 더 — Chrome 의 layout/paint 가 안정되도록 */
+          } catch(_){ r(); return; }
+          setTimeout(r, 4000);
+        });
+      })));
+
+      /* 모든 단계가 reject 해도 print() 는 무조건 시도. */
+      const proceed = () => {
+        try {
           w.requestAnimationFrame(() => w.requestAnimationFrame(() => {
             setTimeout(() => {
               try {
-                w.focus();
+                try { w.focus(); } catch(_){}
                 w.print();
                 resolve();
               } catch (err){
@@ -6490,11 +6504,12 @@ function printRenderedBook(){
               }
             }, 60);
           }));
-        }).catch(err => { cleanup(); reject(err); });
-      } catch (err){
-        try { iframe.remove(); } catch(_){}
-        reject(err);
-      }
+        } catch (err){
+          cleanup();
+          reject(err);
+        }
+      };
+      Promise.all([linksReady, fontsReady, imagesReady]).then(proceed, proceed);
     };
 
     /* iframe 의 srcdoc 은 일부 환경에서 외부 link[rel=stylesheet] 이
