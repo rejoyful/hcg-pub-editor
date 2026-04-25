@@ -1127,7 +1127,11 @@ body.show-printer-marks .page-marks{ display:block; }
    - word-break:normal       → 한글 어절 공백 폭주 방지 (keep-all 금지). */
 .page-content p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:justify;overflow-wrap:anywhere;word-break:normal;hyphens:auto;-webkit-hyphens:auto;text-indent:var(--body-indent);orphans:2;widows:2}
 .page-content p + p{margin-top:0}
-.page-content h1+p,.page-content h2+p,.page-content h3+p{text-indent:0}
+/* 2026-04-26: h1/h2/h3 직후 첫 단락의 text-indent 리셋을 제거.
+   한국 단행본 조판 관행에 맞춰 모든 본문 단락에 동일하게 first-line indent
+   (--body-indent) 가 적용되도록 통일 — 에디터 영역의 들여쓰기가 프리뷰에도
+   1:1 로 반영. (이전: 영문 조판 관행을 따라 첫 단락은 indent 0 으로 reset
+   했으나, 에디터 표시와 어긋나 사용자 불일치 보고가 있었음) */
 .page-content ul,.page-content ol{margin:0 0 10pt;padding-left:18pt}
 .page-content li{margin-bottom:3pt}
 .page-content li > p{text-indent:0;margin:0}
@@ -1193,13 +1197,43 @@ body.show-printer-marks .page-marks{ display:block; }
 .ProseMirror mark[data-color="#EEEEEE"],.page-content mark[data-color="#EEEEEE"]{
   background:#EEEEEE;padding:2pt 8pt;border-radius:3pt;display:inline-block;
 }
-/* 자동분류가 부여하는 "📷 이미지 첨부" 라벨 */
+/* 자동분류가 부여하는 "이미지 첨부" 라벨.
+   2026-04-26: 단일 <p> → 1×1 표 placeholder 로 구조 변경.
+   <mark data-color="#DDEBF7"> 는 그대로 유지(검출 마커) 하되, 셀 안에 들어가므로
+   기존 highlight 칩 스타일은 제거하고 셀 자체를 placeholder 로 보이게 한다.
+   주의: TipTap Highlight 확장이 inline `style="background-color:#DDEBF7"` 를
+   직렬화하므로 표 셀 내부에서는 !important 로 무효화한다. */
 .ProseMirror mark[data-color="#DDEBF7"],.page-content mark[data-color="#DDEBF7"]{
   background:#DDEBF7;padding:1pt 6pt;border-radius:3pt;
   font-size:9pt;color:#1F4E79;letter-spacing:.2px;
 }
+/* 1×1 표 placeholder — 자동분류 fig 라벨 전용.
+   셀 안에 검출 마커(<mark data-color="#DDEBF7">) 가 있는 표만 매칭한다.
+   일반 표는 영향 없음. */
+.ProseMirror table:has(td > p mark[data-color="#DDEBF7"]),
+.page-content table:has(td > p mark[data-color="#DDEBF7"]){
+  width:100%;margin:8pt 0 4pt;table-layout:fixed;break-inside:avoid;
+}
+.ProseMirror table:has(td > p mark[data-color="#DDEBF7"]) td,
+.page-content table:has(td > p mark[data-color="#DDEBF7"]) td{
+  border:1px dashed #B7C9DD !important;background:#F4F8FC !important;
+  padding:22pt 12pt !important;text-align:center;vertical-align:middle !important;
+  color:#1F4E79;min-width:auto;
+}
+.ProseMirror table:has(td > p mark[data-color="#DDEBF7"]) td p,
+.page-content table:has(td > p mark[data-color="#DDEBF7"]) td p{
+  text-indent:0;margin:0;text-align:center;
+}
+/* 셀 내부의 검출 마커 mark 는 인라인 background-color(highlight 칩) 무효화 →
+   placeholder 셀의 단정한 외관을 유지한다. 검출 자체는 data-color 로 계속 작동. */
+.ProseMirror table:has(td > p mark[data-color="#DDEBF7"]) td mark[data-color="#DDEBF7"],
+.page-content table:has(td > p mark[data-color="#DDEBF7"]) td mark[data-color="#DDEBF7"]{
+  background:transparent !important;background-color:transparent !important;
+  padding:0 !important;border-radius:0 !important;
+  font-size:11pt;color:#1F4E79;font-style:normal;letter-spacing:.4px;
+}
 .ProseMirror [style*="color"],.page-content [style*="color"]{/* inline */}
-.ProseMirror h1+p,.ProseMirror h2+p,.ProseMirror h3+p{text-indent:0}
+/* 2026-04-26: ProseMirror 측 h*+p text-indent 리셋도 함께 제거 (page-content 와 동기화). */
 .ProseMirror ul,.ProseMirror ol{margin:0 0 10pt;padding-left:18pt}
 .ProseMirror li{margin-bottom:3pt}
 .ProseMirror li > p{text-indent:0;margin:0}
@@ -3836,13 +3870,18 @@ function paginate(){
      - 현재 페이지의 남은 공간이 유의미하면(≥ MIN_SPLIT_REMAINING_PX)
      블록을 남은 공간 기준으로 나눠 첫 조각을 현재 페이지, 나머지를 새 페이지로
      이월한다. 페이지 하단에 불필요하게 비어 있는 "orphan" 공백을 없애는 것이
-     주 목적 (실측 사례: "이 책을 쓰게 되었다" 문단 다음에 페이지가 텅 비고
-     내용이 다음 쪽에서 이어지던 버그). 너무 작은 잔여공간(≤ 4줄) 은 1~2줄만
-     남는 widow 현상을 만들기 쉬우므로 분할하지 않고 통째로 이월한다.
+     주 목적 (실측 사례: "D. 배려의 중요성" 헤딩 다음에 본문 단락이 통째로
+     다음 페이지로 넘어가 페이지 하단이 비던 버그).
+     2026-04-26: 임계값 80px(≈5줄) → 24px(≈1.5줄) 로 완화.
+     이전 80px 은 헤딩 + bottom-margin 만 남는 케이스(잔여 60–79px)에서 분할이
+     스킵되어 페이지 하단이 그대로 빈 채로 두 페이지로 갈렸음. 24px 로 낮추면
+     "헤딩 바로 아래 한두 줄이라도 채워서 다음 단락 본문이 시작" 하는 한국 책
+     조판 관행에 맞춰 페이지를 채운다. splitTextBlockVariable 의 이진 탐색이
+     자체적으로 단어/어절 경계 스냅을 하므로 widow(1글자 단독행) 위험은 낮다.
      columns 레이아웃에서는 clip 의 높이가 컬럼 흐름에 의해 결정되므로, 여기서
      말하는 '남은 공간'은 pageCapH (전체 페이지 용량) - bucketHeight (이미
      배치된 누적 높이) 로 근사한다. */
-  const MIN_SPLIT_REMAINING_PX = 80;
+  const MIN_SPLIT_REMAINING_PX = 24;
   for (const item of flattened){
     if (item.break){
       if (pages[pages.length - 1].length > 0) startNewPage();
@@ -7176,8 +7215,8 @@ function openFloatPopup(){
   .fw-edit h1:first-child{margin-top:0}
   .fw-edit h2{font-size:16pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4}
   .fw-edit h3{font-size:13pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4}
-  .fw-edit p{margin:0 0 1em;text-align:justify;overflow-wrap:anywhere;word-break:normal;hyphens:auto;-webkit-hyphens:auto;text-indent:1em}
-  .fw-edit h1+p,.fw-edit h2+p,.fw-edit h3+p{text-indent:0}
+  .fw-edit p{margin:0 0 1em;text-align:justify;overflow-wrap:anywhere;word-break:normal;hyphens:auto;-webkit-hyphens:auto;text-indent:var(--body-indent,1em)}
+  /* 2026-04-26: h1/h2/h3 직후 첫 단락 indent 리셋 제거 — 메인 에디터/프리뷰와 동기화. */
   .fw-edit mark{background:#FFF59D;padding:0 2px;border-radius:2px}
   .fw-edit img{max-width:100%;border-radius:2pt;vertical-align:middle;cursor:pointer}
   .fw-edit img.center{display:block;margin:10pt auto}
@@ -8404,7 +8443,7 @@ function extractPlainText(node){
     · H2     : 숫자 접두  — '제N장/절/편/부', 'N.', '1.1', 'Chapter N'
     · H3     : 알파벳·로마자 접두 — 'A.', 'B.', 'I.', 'II.', 'Part III'
     · FIG    : 도판 캡션 '그림 N', '표 N', 'Figure N' — 본문 크기 + 굵게,
-               위에 "📷 이미지 첨부" 라벨 자동 삽입
+               위에 1×1 표(가운데 '이미지 첨부' placeholder) 자동 삽입
     · CALLOUT: 블릿(· • ● ▪ □ ○ ◇ ■ ◆) 또는 소문자 로마자(i. ii. iii.)
                → 볼드 + 회색 음영 + 상단 2행 / 하단 1행 여백
                  (상단에 이미 빈 행이 있으면 여백 추가 생략)
@@ -8529,13 +8568,29 @@ function splitParagraphOnHardBreak(node){
 function applyKeywordRules(docJson){
   if (!docJson || !Array.isArray(docJson.content)) return docJson;
   const emptyPara = () => ({ type:'paragraph', content:[] });
+  /* 2026-04-26: fig 라벨을 단락이 아닌 1×1 표(placeholder) 로 변경.
+     - 사용자 요구: "캡션 위 '이미지 첨부' 자리는 표 1×1 영역, 가운데에 '이미지 첨부' 글".
+     - 셀 안에 <mark data-color="#DDEBF7"> 텍스트를 그대로 두어 기존 검출 마커
+       (CLF_BLUE) 가 유지되고, isFigLabelNode 가 멱등성 판별을 계속 할 수 있다.
+     - CSS `:has()` 셀렉터로 placeholder 스타일(점선 테두리·연한 배경·중앙정렬)을
+       이 표에만 한정 적용. 일반 표는 영향 없음. */
   const figLabel  = () => ({
-    type:'paragraph',
-    attrs: docJson.content[0]?.attrs ? undefined : undefined,
-    content:[{ type:'text', text:'📷 이미지 첨부', marks:[
-      { type:'italic' },
-      { type:'highlight', attrs:{ color: CLF_BLUE }},
-    ]}],
+    type:'table',
+    content:[{
+      type:'tableRow',
+      content:[{
+        type:'tableCell',
+        attrs:{ colspan:1, rowspan:1, colwidth:null },
+        content:[{
+          type:'paragraph',
+          attrs:{ textAlign:'center' },
+          content:[{ type:'text', text:'이미지 첨부', marks:[
+            { type:'italic' },
+            { type:'highlight', attrs:{ color: CLF_BLUE }},
+          ]}]
+        }]
+      }]
+    }]
   });
   /* 메인 루프 진입 전: paragraph 안의 hardBreak를 경계로 paragraph 배열을 펼친다. */
   const expanded = [];
@@ -8544,11 +8599,38 @@ function applyKeywordRules(docJson){
     for (const p of parts) expanded.push(p);
   }
   /* fig/callout 멱등성 판별 헬퍼 — HTML 단계(applyKeywordRulesToHtml)가 이미
-     라벨/패딩을 붙여 놓았으면 JSON 단계가 중복으로 붙이지 않는다. */
+     라벨/패딩을 붙여 놓았으면 JSON 단계가 중복으로 붙이지 않는다.
+     2026-04-26: 라벨이 단락에서 1×1 표로 바뀌어 두 형태를 모두 인식한다.
+       - 신형: table > tableRow > tableCell > paragraph(text "이미지 첨부" + CLF_BLUE highlight)
+       - 구형: paragraph(text "📷 이미지 첨부") — 기존 문서 호환용
+     멱등성 보장: 자동분류 재실행 시 둘 다 "이미 라벨 있음" 으로 판단해 라벨을 새로
+     푸시하지 않는다. */
   const isFigLabelPara = (n) => {
-    if (!n || n.type !== 'paragraph' || !Array.isArray(n.content)) return false;
-    const s = n.content.map(x => (x && typeof x.text === 'string') ? x.text : '').join('');
-    return s.trim().startsWith('📷 이미지 첨부');
+    if (!n || typeof n !== 'object') return false;
+    /* 신형 (1×1 표) */
+    if (n.type === 'table' && Array.isArray(n.content) && n.content.length === 1){
+      const row = n.content[0];
+      if (row && row.type === 'tableRow' && Array.isArray(row.content) && row.content.length === 1){
+        const cell = row.content[0];
+        if (cell && cell.type === 'tableCell' && Array.isArray(cell.content)){
+          const txt = (function collect(nodes){
+            let s = '';
+            for (const c of nodes){
+              if (c && c.type === 'text' && typeof c.text === 'string') s += c.text;
+              else if (c && Array.isArray(c.content)) s += collect(c.content);
+            }
+            return s;
+          })(cell.content);
+          if (/이미지\s*첨부/.test(txt)) return true;
+        }
+      }
+    }
+    /* 구형 (단락) */
+    if (n.type === 'paragraph' && Array.isArray(n.content)){
+      const s = n.content.map(x => (x && typeof x.text === 'string') ? x.text : '').join('');
+      return s.trim().startsWith('📷 이미지 첨부');
+    }
+    return false;
   };
   const hasMarkType = (inline, typeName) => {
     if (!Array.isArray(inline)) return false;
@@ -8820,12 +8902,20 @@ function applyKeywordRulesToHtml(html){
       frag.appendChild(p);
       node.replaceWith(frag);
     } else if (tag === 'fig'){
-      /* JSON 버전과 동형: 앞에 빈 단락 + 📷 라벨 + 굵은 캡션 */
+      /* JSON 버전과 동형: 앞에 빈 단락 + 1×1 표 placeholder + 굵은 캡션.
+         2026-04-26: 라벨을 <p> 가 아닌 <table><tr><td><p>이미지 첨부</p></td></tr></table>
+         로 변경. CSS `:has(mark[data-color="#DDEBF7"])` 셀렉터가 이 표에만
+         placeholder 스타일을 적용한다. */
       const frag = document.createDocumentFragment();
       const prev = node.previousElementSibling;
       if (!isEmptyP(prev)) frag.appendChild(mkEmpty());
-      const label = document.createElement('p');
-      label.innerHTML = '<em><mark data-color="' + CLF_BLUE + '" style="background:' + CLF_BLUE + '">📷 이미지 첨부</mark></em>';
+      const label = document.createElement('table');
+      label.innerHTML =
+        '<tbody><tr><td colspan="1" rowspan="1">' +
+          '<p style="text-align:center">' +
+            '<em><mark data-color="' + CLF_BLUE + '" style="background:' + CLF_BLUE + '">이미지 첨부</mark></em>' +
+          '</p>' +
+        '</td></tr></tbody>';
       const p = document.createElement('p');
       const b = document.createElement('strong');
       while (node.firstChild) b.appendChild(node.firstChild);
