@@ -693,18 +693,14 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
   box-shadow:var(--page-shadow);
   position:relative;
 }
-/* Centerline between left and right page */
-.spread::before{
-  content:"";position:absolute;top:0;bottom:0;left:50%;width:1px;
-  background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.10) 6%, rgba(0,0,0,.10) 94%, rgba(0,0,0,0) 100%);
-  pointer-events:none;z-index:2;
-}
-/* Subtle inner gutter shadow on each page edge near the spine */
+/* 세네카(책등/spine) 영역은 비워둔다 — 사용자가 표지·내지 모두 가운데를
+   작업 가능한 빈 공간으로 보길 원함. 중철제본·무선·양장 어떤 제본이든
+   본문 작업 단계에서 가운데에 시각 노이즈가 있으면 작업자가 헷갈린다.
+   centerline / gutter shadow 를 그리던 ::before, ::after 를 영구적으로 비활성화.
+   (구버전과의 호환을 위해 selector 자체는 남겨두고 content 를 none 으로) */
+.spread::before,
 .spread::after{
-  content:"";position:absolute;top:0;bottom:0;left:50%;width:24px;
-  transform:translateX(-50%);
-  background:radial-gradient(ellipse at center, rgba(0,0,0,.05), rgba(0,0,0,0) 70%);
-  pointer-events:none;z-index:1;
+  content:none;
 }
 
 /* ============================================================
@@ -782,29 +778,65 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
     var(--page-mark-len) var(--page-mark-thick),
     var(--page-mark-thick) var(--page-mark-len);
   background-position:
-    /* 모든 마크는 trim 모서리 외부(트림 영역 밖) 에 위치하도록 mark-thick 보정.
-       또한 mark-offset(인디자인 표준) 만큼 trim 모서리에서 추가로 떨어진다 —
-       마크의 안쪽 끝과 trim 모서리 사이에 offset 폭의 여유가 생긴다.
-       (첨부된 표준 PDF 의 재단선이 모서리에 붙지 않고 살짝 떨어진 모습과 정합.)
-       가로선의 경우 Y 좌표를 mark-thick 만큼 위로 올려서 마크의 아래쪽 가장자리가
-       정확히 trim 모서리(에서 mark-offset 만큼 위) 에 일치하게 한다. */
-    /* TL 가로 — 마크 X: trim 좌측 외향 (mark-len + offset) ~ (offset).
-                마크 Y: trim 상단 외향 mark-thick. */
-    calc(var(--page-mark-margin) - var(--page-mark-len) - var(--page-mark-offset)) calc(var(--page-mark-margin) - var(--page-mark-thick)),
-    /* TL 세로 — X: trim 좌측 외향 mark-thick. Y: trim 상단 외향 (mark-len + offset). */
-    calc(var(--page-mark-margin) - var(--page-mark-thick)) calc(var(--page-mark-margin) - var(--page-mark-len) - var(--page-mark-offset)),
-    /* TR 가로 — X: trim 우측 모서리 + offset ~ + offset + mark-len. Y: trim 상단 외향. */
-    calc(100% - var(--page-mark-margin) + var(--page-mark-offset)) calc(var(--page-mark-margin) - var(--page-mark-thick)),
-    /* TR 세로 — X: trim 우측 모서리. Y: trim 상단 외향 (mark-len + offset). */
-    calc(100% - var(--page-mark-margin)) calc(var(--page-mark-margin) - var(--page-mark-len) - var(--page-mark-offset)),
-    /* BL 가로 — X: trim 좌측 외향 (mark-len + offset). Y: trim 하단 모서리. */
-    calc(var(--page-mark-margin) - var(--page-mark-len) - var(--page-mark-offset)) calc(100% - var(--page-mark-margin)),
-    /* BL 세로 — X: trim 좌측 외향 mark-thick. Y: trim 하단 모서리 + offset. */
-    calc(var(--page-mark-margin) - var(--page-mark-thick)) calc(100% - var(--page-mark-margin) + var(--page-mark-offset)),
-    /* BR 가로 — X: trim 우측 모서리 + offset. Y: trim 하단 모서리. */
-    calc(100% - var(--page-mark-margin) + var(--page-mark-offset)) calc(100% - var(--page-mark-margin)),
-    /* BR 세로 — X: trim 우측 모서리. Y: trim 하단 모서리 + offset. */
-    calc(100% - var(--page-mark-margin)) calc(100% - var(--page-mark-margin) + var(--page-mark-offset));
+    /* ⚠️ 좌표계 정정 (2026-04-25 v3 — InDesign Marks Offset 표준):
+       이전 v2 는 L자 inner-corner 를 (trim ± offset, trim ± offset) 로 두어
+       대각선 외향 코너를 만들었지만, 실제 InDesign 출력은 trim 변의 직선 연장 — 즉
+       각 마크가 trim 변과 동일선상에 놓이고, 코너에서 offset 만큼 떨어진다. 좌·우/상·하
+       각각 두 개의 perpendicular segment 로, 코너 그 자체엔 빈 십자형 공간이 생긴다.
+
+       container = page-w + 2×mark-margin × page-h + 2×mark-margin:
+         · trim_left   = mark-margin
+         · trim_right  = mark-margin + page-w
+         · trim_top    = mark-margin
+         · trim_bottom = mark-margin + page-h
+
+       각 segment 정의:
+         · 가로 segment: trim_top 또는 trim_bottom y-line 상에 놓이고, x 가 trim 변에서
+                         offset 만큼 떨어진 곳에서 mark-len 만큼 외향으로 뻗음.
+         · 세로 segment: 대칭.
+       segment 두께(mark-thick) 는 trim 선을 중앙에 두도록 ±thick/2 로 배치.
+
+       각 mark image 의 top-left 좌표 = 다음 8 케이스. */
+    /* TL 가로 (image: mark-len × mark-thick)  — 윗변 외향 좌측
+         line at y=trim_top, x ∈ [trim_left − offset − mark-len, trim_left − offset]
+         image-TL = (trim_left − offset − mark-len, trim_top − mark-thick/2) */
+    calc(var(--page-mark-margin) - var(--page-mark-offset) - var(--page-mark-len))
+    calc(var(--page-mark-margin) - var(--page-mark-thick) / 2),
+    /* TL 세로 (image: mark-thick × mark-len)  — 좌변 외향 상단
+         line at x=trim_left, y ∈ [trim_top − offset − mark-len, trim_top − offset]
+         image-TL = (trim_left − mark-thick/2, trim_top − offset − mark-len) */
+    calc(var(--page-mark-margin) - var(--page-mark-thick) / 2)
+    calc(var(--page-mark-margin) - var(--page-mark-offset) - var(--page-mark-len)),
+    /* TR 가로  — 윗변 외향 우측
+         line at y=trim_top, x ∈ [trim_right + offset, trim_right + offset + mark-len]
+         image-TL = (trim_right + offset, trim_top − mark-thick/2) */
+    calc(var(--page-mark-margin) + var(--page-w) + var(--page-mark-offset))
+    calc(var(--page-mark-margin) - var(--page-mark-thick) / 2),
+    /* TR 세로  — 우변 외향 상단
+         line at x=trim_right, y ∈ [trim_top − offset − mark-len, trim_top − offset]
+         image-TL = (trim_right − mark-thick/2, trim_top − offset − mark-len) */
+    calc(var(--page-mark-margin) + var(--page-w) - var(--page-mark-thick) / 2)
+    calc(var(--page-mark-margin) - var(--page-mark-offset) - var(--page-mark-len)),
+    /* BL 가로  — 아랫변 외향 좌측
+         line at y=trim_bottom, x ∈ [trim_left − offset − mark-len, trim_left − offset]
+         image-TL = (trim_left − offset − mark-len, trim_bottom − mark-thick/2) */
+    calc(var(--page-mark-margin) - var(--page-mark-offset) - var(--page-mark-len))
+    calc(var(--page-mark-margin) + var(--page-h) - var(--page-mark-thick) / 2),
+    /* BL 세로  — 좌변 외향 하단
+         line at x=trim_left, y ∈ [trim_bottom + offset, trim_bottom + offset + mark-len]
+         image-TL = (trim_left − mark-thick/2, trim_bottom + offset) */
+    calc(var(--page-mark-margin) - var(--page-mark-thick) / 2)
+    calc(var(--page-mark-margin) + var(--page-h) + var(--page-mark-offset)),
+    /* BR 가로  — 아랫변 외향 우측
+         line at y=trim_bottom, x ∈ [trim_right + offset, trim_right + offset + mark-len]
+         image-TL = (trim_right + offset, trim_bottom − mark-thick/2) */
+    calc(var(--page-mark-margin) + var(--page-w) + var(--page-mark-offset))
+    calc(var(--page-mark-margin) + var(--page-h) - var(--page-mark-thick) / 2),
+    /* BR 세로  — 우변 외향 하단
+         line at x=trim_right, y ∈ [trim_bottom + offset, trim_bottom + offset + mark-len]
+         image-TL = (trim_right − mark-thick/2, trim_bottom + offset) */
+    calc(var(--page-mark-margin) + var(--page-w) - var(--page-mark-thick) / 2)
+    calc(var(--page-mark-margin) + var(--page-h) + var(--page-mark-offset));
 }
 body.show-crop-marks .page::before{ display:block; }
 
@@ -850,16 +882,12 @@ body.facing-pages .page-right .page-foot{
   padding-left: var(--page-inner);
   padding-right: var(--page-outer);
 }
-/* 마주보기 시각화: spine 쪽 그림자 강조 — .spread::after 는 이미 중앙에 drop shadow
-   를 주고 있으므로 그대로 둠.
-   ──────────────────────────────────────────────────────────────────────
-   gap 정책 (2026-04-25 정정): 이전엔 마크 토글 시점에 gap 이 0 ↔ 22mm 로 변해
+/* gap 정책 (2026-04-25 정정): 이전엔 마크 토글 시점에 gap 이 0 ↔ 22mm 로 변해
    .book 이 가로 폭이 출렁여 페이지가 좌·우로 흔들리는 시각 사고가 있었다(편집자
    의 시점 추적이 깨짐). 따라서 토글 상태와 무관하게 gap 을 항상 동일하게 둔다 —
    마크 영역(2 × mark-margin) + 여유 4mm. 이렇게 하면 .book 의 총 폭이 고정돼,
    사이드바 토글이 무엇이든 페이지 위치가 그대로 유지된다(stage 가 책모양에 끼어
-   맞추듯 좁아지지 않음). spread::before 의 centerline 은 left:50% 기준이므로
-   늘어난 gap 가운데에 그려져 책등 표현은 그대로 유지된다. */
+   맞추듯 좁아지지 않음). 가운데 세네카(책등) 영역은 시각 노이즈 없이 비워둔다. */
 body.facing-pages .spread{
   gap: calc(var(--page-mark-margin) * 2 + 4mm);
 }
