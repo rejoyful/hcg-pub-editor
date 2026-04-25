@@ -1498,8 +1498,24 @@ ul.toc-list > li::before{
      style="color:…" (CMYK/컬러픽커 적용분) 이 보존되도록. */
   .page-content{pointer-events:none;color:#000}
   .page-content h1,.page-content h2,.page-content h3{color:#000}
-  /* print-color-adjust: 브라우저가 절약 모드로 색을 무시하지 않도록 강제 */
-  .page-content, .page-content *{
+  /* ============================================================
+     print-color-adjust: 모든 요소에 강제 적용
+     ------------------------------------------------------------
+     [편집부 시나리오]
+     - 편집자가 만든 회색 박스 표제(.front-matter h1: color:#fff;
+       background:#B0B0B0) 가 Chrome "배경 그래픽" 옵션 OFF 상태에서
+       흰 글자만 인쇄되는 사고가 보고됨.
+     - 같은 사고는 .page-marks 의 CMYK 컬러바(인쇄소 컬러 검수 기준),
+       pre 코드블록 검은 배경, mark 형광펜 표시 등 모든 디자인 의도된
+       배경/색상에 동일하게 발생할 수 있음.
+     - 인쇄소 직원이 임의의 Chrome 환경에서 이 PDF 를 열고 인쇄해도
+       편집자가 의도한 디자인이 100% 보존되어야 함.
+
+     해결: print-color-adjust:exact 를 모든 요소(*, ::before, ::after)
+     에 강제. 이 선언은 브라우저의 "배경 그래픽" 환경설정/체크박스를
+     무시하고 항상 색상·배경·이미지를 출력하도록 함.
+     ============================================================ */
+  *, *::before, *::after{
     -webkit-print-color-adjust:exact !important;
     print-color-adjust:exact !important;
   }
@@ -1634,18 +1650,27 @@ ul.toc-list > li::before{
         </div>
         <div class="row">
           <label>재단선</label>
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer">
-            <input type="checkbox" id="chk-crop-marks" checked> 표시
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer" title="Crop Marks — 페이지 4모서리에 L자 재단 기준선. PDF 인쇄 시 그대로 출력되어 인쇄소가 재단(트림) 위치를 잡는 기준이 됩니다. 인쇄소 납품용 PDF 에서는 반드시 ON.">
+            <input type="checkbox" id="chk-crop-marks" checked> 표시 <small style="color:var(--meta);font-size:10.5px">· PDF 출력 ✓</small>
           </label>
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer;margin-left:8px">
-            <input type="checkbox" id="chk-bleed-guide" checked> 도련 가이드
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer;margin-left:8px" title="Bleed Guide — 도련 영역의 점선 표시. 편집 화면 보조용이며 PDF 인쇄 시에는 출력되지 않습니다(실제 인쇄물에는 불필요).">
+            <input type="checkbox" id="chk-bleed-guide" checked> 도련 가이드 <small style="color:var(--meta);font-size:10.5px">· 편집용</small>
           </label>
         </div>
         <div class="row">
           <label>인쇄 마크</label>
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer" title="Printer's Marks — 맞춤표(Registration) + 컬러바(Color Bars) 포함. PDF 내보내기에도 그대로 반영됩니다.">
-            <input type="checkbox" id="chk-printer-marks" checked> 맞춤표·컬러바
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer" title="Printer's Marks — 맞춤표(Registration) + CMYK 컬러바(Color Bars). 인쇄소가 색상·견양 정합성을 검수하는 기준입니다. PDF 인쇄 시 그대로 출력되어 인쇄소 납품용 PDF 에서는 ON 권장.">
+            <input type="checkbox" id="chk-printer-marks" checked> 맞춤표·컬러바 <small style="color:var(--meta);font-size:10.5px">· PDF 출력 ✓</small>
           </label>
+        </div>
+        <!-- 편집부 실무 가이드: 토글 조합에 따라 PDF 산출물의 용도가 결정됨을 명시.
+             신규 편집자가 토글을 깜빡 잊고 잘못된 PDF 를 발송하는 사고를 방지. -->
+        <div class="row" style="margin-top:-2px">
+          <small style="font-size:10.5px;line-height:1.4;color:var(--meta);display:block;padding:4px 6px;background:var(--soft);border-radius:4px;width:100%">
+            <b style="color:var(--ink)">인쇄소 납품용</b> = 재단선·맞춤표 ON ·
+            <b style="color:var(--ink)">검토용</b> = 둘 다 OFF.
+            PDF 내보내기 시 토스트와 저장 파일명에 현재 용도가 표시됩니다.
+          </small>
         </div>
       </div>
 
@@ -6147,11 +6172,42 @@ function download(filename, data, mime){
   }
 }
 
+/* PDF 마크 상태 라벨 ───────────────────────────────────────────────
+   [편집부 시나리오]
+   편집부 실무에서 PDF 산출물은 두 가지 흐름으로 나뉜다.
+     ① 인쇄소 납품용 — 재단선/맞춤표가 반드시 들어간 PDF
+     ② 저자/내부 검토용 — 마크 없이 깨끗한 PDF
+   사이드바 토글을 깜빡 잊고 검토용을 인쇄소에 보내거나, 거꾸로
+   마크 들어간 PDF 를 저자에게 보내는 사고가 가장 흔한 휴먼에러다.
+   토스트 메시지와 iframe <title>(= Chrome "다른 이름으로 PDF 저장"
+   기본 파일명) 양쪽에 현재 마크 상태를 명시해 사고를 차단한다.
+   bleed-guide 는 @media print 에서 항상 강제 hidden 이므로 판단에서 제외. */
+function getPdfMarkContext(){
+  const b = document.body.classList;
+  const crop = b.contains('show-crop-marks');
+  const printer = b.contains('show-printer-marks');
+  const hasMarks = crop || printer;
+  const parts = [];
+  if (crop) parts.push('재단선');
+  if (printer) parts.push('맞춤표');
+  return {
+    hasMarks,
+    crop, printer,
+    /* 토스트 — 한 줄로 즉시 인지 가능한 형태 */
+    toastLabel: hasMarks
+      ? `인쇄소 납품용 PDF (${parts.join('·')} 포함)`
+      : '검토용 PDF (마크 없음)',
+    /* 파일명 suffix — Chrome 의 PDF 저장 다이얼로그 기본 파일명에 붙음 */
+    titleSuffix: hasMarks ? ' (인쇄소 납품용)' : ' (검토용)',
+  };
+}
+
 async function runExport(kind){
   try{
     const base = safeFilename();
     if (kind === 'pdf'){
-      toast('PDF 인쇄 창을 엽니다', 'info');
+      const mc = getPdfMarkContext();
+      toast(`${mc.toastLabel} — 인쇄 창을 엽니다`, 'info');
       /* 페이지네이션 race 가드 ────────────────────────────────────────
          scheduleReflow() 는 45–70ms debounce + 1 rAF 로 늦게 paginate 하기
          때문에, 페이지 진입 직후(~100–500ms) 또는 사이드바 설정 변경 직후
@@ -6243,7 +6299,12 @@ table{border-collapse:collapse;width:100%;margin:10pt 0}td,th{border:1px solid #
 }
 
 function buildPrintHtml(){
-  const title = ($('#doc-title').value || 'HCG typesetting editor').trim();
+  /* iframe <title> 은 Chrome 의 "다른 이름으로 PDF 저장" 기본 파일명이 된다.
+     마크 상태 suffix 를 붙여, 편집자가 저장 시점에 한 번 더 자가 점검할 수
+     있게 한다(인쇄소 납품용 vs 검토용). */
+  const baseTitle = ($('#doc-title').value || 'HCG typesetting editor').trim();
+  const mc = (typeof getPdfMarkContext === 'function') ? getPdfMarkContext() : { titleSuffix: '' };
+  const title = `${baseTitle}${mc.titleSuffix}`;
   /* body class 화이트리스트 ──────────────────────────────────────────
      document.body 의 모든 클래스를 그대로 iframe 에 넘기면 dock-mode-right /
      dock-mode-bottom 같은 UI 전용 클래스가 따라와서 .stage 에 도크 폭만큼의
