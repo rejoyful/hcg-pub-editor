@@ -1814,7 +1814,7 @@ ul.toc-list > li::before{
         </div>
         <div class="grp color-grp">
           <!-- 글자 색 — 하나의 버튼에서 팝오버로 HEX/CMYK 선택 + 해제 내장 -->
-          <button type="button" class="color-swatch" data-cmd="color-open" title="글자 색 (HEX · CMYK)" style="color:#1A1A1A">
+          <button type="button" class="color-swatch" data-cmd="color-open" title="글자 색 (HEX · CMYK)">
             <i class="ph ph-text-aa"></i>
             <span class="color-dot" style="background:#1A1A1A"></span>
           </button>
@@ -4657,7 +4657,7 @@ function applyColorToSelection(hex){
   }
   /* 툴바 스와치 dot 동기화 */
   const sw = document.querySelector('.edit-toolbar button.color-swatch[data-cmd="color-open"]');
-  if (sw){ sw.style.color = hex; const d = sw.querySelector('.color-dot'); if (d) d.style.background = hex; }
+  if (sw){ const d = sw.querySelector('.color-dot'); if (d) d.style.background = hex; }
   /* 프리뷰 즉시 반영 (debounce 우회) */
   try { if (typeof paginate === 'function') paginate(); } catch(_){}
   try { if (typeof scheduleReflow === 'function') scheduleReflow(); } catch(_){}
@@ -4669,7 +4669,7 @@ function clearColorSelection(){
   if (sel) ch.setTextSelection({ from: sel.from, to: sel.to });
   ch.unsetColor().run();
   const sw = document.querySelector('.edit-toolbar button.color-swatch[data-cmd="color-open"]');
-  if (sw){ sw.style.color = '#1A1A1A'; const d = sw.querySelector('.color-dot'); if (d) d.style.background = '#1A1A1A'; }
+  if (sw){ const d = sw.querySelector('.color-dot'); if (d) d.style.background = '#1A1A1A'; }
   try { if (typeof paginate === 'function') paginate(); } catch(_){}
 }
 
@@ -5232,7 +5232,7 @@ function updateToolbar(ed){
     const cur = ed.getAttributes('textStyle')?.color;
     if (cur){
       const sw = document.querySelector('.toolbar button.color-swatch[data-cmd="color-open"]');
-      if (sw){ sw.style.color = cur; const d = sw.querySelector('.color-dot'); if (d) d.style.background = cur; }
+      if (sw){ const d = sw.querySelector('.color-dot'); if (d) d.style.background = cur; }
     }
   } catch(_){}
 }
@@ -6111,6 +6111,14 @@ async function runExport(kind){
     const base = safeFilename();
     if (kind === 'pdf'){
       toast('PDF 인쇄 창을 엽니다', 'info');
+      /* 현재 용지/여백 변경이 debounce 중일 수 있으므로, 인쇄 직전에
+         페이지네이션을 즉시 실행해서 .book DOM 을 최신화한다. */
+      try { if (typeof paginate === 'function') paginate(); } catch(_){}
+      /* 메인 문서의 웹폰트 로드를 대기 — 다른 데스크탑에서 폰트 캐시가
+         없을 때 첫 인쇄가 시스템 폴백 폰트로 나가는 현상을 방지. */
+      try {
+        if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      } catch(_){}
       syncPrintPageSize();
       await printRenderedBook();
       return;
@@ -6170,8 +6178,27 @@ table{border-collapse:collapse;width:100%;margin:10pt 0}td,th{border:1px solid #
 function buildPrintHtml(){
   const title = ($('#doc-title').value || 'HCG typesetting editor').trim();
   const bodyClasses = document.body.className || '';
+  /* Chrome / Edge / Safari 빌드별로 동일하게 동작하도록, 본 문서에서 복사하는
+     헤드 자원에서 모든 @page 규칙을 제거한다. 인쇄용 @page 는 아래에서
+     단 하나, 명시적 mm 값으로만 선언한다. dynamic-print-page-size 도 같이 제거.
+     또한 @media print 안의 @page 규칙도 함께 처리하기 위해 중첩 블록까지 제거. */
+  const stripAtPage = (css) => {
+    if (!css) return '';
+    let out = css;
+    /* 단순 @page { ... } 제거 */
+    out = out.replace(/@page[^{]*\{[^{}]*\}/g, '');
+    /* 이름 있는 @page (e.g. @page :first) 제거 */
+    out = out.replace(/@page\s+[^{]+\{[^{}]*\}/g, '');
+    return out;
+  };
   const headAssets = Array.from(document.head.querySelectorAll('style, link[rel="stylesheet"]'))
-    .map(el => el.outerHTML)
+    .filter(el => el.id !== 'dynamic-print-page-size')
+    .map(el => {
+      if (el.tagName === 'STYLE'){
+        return `<style>${stripAtPage(el.textContent || '')}</style>`;
+      }
+      return el.outerHTML;
+    })
     .join('\n');
   const pageW = parseFloat(getComputedStyle(root).getPropertyValue('--page-w')) || 152;
   const pageH = parseFloat(getComputedStyle(root).getPropertyValue('--page-h')) || 225;
@@ -6225,9 +6252,16 @@ function buildPrintHtml(){
 <title>${escapeHtml(title)}</title>
 ${headAssets}
 <style>
+/* ── 인쇄/저장 시 단 하나의 @page 선언 ──
+   CSS 변수가 아닌 명시적 mm 값으로만 선언하여, Chromium / Safari / Firefox
+   계열 빌드와 OS 기본 용지 설정에 영향을 받지 않고 동일한 결과를 낸다. */
 @page{size:${sheetW} ${sheetH};margin:0}
 :root{${vars}}
 html,body{margin:0;padding:0;background:#fff;}
+*{
+  -webkit-print-color-adjust:exact !important;
+  print-color-adjust:exact !important;
+}
 body{overflow:visible !important;}
 .print-root{display:block !important;background:#fff !important;}
 .print-root .main,
@@ -6329,15 +6363,30 @@ function printRenderedBook(){
         const cleanup = () => setTimeout(() => iframe.remove(), 300);
         w.addEventListener('afterprint', cleanup, { once: true });
         w.focus();
-        setTimeout(() => {
-          try {
-            w.print();
-            resolve();
-          } catch (err){
-            cleanup();
-            reject(err);
-          }
-        }, 120);
+        /* 다른 데스크탑(폰트 캐시 없음)에서도 동일하게 보여지도록,
+           웹폰트와 이미지가 모두 로드된 뒤 print() 호출. */
+        const doc = w.document;
+        const fontsReady = (doc.fonts && doc.fonts.ready) ? doc.fonts.ready : Promise.resolve();
+        const imgs = Array.from(doc.images || []);
+        const imagesReady = Promise.all(imgs.map(img => {
+          if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+          return new Promise(r => {
+            img.addEventListener('load', r, { once: true });
+            img.addEventListener('error', r, { once: true });
+          });
+        }));
+        Promise.all([fontsReady, imagesReady]).then(() => {
+          /* 두 번의 rAF 로 레이아웃이 안정된 다음 인쇄 */
+          w.requestAnimationFrame(() => w.requestAnimationFrame(() => {
+            try {
+              w.print();
+              resolve();
+            } catch (err){
+              cleanup();
+              reject(err);
+            }
+          }));
+        }).catch(err => { cleanup(); reject(err); });
       } catch (err){
         iframe.remove();
         reject(err);
