@@ -1125,13 +1125,12 @@ body.show-printer-marks .page-marks{ display:block; }
    - hyphens:auto            → 영어는 소프트 하이픈, 한글은 음절 개행
      (브라우저가 lang 속성 따라 자동 선택).
    - word-break:normal       → 한글 어절 공백 폭주 방지 (keep-all 금지). */
-.page-content p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:justify;overflow-wrap:anywhere;word-break:normal;hyphens:auto;-webkit-hyphens:auto;text-indent:var(--body-indent);orphans:2;widows:2}
+/* white-space:break-spaces — 에디터(.ProseMirror)와 동일하게 단락 선두의
+   리터럴 공백(들여쓰기 띄어쓰기)을 보존. 기본값 normal 은 인라인 컨텍스트
+   시작부의 공백을 무너뜨려 에디터↔프리뷰 들여쓰기 불일치를 유발한다. */
+.page-content p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:justify;overflow-wrap:anywhere;word-break:normal;hyphens:auto;-webkit-hyphens:auto;text-indent:var(--body-indent);orphans:2;widows:2;white-space:break-spaces}
 .page-content p + p{margin-top:0}
-/* 2026-04-26: h1/h2/h3 직후 첫 단락의 text-indent 리셋을 제거.
-   한국 단행본 조판 관행에 맞춰 모든 본문 단락에 동일하게 first-line indent
-   (--body-indent) 가 적용되도록 통일 — 에디터 영역의 들여쓰기가 프리뷰에도
-   1:1 로 반영. (이전: 영문 조판 관행을 따라 첫 단락은 indent 0 으로 reset
-   했으나, 에디터 표시와 어긋나 사용자 불일치 보고가 있었음) */
+.page-content h1+p,.page-content h2+p,.page-content h3+p{text-indent:0}
 .page-content ul,.page-content ol{margin:0 0 10pt;padding-left:18pt}
 .page-content li{margin-bottom:3pt}
 .page-content li > p{text-indent:0;margin:0}
@@ -1233,7 +1232,7 @@ body.show-printer-marks .page-marks{ display:block; }
   font-size:11pt;color:#1F4E79;font-style:normal;letter-spacing:.4px;
 }
 .ProseMirror [style*="color"],.page-content [style*="color"]{/* inline */}
-/* 2026-04-26: ProseMirror 측 h*+p text-indent 리셋도 함께 제거 (page-content 와 동기화). */
+.ProseMirror h1+p,.ProseMirror h2+p,.ProseMirror h3+p{text-indent:0}
 .ProseMirror ul,.ProseMirror ol{margin:0 0 10pt;padding-left:18pt}
 .ProseMirror li{margin-bottom:3pt}
 .ProseMirror li > p{text-indent:0;margin:0}
@@ -7215,8 +7214,8 @@ function openFloatPopup(){
   .fw-edit h1:first-child{margin-top:0}
   .fw-edit h2{font-size:16pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4}
   .fw-edit h3{font-size:13pt;font-weight:700;margin:2.4em 0 1.2em;line-height:1.4}
-  .fw-edit p{margin:0 0 1em;text-align:justify;overflow-wrap:anywhere;word-break:normal;hyphens:auto;-webkit-hyphens:auto;text-indent:var(--body-indent,1em)}
-  /* 2026-04-26: h1/h2/h3 직후 첫 단락 indent 리셋 제거 — 메인 에디터/프리뷰와 동기화. */
+  .fw-edit p{margin:0 0 1em;text-align:justify;overflow-wrap:anywhere;word-break:normal;hyphens:auto;-webkit-hyphens:auto;text-indent:1em}
+  .fw-edit h1+p,.fw-edit h2+p,.fw-edit h3+p{text-indent:0}
   .fw-edit mark{background:#FFF59D;padding:0 2px;border-radius:2px}
   .fw-edit img{max-width:100%;border-radius:2pt;vertical-align:middle;cursor:pointer}
   .fw-edit img.center{display:block;margin:10pt auto}
