@@ -1125,7 +1125,10 @@ body.show-printer-marks .page-marks{ display:block; }
    - hyphens:auto            → 영어는 소프트 하이픈, 한글은 음절 개행
      (브라우저가 lang 속성 따라 자동 선택).
    - word-break:normal       → 한글 어절 공백 폭주 방지 (keep-all 금지). */
-.page-content p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:justify;overflow-wrap:anywhere;word-break:normal;hyphens:auto;-webkit-hyphens:auto;text-indent:var(--body-indent);orphans:2;widows:2}
+/* white-space:break-spaces — 에디터(.ProseMirror)와 동일하게 단락 선두의
+   리터럴 공백(들여쓰기 띄어쓰기)을 보존. 기본값 normal 은 인라인 컨텍스트
+   시작부의 공백을 무너뜨려 에디터↔프리뷰 들여쓰기 불일치를 유발한다. */
+.page-content p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:justify;overflow-wrap:anywhere;word-break:normal;hyphens:auto;-webkit-hyphens:auto;text-indent:var(--body-indent);orphans:2;widows:2;white-space:break-spaces}
 .page-content p + p{margin-top:0}
 .page-content h1+p,.page-content h2+p,.page-content h3+p{text-indent:0}
 .page-content ul,.page-content ol{margin:0 0 10pt;padding-left:18pt}
