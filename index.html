@@ -75,7 +75,7 @@
   --color-bar-swatch: 4mm;     /* 각 스와치 폭 */
 
   /* typography */
-  --body-family: "Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif;
+  --body-family: "Nanum Gothic","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
   --ui-family: "Noto Sans KR","SF Pro Text","Helvetica Neue","Segoe UI",sans-serif;
   --body-size: 10pt;
   --body-leading: 1.75;
@@ -1964,10 +1964,10 @@ ul.toc-list > li::before{
         <div class="row">
           <label>서체</label>
           <select id="sel-font">
-            <option value='"Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif' selected>Noto Serif (명조)</option>
-            <option value='"Noto Sans KR","SF Pro Text","Helvetica Neue",sans-serif'>Noto Sans (고딕)</option>
+            <option value='"Nanum Gothic","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif' selected>나눔고딕</option>
             <option value='"Nanum Myeongjo","Batang",serif'>나눔명조</option>
-            <option value='"Nanum Gothic","Malgun Gothic",sans-serif'>나눔고딕</option>
+            <option value='"Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif'>Noto Serif (명조)</option>
+            <option value='"Noto Sans KR","SF Pro Text","Helvetica Neue",sans-serif'>Noto Sans (고딕)</option>
             <option value='"Pretendard Variable","Pretendard","Apple SD Gothic Neo",sans-serif'>Pretendard</option>
           </select>
         </div>
@@ -2483,11 +2483,11 @@ ul.toc-list > li::before{
      버튼 클릭 시 setTextSelection+setColor 를 atomic chain 으로 실행한다. -->
 <div id="color-popover" class="color-popover" role="dialog" aria-label="글자 색">
   <div class="cp-tabs" role="tablist">
-    <button type="button" class="cp-tab active" data-mode="hex" role="tab" aria-selected="true">HEX · sRGB</button>
-    <button type="button" class="cp-tab"        data-mode="cmyk" role="tab" aria-selected="false">CMYK · Japan 2001</button>
+    <button type="button" class="cp-tab active" data-mode="cmyk" role="tab" aria-selected="true">CMYK · 인쇄</button>
+    <button type="button" class="cp-tab"        data-mode="hex"  role="tab" aria-selected="false">HEX · sRGB</button>
   </div>
-  <!-- HEX / sRGB 패널 -->
-  <div class="cp-panel" data-panel="hex">
+  <!-- HEX / sRGB 패널 — 보조 입력. 인쇄 색상은 CMYK 패널이 기본 -->
+  <div class="cp-panel" data-panel="hex" hidden>
     <div class="cp-preview-row">
       <div class="cp-preview" id="cp-preview"></div>
       <div style="flex:1;display:flex;flex-direction:column;gap:6px">
@@ -2496,21 +2496,23 @@ ul.toc-list > li::before{
                style="font-family:var(--ui-family);text-transform:uppercase;letter-spacing:.5px">
       </div>
     </div>
+    <!-- HEX 스와치도 인쇄 표준 CMYK 의 sRGB 근사값으로 통일.
+         이 탭은 화면 전용 보조 입력이지만, 자주 쓰는 색은 인쇄와의
+         일관성을 위해 CMYK 패널과 동일한 컬러를 노출한다. -->
     <div class="cp-swatches" id="cp-hex-swatches">
-      <!-- 자주 쓰는 sRGB 색 9개 -->
-      <button type="button" class="cp-swatch" data-hex="#1A1A1A" title="검정 #1A1A1A"></button>
-      <button type="button" class="cp-swatch" data-hex="#555555" title="회색 #555555"></button>
-      <button type="button" class="cp-swatch" data-hex="#999999" title="연회색 #999999"></button>
-      <button type="button" class="cp-swatch" data-hex="#D32F2F" title="빨강 #D32F2F"></button>
-      <button type="button" class="cp-swatch" data-hex="#E67E22" title="주황 #E67E22"></button>
-      <button type="button" class="cp-swatch" data-hex="#F1C40F" title="노랑 #F1C40F"></button>
-      <button type="button" class="cp-swatch" data-hex="#2E6B52" title="초록 #2E6B52"></button>
-      <button type="button" class="cp-swatch" data-hex="#2E6BD6" title="파랑 #2E6BD6"></button>
-      <button type="button" class="cp-swatch" data-hex="#7B3FA0" title="보라 #7B3FA0"></button>
+      <button type="button" class="cp-swatch" data-hex="#1A1A1A" title="검정 (CMYK 0/0/0/100)"></button>
+      <button type="button" class="cp-swatch" data-hex="#4D4D4D" title="짙은 회색 (CMYK 0/0/0/80)"></button>
+      <button type="button" class="cp-swatch" data-hex="#9C9C9C" title="중간 회색 (CMYK 0/0/0/50)"></button>
+      <button type="button" class="cp-swatch" data-hex="#D72020" title="빨강 (CMYK 0/100/100/0)"></button>
+      <button type="button" class="cp-swatch" data-hex="#E7C300" title="황금 (CMYK 0/20/100/10)"></button>
+      <button type="button" class="cp-swatch" data-hex="#00873B" title="초록 (CMYK 100/0/100/0)"></button>
+      <button type="button" class="cp-swatch" data-hex="#287064" title="짙은 청록 (CMYK 80/0/60/20)"></button>
+      <button type="button" class="cp-swatch" data-hex="#1F3B91" title="파랑 (CMYK 100/100/0/0)"></button>
+      <button type="button" class="cp-swatch" data-hex="#9A3070" title="자주 (CMYK 40/90/20/10)"></button>
     </div>
   </div>
-  <!-- CMYK 패널 -->
-  <div class="cp-panel" data-panel="cmyk" hidden>
+  <!-- CMYK 패널 — 인쇄 표준. 기본 활성. -->
+  <div class="cp-panel" data-panel="cmyk">
     <div class="cp-preview-row">
       <div class="cp-preview" id="cp-cmyk-preview"></div>
       <div style="flex:1;display:grid;grid-template-columns:24px 1fr 42px;gap:5px 8px;align-items:center;font-size:12px">
@@ -2524,8 +2526,8 @@ ul.toc-list > li::before{
         <input type="range" id="cp-y" min="0" max="100" step="1" value="0">
         <input type="number" id="cp-y-n" min="0" max="100" step="1" value="0">
         <label for="cp-k" style="font-weight:600">K</label>
-        <input type="range" id="cp-k" min="0" max="100" step="1" value="90">
-        <input type="number" id="cp-k-n" min="0" max="100" step="1" value="90">
+        <input type="range" id="cp-k" min="0" max="100" step="1" value="100">
+        <input type="number" id="cp-k-n" min="0" max="100" step="1" value="100">
       </div>
     </div>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;margin:10px 0;font-size:11.5px;color:var(--mute)">
@@ -2535,16 +2537,26 @@ ul.toc-list > li::before{
         <option value="srgb">sRGB (프로필 미적용)</option>
       </select>
     </div>
+    <!-- 인쇄 표준 CMYK 스와치. 모든 색상은 process color (4도) 기준값.
+         숫자는 인쇄소 RIP 가 그대로 받는 CMYK 좌표이며, 프리뷰의 background
+         는 Japan Color 2001 Coated 프로필로 변환한 sRGB 근사값. -->
     <div class="cp-swatches" id="cp-cmyk-swatches">
       <button type="button" class="cp-swatch" data-cmyk="0,0,0,100"   title="Process Black 0/0/0/100" style="background:#1A1A1A"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,0,0,80"    title="짙은 회색 0/0/0/80" style="background:#404040"></button>
-      <button type="button" class="cp-swatch" data-cmyk="100,0,0,0"   title="Cyan 100/0/0/0" style="background:#00A2E8"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,100,0,0"   title="Magenta 0/100/0/0" style="background:#E3007F"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,0,100,0"   title="Yellow 0/0/100/0" style="background:#FFDD00"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,20,100,10" title="따뜻한 황금" style="background:#E7C300"></button>
-      <button type="button" class="cp-swatch" data-cmyk="60,40,0,0"   title="인디고" style="background:#697CCB"></button>
-      <button type="button" class="cp-swatch" data-cmyk="20,80,80,0"  title="진홍" style="background:#BE3F31"></button>
-      <button type="button" class="cp-swatch" data-cmyk="80,0,60,20"  title="짙은 청록" style="background:#287064"></button>
+      <button type="button" class="cp-swatch" data-cmyk="0,0,0,80"    title="짙은 회색 0/0/0/80"   style="background:#4D4D4D"></button>
+      <button type="button" class="cp-swatch" data-cmyk="0,0,0,50"    title="중간 회색 0/0/0/50"   style="background:#9C9C9C"></button>
+      <button type="button" class="cp-swatch" data-cmyk="0,0,0,20"    title="연회색 0/0/0/20"     style="background:#D5D5D5"></button>
+      <button type="button" class="cp-swatch" data-cmyk="100,0,0,0"   title="Cyan 100/0/0/0"      style="background:#00A2E8"></button>
+      <button type="button" class="cp-swatch" data-cmyk="0,100,0,0"   title="Magenta 0/100/0/0"   style="background:#E3007F"></button>
+      <button type="button" class="cp-swatch" data-cmyk="0,0,100,0"   title="Yellow 0/0/100/0"    style="background:#FFDD00"></button>
+      <button type="button" class="cp-swatch" data-cmyk="0,100,100,0" title="Red 0/100/100/0"     style="background:#D72020"></button>
+      <button type="button" class="cp-swatch" data-cmyk="100,0,100,0" title="Green 100/0/100/0"   style="background:#00873B"></button>
+      <button type="button" class="cp-swatch" data-cmyk="100,100,0,0" title="Blue 100/100/0/0"    style="background:#1F3B91"></button>
+      <button type="button" class="cp-swatch" data-cmyk="20,80,80,0"  title="진홍 (브랜드 빨강) 20/80/80/0" style="background:#BE3F31"></button>
+      <button type="button" class="cp-swatch" data-cmyk="0,20,100,10" title="따뜻한 황금 0/20/100/10"   style="background:#E7C300"></button>
+      <button type="button" class="cp-swatch" data-cmyk="60,40,0,0"   title="인디고 60/40/0/0"     style="background:#697CCB"></button>
+      <button type="button" class="cp-swatch" data-cmyk="80,0,60,20"  title="짙은 청록 80/0/60/20"  style="background:#287064"></button>
+      <button type="button" class="cp-swatch" data-cmyk="40,90,20,10" title="자주 40/90/20/10"     style="background:#9A3070"></button>
+      <button type="button" class="cp-swatch" data-cmyk="60,60,80,40" title="녹슨 갈색 60/60/80/40" style="background:#5C4D33"></button>
     </div>
   </div>
   <div class="cp-foot">
@@ -2622,6 +2634,7 @@ import TableCell from 'https://esm.sh/@tiptap/extension-table-cell@2.6.6';
 import TableHeader from 'https://esm.sh/@tiptap/extension-table-header@2.6.6';
 import TextAlign from 'https://esm.sh/@tiptap/extension-text-align@2.6.6';
 import TextStyle from 'https://esm.sh/@tiptap/extension-text-style@2.6.6';
+import FontFamily from 'https://esm.sh/@tiptap/extension-font-family@2.6.6';
 import { Color } from 'https://esm.sh/@tiptap/extension-color@2.6.6';
 import Highlight from 'https://esm.sh/@tiptap/extension-highlight@2.6.6';
 import JSZip from 'https://esm.sh/jszip@3.10.1';
@@ -3441,6 +3454,7 @@ const editor = window.editor = new Editor({
     TableRow, TableCell, TableHeader,
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     TextStyle,
+    FontFamily.configure({ types: ['textStyle'] }),
     Color.configure({ types: ['textStyle'] }),
     Highlight.configure({ multicolor: true }),
     IndentExtension,
@@ -4918,11 +4932,12 @@ function hexToRgb(hex){
       바로 갱신.
    ============================================================ */
 
-/* 팝오버 상태 */
+/* 팝오버 상태 — 인쇄 컬러는 CMYK 가 기본 모드.
+   기본 색상은 Process Black (0/0/0/100) — 인쇄 표준 검정. */
 const __cp = {
-  mode: 'hex',                 /* 'hex' | 'cmyk' */
-  hex: '#1A1A1A',
-  cmyk: { c:0, m:0, y:0, k:90 },
+  mode: 'cmyk',                /* 'cmyk' | 'hex'  ← CMYK 가 기본 */
+  hex: '#1A1A1A',              /* preview 용 sRGB 근사값 */
+  cmyk: { c:0, m:0, y:0, k:100 },
   profile: 'japan2001',
   savedSel: null,              /* { from, to } — 팝오버 열릴 때 capture */
 };
@@ -4985,10 +5000,23 @@ function openTextColorPopover(anchorBtn){
     const s = editor?.state?.selection;
     __cp.savedSel = s ? { from: s.from, to: s.to } : null;
   } catch(_){ __cp.savedSel = null; }
-  /* 초기값: 현재 선택의 글자색 */
+  /* 초기값: 현재 선택의 글자색 (없으면 sRGB 근사 #1A1A1A) */
   const cur = editor?.getAttributes('textStyle')?.color || '#1A1A1A';
   __cp.hex = cur;
   const hi = document.getElementById('cp-hex-input'); if (hi) hi.value = cur;
+  /* CMYK 패널 입력값을 현재 hex 의 CMYK 변환값으로 동기화.
+     이렇게 해두지 않으면 _cpSwitchMode('cmyk') → _cpSyncPreviews 시
+     슬라이더의 HTML 기본값을 거꾸로 hex 로 변환해 색이 어긋난다. */
+  const _rgbInit = hexToRgb(cur);
+  if (_rgbInit){
+    const _cmykInit = rgbToCmyk(_rgbInit.r, _rgbInit.g, _rgbInit.b, __cp.profile);
+    __cp.cmyk = _cmykInit;
+    _cpWriteCmyk(_cmykInit.c, _cmykInit.m, _cmykInit.y, _cmykInit.k);
+  } else {
+    /* hex 파싱 실패 — Process Black 으로 fallback */
+    __cp.cmyk = { c:0, m:0, y:0, k:100 };
+    _cpWriteCmyk(0, 0, 0, 100);
+  }
   /* 위치: 앵커 버튼 아래 */
   pop.style.visibility = 'hidden';
   pop.classList.add('show');
@@ -4999,7 +5027,8 @@ function openTextColorPopover(anchorBtn){
   pop.style.left = left + 'px';
   pop.style.top  = (rect.bottom + 6) + 'px';
   pop.style.visibility = '';
-  _cpSwitchMode('hex');
+  /* 인쇄 작업 흐름에서는 CMYK 가 기본. 사용자가 sRGB 가 필요하면 탭 전환. */
+  _cpSwitchMode('cmyk');
 }
 function closeTextColorPopover(){
   const pop = document.getElementById('color-popover');
@@ -6001,8 +6030,31 @@ $('#seg-columns').addEventListener('click', e=>{
   scheduleReflow();
 });
 
+/* 서체 선택 — 부분/전체 적용 분기.
+   ───────────────────────────────────────────────────────────────
+   • 텍스트가 선택되어 있을 때(from < to) → TipTap FontFamily 마크로
+     **선택 영역에만** 적용 (부분 적용).
+   • 선택이 없을 때 → CSS var --body-family 갱신으로 **본문 전역** 적용
+     (이전 동작 유지).
+   • 두 경우 모두 sel-font 의 표시값과 적용값이 1:1 일치한다.
+   ─────────────────────────────────────────────────────────────── */
 $('#sel-font').addEventListener('change', e=>{
-  root.style.setProperty('--body-family', e.target.value);
+  const family = e.target.value;
+  let appliedToSelection = false;
+  try {
+    if (window.editor){
+      const sel = editor.state?.selection;
+      if (sel && sel.from < sel.to){
+        editor.chain().focus().setFontFamily(family).run();
+        appliedToSelection = true;
+      }
+    }
+  } catch(err){ console.warn('[sel-font] setFontFamily failed:', err); }
+  /* 선택이 없거나 전역 폰트 변경이 더 자연스러운 경우엔 본문 기본 폰트도 갱신.
+     선택 영역 적용 시에는 부분 변경이 우선이므로 전역은 건드리지 않음. */
+  if (!appliedToSelection){
+    root.style.setProperty('--body-family', family);
+  }
   scheduleReflow();
 });
 /* 본문 굵기 — CSS var 로 적용해 .page-content 와 .ProseMirror 에 공통 반영 */
@@ -6141,7 +6193,7 @@ applyHeaderFooter();
    ============================================================ */
 const STYLE_PRESETS = {
   /* 신국판: 현재까지의 기본값을 그대로 번들 — 152×225mm, 1단, 20mm 여백,
-     도련 3mm(재단선·가이드 ON), Noto Serif 10pt / 1.75 / 자간 0 /
+     도련 3mm(재단선·가이드 ON), 나눔고딕 10pt / 1.75 / 자간 0 /
      단락 간격 0 / 들여쓰기 0, 머리말 바깥쪽, 쪽번호 가운데, 시작쪽수 1. */
   Shinkook: {
     label: '신국판',
@@ -6155,7 +6207,7 @@ const STYLE_PRESETS = {
     cropMarks: true,
     bleedGuide: true,
     printerMarks: true,  /* 맞춤표 + 컬러바 */
-    fontFamily: '"Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif',
+    fontFamily: '"Nanum Gothic","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif',
     fontWeight: '400',
     fontSize: 10,
     leading: 1.75,
@@ -7185,7 +7237,7 @@ function openFloatPopup(){
   :root{
     --ink:#1A1A1A;--panel:#FBFBF8;--bg:#F5F5F2;--soft:#F0EDE7;
     --line:#E5E5DF;--accent:#8B6E3E;--accent-soft:#F5EFE4;--mute:#6B6B66;
-    --body-family:"Nanum Myeongjo","Noto Serif KR","Apple SD Gothic Neo","Malgun Gothic",serif;
+    --body-family:"Nanum Gothic","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR","Malgun Gothic",sans-serif;color:var(--ink)}
