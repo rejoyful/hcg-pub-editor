@@ -63,14 +63,16 @@
         · 재단선(crop marks)  : trim 모서리 기준 mark-len 외향
         · 맞춤표(reg)         : 슬러그 영역(=mark-margin − bleed) 한가운데
         · 컬러바              : 하단 슬러그 영역 한가운데
-     12mm = 도련 3mm + 슬러그 9mm. 신국판(152×225) PDF 출력 시
-     sheet = 176×249mm 로, reg 6mm + 여유 1.5mm × 2 가 슬러그 안에 안전하게 자리.
-     이전 9mm 는 슬러그 6mm 가 reg 6mm 와 동일해 마크가 sheet 가장자리에 닿아
-     출력 시 절반이 잘리는 시각 사고가 있었다 (사용자 피드백 2026-04-26). */
-  --page-mark-margin: 12mm;
+     9mm = 도련 3mm + 슬러그 6mm. 신국판(152×225) PDF 출력 시
+     sheet = 170×243mm (= 483×690pt) 로, 학지사 기존 출판물(예: 화타) 및
+     InDesign 표준 인쇄 마크 시방과 동일. reg mark 는 3mm 로 작게 두어
+     6mm 슬러그 안에 1.5mm × 2 여유로 자리한다.
+     변경 이력 — 2026-04-27: 기존 12mm(slug 9 + reg 6) → 9mm(slug 6 + reg 3)
+     로 환원. 학지사 출판물(화타 483×690pt) 및 InDesign 표준에 정합. */
+  --page-mark-margin: 9mm;
 
   /* Printer's marks (인디자인 인쇄용 마크) */
-  --reg-mark-size: 6mm;        /* 맞춤표 지름 */
+  --reg-mark-size: 3mm;        /* 맞춤표 지름 — InDesign 표준값 */
   --color-bar-h: 3.2mm;        /* 컬러바 높이 */
   --color-bar-swatch: 4mm;     /* 각 스와치 폭 */
 
@@ -685,12 +687,10 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
 /* Book container — vertical stack of spreads */
 .book{
   display:flex;flex-direction:column;align-items:center;
-  /* gap = 2 × mark-margin + 8mm 여유. 이전 28px(=7.4mm) 는 mark-margin 12mm
-     의 두 슬러그(=24mm) 가 인접 spread 사이에서 겹쳐, 윗 spread 의 하단
-     컬러바·맞춤표가 아래 spread 의 상단 슬러그와 시각적으로 충돌했다
-     (사용자 피드백 2026-04-26: "맞춤표가 두개로 보여진다"). 이렇게 하면
-     아래 spread 의 상단 마크와 윗 spread 의 하단 마크가 분리돼 각자 독립
-     슬러그 안에 깔린다. */
+  /* gap = 2 × mark-margin + 8mm 여유. mark-margin 이 변해도 자동 따라간다.
+     mark-margin 9mm → 두 슬러그 18mm + 8mm 여백 = 26mm 간격. 인접 spread
+     의 상·하 마크가 겹치지 않도록 보장한다 (사용자 피드백 2026-04-26:
+     "맞춤표가 두개로 보여진다" 이슈 대응). */
   gap: calc(var(--page-mark-margin) * 2 + 8mm);
   padding:14px 0 40px;min-width:max-content;
 }
@@ -991,10 +991,10 @@ body.show-printer-marks .page-marks{ display:block; }
    온전한 원 + 십자가 들어가야 함. .page-marks 좌표계에서:
      · 슬러그 시작(=bleed 외곽) = mark-margin − bleed     [.page-marks 안쪽]
      · 슬러그 끝(=sheet 가장자리) = 0                      [.page-marks 모서리]
-     · 슬러그 정중앙 = (mark-margin − bleed) / 2          (mark-margin=12mm,
-                                                          bleed=3mm → 4.5mm)
-   따라서 reg.top 의 중심은 sheet 상단에서 4.5mm 안쪽 = trim 상단에서
-   외향 7.5mm. 6mm 마크가 슬러그 9mm 한가운데 자리잡고 1.5mm 씩 여유. */
+     · 슬러그 정중앙 = (mark-margin − bleed) / 2          (mark-margin=9mm,
+                                                          bleed=3mm → 3mm)
+   따라서 reg.top 의 중심은 sheet 상단에서 3mm 안쪽 = trim 상단에서
+   외향 6mm. 3mm 마크가 슬러그 6mm 한가운데 자리잡고 1.5mm 씩 여유. */
 .page-marks .reg.top{
   top:    calc((var(--page-mark-margin) - var(--page-bleed)) / 2);
   left:   50%;
@@ -1952,9 +1952,9 @@ ul.toc-list > li::before{
             <span style="display:inline-block;margin-top:4px">PDF 내보내기 시 토스트와 저장 파일명에 현재 용도가 자동 표기됩니다.</span>
             <br>
             <span style="display:inline-block;margin-top:4px;padding-top:4px;border-top:1px dashed var(--line)">
-              <b style="color:var(--ink)">PDF Sheet 크기</b> = 트림 + 4면 12mm 마크 영역 (도련 3mm + 슬러그 9mm).<br>
-              예) 신국판 152×225 → <b style="color:var(--ink)">176×249 mm</b> (= 499×706 pt).<br>
-              재단선은 트림 모서리에서 2mm 떨어져 그려지며, 맞춤표는 슬러그 한가운데에 놓입니다.
+              <b style="color:var(--ink)">PDF Sheet 크기</b> = 트림 + 4면 9mm 마크 영역 (도련 3mm + 슬러그 6mm).<br>
+              예) 신국판 152×225 → <b style="color:var(--ink)">170×243 mm</b> (= 483×690 pt) — InDesign 표준 / 학지사 출판물 시방.<br>
+              재단선은 트림 모서리에서 2mm 떨어져 그려지며, 맞춤표(3mm)는 슬러그 한가운데에 놓입니다.
             </span>
           </small>
         </div>
@@ -2886,7 +2886,7 @@ async function loadPdfLib(){
  * 브라우저 출력 PDF 를 인쇄소 납품용으로 보강.
  *
  * 입력 PDF 는 우리 buildPrintHtml() 출력 → window.print() → "PDF 로 저장"
- * 으로 만들어진 시트 단위 PDF. MediaBox 가 시트 크기(예: 신국판 499×706 pt)
+ * 으로 만들어진 시트 단위 PDF. MediaBox 가 시트 크기(예: 신국판 483×690 pt)
  * 와 일치하는 것을 가정하고, 그 안쪽에 트림(152×225)·도련(158×231) 좌표를
  * TrimBox / BleedBox 로 박는다.
  *
@@ -2906,7 +2906,7 @@ async function buildPrintReadyPdf(bytes, ctx){
   const trimW = (ctx.trimW || 152) * MM_TO_PT;
   const trimH = (ctx.trimH || 225) * MM_TO_PT;
   const bleed = (ctx.bleed || 3) * MM_TO_PT;
-  const slug  = (ctx.slug  || 9) * MM_TO_PT;
+  const slug  = (ctx.slug  || 6) * MM_TO_PT;
 
   /* 페이지마다 TrimBox / BleedBox / CropBox 박기 -----------------------
      좌표계: PDF 는 좌하단 (0,0). 시트 가운데에 트림이 놓이므로 좌하단 모서리
@@ -6819,11 +6819,12 @@ function buildPrintHtml(){
   const bleed = Math.max(0, parseFloat(getComputedStyle(root).getPropertyValue('--page-bleed')) || 0);
   /* mark-margin: sheet 가장자리부터 trim 까지의 거리.
      PDF sheet = trim + 2 × mark-margin. 인쇄소가 받는 PDF 의 실제 페이지 크기.
-     기본 12mm = 도련 3mm + 슬러그 9mm. 신국판(152×225) 출력 시 sheet = 176×249mm
-     (= 499×706 pt). 슬러그 9mm 안에 6mm 맞춤표가 위·아래·여유 1.5mm 씩으로 안전히
-     자리잡고, 컬러바(높이 3.2mm) 도 슬러그 한가운데에 깔린다. mark-margin 이
-     정의되지 않은 경우 bleed 와 동일하게 폴백 — 단, 그 상황에선 마크가 sheet
-     가장자리에 붙어 출력 시 절반이 잘리는 문제가 발생한다. */
+     기본 9mm = 도련 3mm + 슬러그 6mm. 신국판(152×225) 출력 시 sheet = 170×243mm
+     (= 483×690 pt) — 학지사 기존 출판물(화타) 및 InDesign 표준 시방과 동일.
+     슬러그 6mm 안에 3mm 맞춤표가 위·아래 여유 1.5mm 씩으로 자리잡고, 컬러바
+     (높이 3.2mm) 도 슬러그 한가운데에 깔린다. mark-margin 이 정의되지 않은
+     경우 bleed 와 동일하게 폴백 — 단, 그 상황에선 마크가 sheet 가장자리에
+     붙어 출력 시 절반이 잘리는 문제가 발생한다. */
   const markMargin = Math.max(
     bleed,
     parseFloat(getComputedStyle(root).getPropertyValue('--page-mark-margin')) || 0
@@ -7088,7 +7089,7 @@ function openPrintReadyModal(){
     const trimW = parseFloat(cs.getPropertyValue('--page-w')) || 152;
     const trimH = parseFloat(cs.getPropertyValue('--page-h')) || 225;
     const bleed = Math.max(0, parseFloat(cs.getPropertyValue('--page-bleed')) || 3);
-    const markMargin = Math.max(bleed, parseFloat(cs.getPropertyValue('--page-mark-margin')) || 12);
+    const markMargin = Math.max(bleed, parseFloat(cs.getPropertyValue('--page-mark-margin')) || 9);
     const slug  = Math.max(0, markMargin - bleed);
     const title = ($('#doc-title').value || 'HCG_print_ready').trim();
     const dateStr = new Date().toISOString().slice(0, 10);
