@@ -1815,6 +1815,7 @@ ul.toc-list > li::before{
       <button class="btn primary" id="btn-export"><i class="ph ph-export"></i> 내보내기 <i class="ph ph-caret-down"></i></button>
       <div class="menu" id="menu-export">
         <button data-kind="pdf">PDF · 인쇄 <small>⌘P</small></button>
+        <button data-kind="pdf-print-ready" title="브라우저로 저장한 PDF에 TrimBox·BleedBox·OutputIntent·문서 메타를 보강해 인쇄소 납품용으로 변환합니다">PDF · 인쇄소 납품용</button>
         <button data-kind="docx">Word (.docx)</button>
         <button data-kind="html">HTML</button>
         <button data-kind="md">Markdown</button>
@@ -2869,6 +2870,110 @@ async function loadDocxWriter(){
   _docxLib = m.default || m;
   return _docxLib;
 }
+let _pdfLib = null;
+async function loadPdfLib(){
+  if (_pdfLib) return _pdfLib;
+  /* pdf-lib (Apache 2.0, ~280KB) — 클라이언트에서 PDF 메타데이터(TrimBox·
+     BleedBox·CropBox·OutputIntent·/Info dict) 를 보강해 인쇄소 납품용 PDF
+     로 변환할 때 사용. 픽셀·콘텐츠 스트림은 건드리지 않으며 PDF 의 페이지
+     dictionary 와 카탈로그에 메타만 얹는다. */
+  const m = await import('https://esm.sh/pdf-lib@1.17.1?bundle');
+  _pdfLib = m.default || m;
+  return _pdfLib;
+}
+
+/**
+ * 브라우저 출력 PDF 를 인쇄소 납품용으로 보강.
+ *
+ * 입력 PDF 는 우리 buildPrintHtml() 출력 → window.print() → "PDF 로 저장"
+ * 으로 만들어진 시트 단위 PDF. MediaBox 가 시트 크기(예: 신국판 499×706 pt)
+ * 와 일치하는 것을 가정하고, 그 안쪽에 트림(152×225)·도련(158×231) 좌표를
+ * TrimBox / BleedBox 로 박는다.
+ *
+ * @param {Uint8Array} bytes  원본 PDF 바이트
+ * @param {Object} ctx        { trimW, trimH, bleed, slug, title, author }
+ *                            모든 단위 mm.
+ * @returns {Promise<Uint8Array>}  보강된 PDF 바이트
+ */
+async function buildPrintReadyPdf(bytes, ctx){
+  const PDFLib = await loadPdfLib();
+  const { PDFDocument, PDFName, PDFArray, PDFNumber, PDFString, PDFHexString } = PDFLib;
+  /* ignoreEncryption: 사용자가 저장 시 비밀번호 없이 저장한 일반 케이스에서도
+     혹시 모를 미세 헤더 차이로 reject 되지 않게 한다. */
+  const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+
+  const MM_TO_PT = 2.83464567;
+  const trimW = (ctx.trimW || 152) * MM_TO_PT;
+  const trimH = (ctx.trimH || 225) * MM_TO_PT;
+  const bleed = (ctx.bleed || 3) * MM_TO_PT;
+  const slug  = (ctx.slug  || 9) * MM_TO_PT;
+
+  /* 페이지마다 TrimBox / BleedBox / CropBox 박기 -----------------------
+     좌표계: PDF 는 좌하단 (0,0). 시트 가운데에 트림이 놓이므로 좌하단 모서리
+     로부터 (slug+bleed) 만큼 안쪽으로 들어간 지점이 트림 좌하단. */
+  for (const page of pdf.getPages()){
+    const { width: pw, height: ph } = page.getSize();
+    /* MediaBox 가 시트 크기와 다른 경우(예: Safari 의 A4 출력) 자동 보정.
+       시트 가운데에 트림이 떨어지도록 (pw - trimW)/2, (ph - trimH)/2 사용. */
+    const tx = (pw - trimW) / 2;
+    const ty = (ph - trimH) / 2;
+    const trimRect    = [tx,         ty,         tx + trimW,         ty + trimH];
+    const bleedRect   = [tx - bleed, ty - bleed, tx + trimW + bleed, ty + trimH + bleed];
+
+    const node = page.node;
+    node.set(PDFName.of('TrimBox'),  PDFArray.withContext(node.context));
+    node.set(PDFName.of('BleedBox'), PDFArray.withContext(node.context));
+    /* CropBox = MediaBox 와 동일 (전체 시트 표시). 일부 RIP 가 CropBox 가
+       있어야 안정적으로 인식한다. */
+    node.set(PDFName.of('CropBox'),  PDFArray.withContext(node.context));
+
+    const setRect = (key, rect) => {
+      const arr = node.lookup(PDFName.of(key), PDFArray);
+      while (arr.size()) arr.remove(0);
+      for (const v of rect) arr.push(PDFNumber.of(v));
+    };
+    setRect('TrimBox',  trimRect);
+    setRect('BleedBox', bleedRect);
+    setRect('CropBox',  [0, 0, pw, ph]);
+  }
+
+  /* /Info dict — Acrobat·인디자인의 문서 정보 패널에 표시. PDF/X 변환
+     단계에서 누락되면 경고가 나오는 항목들을 모두 채운다. */
+  const today = new Date();
+  pdf.setTitle(ctx.title || 'Untitled');
+  pdf.setAuthor(ctx.author || '');
+  pdf.setCreator('HCG Pub Editor');
+  pdf.setProducer('HCG Pub Editor + pdf-lib (print-ready post-process)');
+  pdf.setSubject(ctx.subject || '인쇄소 납품용 PDF');
+  pdf.setKeywords(['HCG', 'print-ready', 'trim', 'bleed']);
+  pdf.setCreationDate(today);
+  pdf.setModificationDate(today);
+
+  /* OutputIntent (sRGB IEC61966-2.1) — PDF/X 컨버전 시 출력 색공간 명시.
+     ICC 프로파일을 임베딩하는 본격 PDF/X-4 가 아니더라도, OutputIntent 가
+     없으면 Acrobat Preflight 가 "출력 의도 누락" 오류를 낸다. 우리는 색공간
+     식별자만 명시하는 Identifier 기반 OutputIntent 를 박는다 (DestOutputProfile
+     ICC 미포함 — 인쇄소 RIP 가 자체 프로파일로 변환). */
+  const ctxObj = pdf.context;
+  const outputIntent = ctxObj.obj({
+    Type: 'OutputIntent',
+    S: 'GTS_PDFX',
+    OutputConditionIdentifier: PDFString.of('sRGB IEC61966-2.1'),
+    Info: PDFString.of('sRGB IEC61966-2.1'),
+    RegistryName: PDFString.of('http://www.color.org'),
+  });
+  const outputIntentRef = ctxObj.register(outputIntent);
+  const catalog = pdf.catalog;
+  const arr = PDFArray.withContext(ctxObj);
+  arr.push(outputIntentRef);
+  catalog.set(PDFName.of('OutputIntents'), arr);
+
+  /* GTS_PDFX 식별자를 Catalog 에 박으면 Acrobat 이 PDF/X 호환 후보로 인식. */
+  catalog.set(PDFName.of('Version'), PDFName.of('1.4'));
+
+  return await pdf.save({ useObjectStreams: false });
+}
+
 
 /* ============================================================
    Parsers
@@ -6627,6 +6732,10 @@ async function runExport(kind){
       download(`${base}.docx`, blob, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       return;
     }
+    if (kind === 'pdf-print-ready'){
+      await openPrintReadyModal();
+      return;
+    }
   }catch(err){
     hideLoader();
     /* 인쇄 미리보기는 이미 떠 있는데 Chromium 내부의 cross-origin 스타일시트
@@ -6961,6 +7070,133 @@ function printRenderedBook(){
     };
     iframe.srcdoc = buildPrintHtml();
     document.body.appendChild(iframe);
+  });
+}
+
+/* ============================================================
+   인쇄소 납품용 PDF 변환 모달
+   - 사용자가 ⌘P 로 먼저 PDF 를 저장
+   - 이 모달에서 저장된 PDF 를 드롭/선택
+   - PDF-lib 가 TrimBox/BleedBox/CropBox/OutputIntent/Info 박음
+   - "[제목]_인쇄소납품용_YYYY-MM-DD.pdf" 로 다운로드
+   ============================================================ */
+function openPrintReadyModal(){
+  return new Promise(resolve => {
+    /* 기존 트림 / 도련 / 슬러그 시방값을 CSS 변수에서 그대로 읽어와
+       buildPrintReadyPdf 에 전달. (편집 중 판형이 바뀌어도 자동 반영) */
+    const cs = getComputedStyle(root);
+    const trimW = parseFloat(cs.getPropertyValue('--page-w')) || 152;
+    const trimH = parseFloat(cs.getPropertyValue('--page-h')) || 225;
+    const bleed = Math.max(0, parseFloat(cs.getPropertyValue('--page-bleed')) || 3);
+    const markMargin = Math.max(bleed, parseFloat(cs.getPropertyValue('--page-mark-margin')) || 12);
+    const slug  = Math.max(0, markMargin - bleed);
+    const title = ($('#doc-title').value || 'HCG_print_ready').trim();
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'print-ready-overlay';
+    overlay.style.cssText = `
+      position:fixed;inset:0;background:rgba(20,24,32,.55);z-index:9999;
+      display:flex;align-items:center;justify-content:center;
+    `;
+    overlay.innerHTML = `
+      <div role="dialog" aria-modal="true" style="
+        width:min(560px,92vw);background:#fff;border-radius:14px;
+        box-shadow:0 24px 60px rgba(0,0,0,.28);padding:24px 24px 20px;
+        font-family:var(--ui-family,system-ui,sans-serif);color:#1A1A1A;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px">
+          <div>
+            <div style="font-size:16px;font-weight:700;letter-spacing:-.2px">PDF · 인쇄소 납품용 변환</div>
+            <div style="font-size:12px;color:#666;margin-top:4px;line-height:1.55">
+              ⌘P 로 저장한 PDF 를 끌어다 놓으면<br>
+              TrimBox · BleedBox · OutputIntent · 문서 메타를 보강합니다.
+            </div>
+          </div>
+          <button type="button" id="pr-close" aria-label="닫기" style="
+            border:0;background:transparent;font-size:20px;cursor:pointer;color:#888;line-height:1">×</button>
+        </div>
+        <div id="pr-drop" style="
+          margin-top:12px;border:2px dashed #B7C9DD;border-radius:10px;
+          padding:28px 16px;text-align:center;background:#F4F8FC;color:#1F4E79;
+          transition:background .12s, border-color .12s;cursor:pointer;">
+          <div style="font-size:32px;line-height:1;margin-bottom:6px">📄</div>
+          <div style="font-size:13px;font-weight:600">PDF 를 여기에 드롭</div>
+          <div style="font-size:11px;color:#5078A3;margin-top:4px">또는 클릭해서 파일 선택</div>
+          <input type="file" id="pr-file" accept="application/pdf,.pdf" style="display:none">
+        </div>
+        <div id="pr-info" style="margin-top:12px;font-size:12px;color:#444;line-height:1.6">
+          <div><b>트림</b> ${trimW}×${trimH} mm · <b>도련</b> ${bleed} mm · <b>슬러그</b> ${slug} mm</div>
+          <div><b>제목</b> ${escapeHtml(title)}</div>
+        </div>
+        <div id="pr-status" style="margin-top:10px;font-size:12px;color:#1F4E79;min-height:18px"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = () => {
+      overlay.remove();
+      window.removeEventListener('keydown', onEsc);
+      resolve();
+    };
+    const onEsc = (e) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('keydown', onEsc);
+    overlay.querySelector('#pr-close').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+    const drop = overlay.querySelector('#pr-drop');
+    const fileInput = overlay.querySelector('#pr-file');
+    const statusEl = overlay.querySelector('#pr-status');
+
+    const setStatus = (msg, kind) => {
+      statusEl.textContent = msg;
+      statusEl.style.color = kind === 'err' ? '#B23A3A' : kind === 'ok' ? '#1F7A3D' : '#1F4E79';
+    };
+
+    drop.addEventListener('click', () => fileInput.click());
+    drop.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      drop.style.background = '#E6F0FB';
+      drop.style.borderColor = '#5B8DEF';
+    });
+    drop.addEventListener('dragleave', () => {
+      drop.style.background = '#F4F8FC';
+      drop.style.borderColor = '#B7C9DD';
+    });
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      drop.style.background = '#F4F8FC';
+      drop.style.borderColor = '#B7C9DD';
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) handleFile(f);
+    });
+    fileInput.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) handleFile(f);
+    });
+
+    async function handleFile(file){
+      if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf'){
+        setStatus('PDF 파일만 변환할 수 있습니다.', 'err');
+        return;
+      }
+      setStatus('변환 중… (메타데이터 보강)', 'info');
+      try {
+        const buf = new Uint8Array(await file.arrayBuffer());
+        const out = await buildPrintReadyPdf(buf, {
+          trimW, trimH, bleed, slug, title,
+          author: '', subject: '인쇄소 납품용 PDF',
+        });
+        const blob = new Blob([out], { type: 'application/pdf' });
+        const fname = `${title}_인쇄소납품용_${dateStr}.pdf`;
+        download(fname, blob, 'application/pdf');
+        setStatus(`완료 — ${fname} 다운로드`, 'ok');
+        toast('인쇄소 납품용 PDF 변환 완료', 'ok');
+        setTimeout(close, 900);
+      } catch (err){
+        console.error('[HCG] print-ready 변환 실패:', err);
+        setStatus(`변환 실패: ${err.message || err}`, 'err');
+      }
+    }
   });
 }
 
