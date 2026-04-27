@@ -7,6 +7,10 @@
 <meta name="description" content="HCG typesetting editor — 웹 기반 자동 조판 에디터. HWPX·DOCX·PPTX·HTML·MD·TXT·IDML 자동 파싱.">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
+<!-- Pretendard 웹폰트 (UI 전용) — 시스템 폰트 차이로 인한 UI 렌더링 불일치 제거.
+     본문은 시스템 나눔명조를 사용하므로 PDF 임베딩은 영향 없음. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.min.css">
 <style>
 /* ============================================================
    Design tokens
@@ -50,25 +54,38 @@
   --page-mark-len: 5mm;
   --page-mark-thick: 0.25mm;
   --page-mark-color: #222;
+  /* 재단선 mark offset — 인디자인 기본값(InDesign 표준 ≈ 6pt = 2.117mm).
+     마크의 안쪽 끝이 trim 모서리에서 이만큼 떨어진다(= 마크와 트림 사이 여유).
+     첨부된 표준 PDF(화타 앞부속.pdf) 의 재단선이 모서리에 붙어있지 않고
+     살짝 떨어져 그려진 것과 정합. */
+  --page-mark-offset: 2mm;
   /* 마크 영역(슬러그/마크 마진) — trim 외곽으로 sheet 가장자리까지의 거리.
      인쇄소 표준 PDF (예: InDesign 출력) 의 sheet 사이즈는 다음과 같다.
         sheet = trim + 2 × mark-margin
      이 영역 안에:
         · 도련(--page-bleed)  : trim 외곽 3mm — 본문 이미지가 흘러나가는 영역
         · 재단선(crop marks)  : trim 모서리 기준 mark-len 외향
-        · 맞춤표·컬러바      : sheet 가장자리 / mark area 안 정중앙
-     기본 9mm = 도련 3mm + 마크 여유 6mm. 신국판(152×225) PDF 출력 시
-     sheet ≈ 170×243mm (= 483×690pt) 으로 인디자인 표준 출력값과 정합. */
+        · 맞춤표(reg)         : 슬러그 영역(=mark-margin − bleed) 한가운데
+        · 컬러바              : 하단 슬러그 영역 한가운데
+     9mm = 도련 3mm + 슬러그 6mm. 신국판(152×225) PDF 출력 시
+     sheet = 170×243mm (= 483×690pt) 로, 학지사 기존 출판물(예: 화타) 및
+     InDesign 표준 인쇄 마크 시방과 동일. reg mark 는 3mm 로 작게 두어
+     6mm 슬러그 안에 1.5mm × 2 여유로 자리한다.
+     변경 이력 — 2026-04-27: 기존 12mm(slug 9 + reg 6) → 9mm(slug 6 + reg 3)
+     로 환원. 학지사 출판물(화타 483×690pt) 및 InDesign 표준에 정합. */
   --page-mark-margin: 9mm;
 
   /* Printer's marks (인디자인 인쇄용 마크) */
-  --reg-mark-size: 6mm;        /* 맞춤표 지름 */
+  --reg-mark-size: 3mm;        /* 맞춤표 지름 — InDesign 표준값 */
   --color-bar-h: 3.2mm;        /* 컬러바 높이 */
   --color-bar-swatch: 4mm;     /* 각 스와치 폭 */
 
   /* typography */
-  --body-family: "Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif;
-  --ui-family: "Noto Sans KR","SF Pro Text","Helvetica Neue","Segoe UI",sans-serif;
+  /* 본문 = 시스템 나눔명조 (Nanum Myeongjo) — macOS/Windows 표준 명조체 폴백.
+     PDF 임베딩 시 CIDFontType2 로 정상 임베딩되어 PDF/X-4 변환 통과. */
+  --body-family: "Nanum Myeongjo","NanumMyeongjo","AppleMyungjo","Batang","Apple SD Gothic Neo",serif;
+  /* UI = Pretendard 웹폰트 — head 의 link 로 로드. 시스템 차이 무관 일관 렌더링. */
+  --ui-family: "Pretendard","Pretendard Variable",-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
   --body-size: 10pt;
   --body-leading: 1.75;
   --body-tracking: 0em;
@@ -194,6 +211,57 @@ button:focus-visible,.btn:focus-visible{outline-offset:2px}
 }
 .side .seg button:last-child{border-right:0}
 .side .seg button.active{background:var(--ink);color:#fff}
+
+/* ─── 인쇄 마크 토글 — 한 줄 한 옵션 (디자이너 친화) ───
+   각 토글이 자체 줄을 가져 어색한 줄바꿈 없이 [✓] 한글명 (영문) … 보조설명
+   순으로 가로 정렬된다. 기존 "라벨 + 인라인 checkbox" 방식은 폭이 좁을 때
+   2~3 줄로 깨지는 문제가 있어 폐기. */
+.side .row.mark-row{
+  align-items:flex-start;
+  margin-bottom:6px;
+}
+.side .row > label.chk-line:first-child,
+.side .chk-line{
+  display:flex;align-items:center;gap:8px;
+  width:100%;flex:1 1 auto;min-width:0;cursor:pointer;
+  padding:5px 8px;
+  border:1px solid var(--line);border-radius:4px;background:#fff;
+  font-size:12px;line-height:1.35;
+  white-space:normal;
+  transition:border-color .12s, background .12s;
+}
+.side .chk-line:hover{ border-color:var(--ink); background:var(--panel); }
+.side .chk-line input[type=checkbox]{ flex:0 0 auto; margin:0; }
+.side .chk-line .lbl{
+  flex:1 1 auto; min-width:0;
+  color:var(--ink);font-weight:600;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.side .chk-line .lbl small{
+  display:block;
+  font-size:10.5px; font-weight:400; color:var(--meta);
+  margin-top:1px; letter-spacing:.2px;
+}
+.side .chk-line .tag{
+  flex:0 0 auto;
+  font-size:10px; line-height:1;
+  padding:2px 5px; border-radius:2px;
+  white-space:nowrap;
+  font-weight:600;
+}
+.side .chk-line .tag.ok{ color:#1f5f3f; background:#dff5e3; border:1px solid #b7e4c0; }
+.side .chk-line .tag.screen{ color:#5a4a1f; background:#fff4d2; border:1px solid #f0d97e; }
+
+/* 정보 표시 — 작업 영역(트림+도련 합산) 크기 안내 */
+.side .row.info{ align-items:center; }
+.side .row.info .info-val{
+  flex:1; padding:4px 8px;
+  background:var(--soft); border:1px dashed var(--line); border-radius:3px;
+  font-size:11.5px; color:var(--ink); font-weight:600; line-height:1.35;
+}
+.side .row.info .info-val em{
+  font-style:normal; font-weight:400; color:var(--meta); font-size:10.5px;
+}
 /* 용지 프리셋 저장·삭제 버튼 — 사이드바 톤 맞춤 (얇은 outline) */
 .side .btn-preset{
   padding:5px 10px;background:#fff;border:1px solid var(--line);border-radius:4px;
@@ -625,37 +693,70 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
 
 /* Book container — vertical stack of spreads */
 .book{
-  display:flex;flex-direction:column;align-items:center;gap:28px;
+  display:flex;flex-direction:column;align-items:center;
+  /* gap = 2 × mark-margin + 8mm 여유. mark-margin 이 변해도 자동 따라간다.
+     mark-margin 9mm → 두 슬러그 18mm + 8mm 여백 = 26mm 간격. 인접 spread
+     의 상·하 마크가 겹치지 않도록 보장한다 (사용자 피드백 2026-04-26:
+     "맞춤표가 두개로 보여진다" 이슈 대응). */
+  gap: calc(var(--page-mark-margin) * 2 + 8mm);
   padding:14px 0 40px;min-width:max-content;
 }
 
-/* Spread = a pair of facing pages (좌·우 페이지) */
+/* Spread = a pair of facing pages (좌·우 페이지)
+   spread 자체는 단순 layout 컨테이너 — 배경·그림자 없음.
+   각 .page 가 자기 sheet 의 흰 배경 + 그림자를 가짐 → 좌·우 페이지가
+   서로 독립된 종이로 보이고 가운데(spine/세네카) 는 stage 배경이 그대로
+   드러나 빈 공간이 된다. 사용자 요구(2026-04-26): "가운데 영역은 용지가
+   아예 없어야 한다, 좌·우 페이지가 단일로 보이고 가운데만 비워진 모양". */
 .spread{
   display:grid;
   grid-template-columns:var(--page-w) var(--page-w);
-  background:#fff;
-  box-shadow:var(--page-shadow);
+  background:transparent;
   position:relative;
 }
-/* Centerline between left and right page */
-.spread::before{
-  content:"";position:absolute;top:0;bottom:0;left:50%;width:1px;
-  background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.10) 6%, rgba(0,0,0,.10) 94%, rgba(0,0,0,0) 100%);
-  pointer-events:none;z-index:2;
-}
-/* Subtle inner gutter shadow on each page edge near the spine */
+/* 세네카(책등/spine) 영역은 비워둔다 — 사용자가 표지·내지 모두 가운데를
+   작업 가능한 빈 공간으로 보길 원함. 중철제본·무선·양장 어떤 제본이든
+   본문 작업 단계에서 가운데에 시각 노이즈가 있으면 작업자가 헷갈린다.
+   centerline / gutter shadow 를 그리던 ::before, ::after 를 영구적으로 비활성화.
+   (구버전과의 호환을 위해 selector 자체는 남겨두고 content 를 none 으로) */
+.spread::before,
 .spread::after{
-  content:"";position:absolute;top:0;bottom:0;left:50%;width:24px;
-  transform:translateX(-50%);
-  background:radial-gradient(ellipse at center, rgba(0,0,0,.05), rgba(0,0,0,0) 70%);
-  pointer-events:none;z-index:1;
+  content:none;
 }
 
-/* Single page card */
+/* ============================================================
+   Cover spread (중철제본 첫 페이지 = recto/우면 단일).
+   spread.cover 는 좌측에 .page-blank 를 두고 우측만 실제 페이지.
+   - centerline / gutter shadow 제거 (책등 없음 = 표지 자유 배치).
+   - .page-blank 은 흰 빈 칸으로 두되 box-shadow 와 마크 모두 미표시.
+   facing-pages 와 무관하게 적용 (saddle-stitched 는 항상 첫 페이지가 우면).
+   ============================================================ */
+.spread.cover{
+  background:transparent;
+  box-shadow:none;
+}
+.spread.cover::before,
+.spread.cover::after{ display:none; }
+.spread.cover .page-blank{
+  width:var(--page-w);
+  height:var(--page-h);
+  background:transparent;
+  box-shadow:none;       /* .page 의 sheet 그림자도 placeholder 에선 제거 */
+  visibility:hidden;
+  /* 자식이 없어도 grid 셀을 차지해 우측 recto 의 절대 좌표가 일반 spread 와
+     동일한 위치(우측 column) 에 머문다 → stage 의 가로 레이아웃이 흔들리지 않음. */
+}
+/* 빈 좌측 placeholder 에는 어떤 마크도 그리지 않는다. */
+.spread.cover .page-blank::before,
+.spread.cover .page-blank::after{ display:none !important; }
+.spread.cover .page-blank .page-marks{ display:none !important; }
+
+/* Single page card — 각 페이지가 독립 sheet (흰 종이 + 드롭 섀도) */
 .page{
   width:var(--page-w);
   height:var(--page-h);
   background:#fff;
+  box-shadow:var(--page-shadow);
   position:relative;
   /* 재단선(crop marks)은 페이지 바깥으로 뻗어야 하므로 overflow:visible.
      실제 콘텐츠 잘림은 내부 .page-clip 이 전담한다. */
@@ -700,27 +801,65 @@ body.dock-mode-float .stage{padding-bottom:90px !important}
     var(--page-mark-len) var(--page-mark-thick),
     var(--page-mark-thick) var(--page-mark-len);
   background-position:
-    /* 모든 마크는 trim 모서리 외부(트림 영역 밖) 에 위치하도록 mark-thick 보정.
-       가로선의 경우 Y 좌표를 mark-thick 만큼 위로 올려서 마크의 아래쪽 가장자리가
-       정확히 trim 모서리에 일치(trim 안쪽으로 0.25mm 도 침범하지 않게).
-       세로선도 X 좌표 동일하게 보정. */
-    /* TL 가로 — 마크 X: trim 좌측 외향 mark-len ~ trim 좌측 모서리.
-                마크 Y: trim 상단 외향 mark-thick ~ trim 상단 모서리. */
-    calc(var(--page-mark-margin) - var(--page-mark-len)) calc(var(--page-mark-margin) - var(--page-mark-thick)),
-    /* TL 세로 — X: trim 좌측 외향 mark-thick ~ 모서리. Y: trim 상단 외향 mark-len ~ 모서리. */
-    calc(var(--page-mark-margin) - var(--page-mark-thick)) calc(var(--page-mark-margin) - var(--page-mark-len)),
-    /* TR 가로 — X: trim 우측 모서리(=100%-mark-margin) ~ 외향 mark-len. Y: trim 상단 외향. */
-    calc(100% - var(--page-mark-margin)) calc(var(--page-mark-margin) - var(--page-mark-thick)),
-    /* TR 세로 — X: trim 우측 모서리 ~ 외향 mark-thick. Y: trim 상단 외향 mark-len. */
-    calc(100% - var(--page-mark-margin)) calc(var(--page-mark-margin) - var(--page-mark-len)),
-    /* BL 가로 — X: trim 좌측 외향 mark-len. Y: trim 하단 모서리(=100%-mark-margin) ~ 외향. */
-    calc(var(--page-mark-margin) - var(--page-mark-len)) calc(100% - var(--page-mark-margin)),
-    /* BL 세로 — X: trim 좌측 외향 mark-thick. Y: trim 하단 모서리 ~ 외향. */
-    calc(var(--page-mark-margin) - var(--page-mark-thick)) calc(100% - var(--page-mark-margin)),
-    /* BR 가로 */
-    calc(100% - var(--page-mark-margin)) calc(100% - var(--page-mark-margin)),
-    /* BR 세로 */
-    calc(100% - var(--page-mark-margin)) calc(100% - var(--page-mark-margin));
+    /* ⚠️ 좌표계 정정 (2026-04-25 v3 — InDesign Marks Offset 표준):
+       이전 v2 는 L자 inner-corner 를 (trim ± offset, trim ± offset) 로 두어
+       대각선 외향 코너를 만들었지만, 실제 InDesign 출력은 trim 변의 직선 연장 — 즉
+       각 마크가 trim 변과 동일선상에 놓이고, 코너에서 offset 만큼 떨어진다. 좌·우/상·하
+       각각 두 개의 perpendicular segment 로, 코너 그 자체엔 빈 십자형 공간이 생긴다.
+
+       container = page-w + 2×mark-margin × page-h + 2×mark-margin:
+         · trim_left   = mark-margin
+         · trim_right  = mark-margin + page-w
+         · trim_top    = mark-margin
+         · trim_bottom = mark-margin + page-h
+
+       각 segment 정의:
+         · 가로 segment: trim_top 또는 trim_bottom y-line 상에 놓이고, x 가 trim 변에서
+                         offset 만큼 떨어진 곳에서 mark-len 만큼 외향으로 뻗음.
+         · 세로 segment: 대칭.
+       segment 두께(mark-thick) 는 trim 선을 중앙에 두도록 ±thick/2 로 배치.
+
+       각 mark image 의 top-left 좌표 = 다음 8 케이스. */
+    /* TL 가로 (image: mark-len × mark-thick)  — 윗변 외향 좌측
+         line at y=trim_top, x ∈ [trim_left − offset − mark-len, trim_left − offset]
+         image-TL = (trim_left − offset − mark-len, trim_top − mark-thick/2) */
+    calc(var(--page-mark-margin) - var(--page-mark-offset) - var(--page-mark-len))
+    calc(var(--page-mark-margin) - var(--page-mark-thick) / 2),
+    /* TL 세로 (image: mark-thick × mark-len)  — 좌변 외향 상단
+         line at x=trim_left, y ∈ [trim_top − offset − mark-len, trim_top − offset]
+         image-TL = (trim_left − mark-thick/2, trim_top − offset − mark-len) */
+    calc(var(--page-mark-margin) - var(--page-mark-thick) / 2)
+    calc(var(--page-mark-margin) - var(--page-mark-offset) - var(--page-mark-len)),
+    /* TR 가로  — 윗변 외향 우측
+         line at y=trim_top, x ∈ [trim_right + offset, trim_right + offset + mark-len]
+         image-TL = (trim_right + offset, trim_top − mark-thick/2) */
+    calc(var(--page-mark-margin) + var(--page-w) + var(--page-mark-offset))
+    calc(var(--page-mark-margin) - var(--page-mark-thick) / 2),
+    /* TR 세로  — 우변 외향 상단
+         line at x=trim_right, y ∈ [trim_top − offset − mark-len, trim_top − offset]
+         image-TL = (trim_right − mark-thick/2, trim_top − offset − mark-len) */
+    calc(var(--page-mark-margin) + var(--page-w) - var(--page-mark-thick) / 2)
+    calc(var(--page-mark-margin) - var(--page-mark-offset) - var(--page-mark-len)),
+    /* BL 가로  — 아랫변 외향 좌측
+         line at y=trim_bottom, x ∈ [trim_left − offset − mark-len, trim_left − offset]
+         image-TL = (trim_left − offset − mark-len, trim_bottom − mark-thick/2) */
+    calc(var(--page-mark-margin) - var(--page-mark-offset) - var(--page-mark-len))
+    calc(var(--page-mark-margin) + var(--page-h) - var(--page-mark-thick) / 2),
+    /* BL 세로  — 좌변 외향 하단
+         line at x=trim_left, y ∈ [trim_bottom + offset, trim_bottom + offset + mark-len]
+         image-TL = (trim_left − mark-thick/2, trim_bottom + offset) */
+    calc(var(--page-mark-margin) - var(--page-mark-thick) / 2)
+    calc(var(--page-mark-margin) + var(--page-h) + var(--page-mark-offset)),
+    /* BR 가로  — 아랫변 외향 우측
+         line at y=trim_bottom, x ∈ [trim_right + offset, trim_right + offset + mark-len]
+         image-TL = (trim_right + offset, trim_bottom − mark-thick/2) */
+    calc(var(--page-mark-margin) + var(--page-w) + var(--page-mark-offset))
+    calc(var(--page-mark-margin) + var(--page-h) - var(--page-mark-thick) / 2),
+    /* BR 세로  — 우변 외향 하단
+         line at x=trim_right, y ∈ [trim_bottom + offset, trim_bottom + offset + mark-len]
+         image-TL = (trim_right − mark-thick/2, trim_bottom + offset) */
+    calc(var(--page-mark-margin) + var(--page-w) - var(--page-mark-thick) / 2)
+    calc(var(--page-mark-margin) + var(--page-h) + var(--page-mark-offset));
 }
 body.show-crop-marks .page::before{ display:block; }
 
@@ -766,19 +905,56 @@ body.facing-pages .page-right .page-foot{
   padding-left: var(--page-inner);
   padding-right: var(--page-outer);
 }
-/* 마주보기 시각화: spine 쪽 그림자 강조 — .spread::after 는 이미 중앙에 drop shadow
-   를 주고 있으므로 그대로 둠. 추가로 facing-pages 일 때 페이지 간 간격을 0 으로 강제.
-   단, 재단선/도련 가이드/맞춤표 중 하나라도 켜져 있으면 마크 영역(--page-mark-margin)
-   이 페이지 외곽으로 뻗기 때문에, 좌측 페이지 우측 마크와 우측 페이지 좌측 마크가
-   gap=0 인 상태에서 정확히 겹친다(오버랩). 이 때만 마크 영역 폭 × 2 + 여유(4mm)
-   만큼 gap 을 자동으로 두어 마크가 명확히 보이게 한다. spread::before 의 centerline
-   은 left:50% 기준이라 늘어난 gap 가운데에 그려져 책 등 표현은 그대로 유지된다. */
-body.facing-pages .spread{ gap:0; }
-body.facing-pages.show-crop-marks .spread,
-body.facing-pages.show-bleed-guide .spread,
-body.facing-pages.show-printer-marks .spread{
+/* gap 정책 (2026-04-25 정정): 이전엔 마크 토글 시점에 gap 이 0 ↔ 22mm 로 변해
+   .book 이 가로 폭이 출렁여 페이지가 좌·우로 흔들리는 시각 사고가 있었다(편집자
+   의 시점 추적이 깨짐). 따라서 토글 상태와 무관하게 gap 을 항상 동일하게 둔다 —
+   마크 영역(2 × mark-margin) + 여유 4mm. 이렇게 하면 .book 의 총 폭이 고정돼,
+   사이드바 토글이 무엇이든 페이지 위치가 그대로 유지된다(stage 가 책모양에 끼어
+   맞추듯 좁아지지 않음). 가운데 세네카(책등) 영역은 시각 노이즈 없이 비워둔다. */
+body.facing-pages .spread{
   gap: calc(var(--page-mark-margin) * 2 + 4mm);
 }
+
+/* ============================================================
+   Facing Pages — Spine(세네카) 영역 비우기 (2026-04-26 v2).
+   마주보기 모드에서 두 페이지의 inner edge 는 책등에 해당하므로 실제 재단·
+   인쇄 핀트 검수의 대상이 아니다. InDesign 도 facing pages 출력 시 inner-side
+   crop mark 와 reg mark 는 자동 생략.
+
+   ⚠️ 좌표계 사고 정정 (2026-04-26 v2):
+   v1 에선 .page-left::before { right:0 } 로 element box 를 줄여 inner 마크를
+   밀어내려 했으나, background-position 의 좌표는 element box 기준이라
+   element 가 줄어들면 outer 모서리(TR/BR for left, TL/BL for right) 마크가
+   원래 좌표 그대로 박힌 상태에서 element 가 그 좌표를 더 이상 포함하지 않게
+   되거나, 반대로 안쪽으로 들어와 페이지 위에 그려지는 사고가 났다. 사용자
+   피드백: "에디터 영역의 프리뷰에서 우측 상하단 도련마크가 깨져있다."
+
+   v2 는 element box 를 그대로 두고 clip-path 로 inner 쪽 mark area 만
+   잘라낸다. background-position 좌표계는 변하지 않으므로 outer 마크는
+   완벽히 자기 자리에 남고, inner 마크는 visible region 밖으로 잘려 painting
+   되지 않는다.
+
+   결과:
+     · 좌(verso) ::before  : 우측 mark-margin 폭 clip → TR/BR/우측 모서리 미표시
+     · 우(recto) ::before  : 좌측 mark-margin 폭 clip → TL/BL/좌측 모서리 미표시
+     · 좌 reg.right / 우 reg.left : display:none
+   gap 자체는 그대로(mark-margin × 2 + 4mm) — stage 안정성 보존. */
+body.facing-pages .page-left::before{
+  /* inset 폭 = mark-margin + thick/2 — TR/BR 의 vertical segment 이미지가
+     trim 선을 중앙으로 두께 thick(0.25mm) 만큼 펴져있어, 단순히
+     mark-margin 만 inset 하면 trim 선의 페이지 쪽 절반(thick/2 = 0.125mm)
+     이 sliver 로 남는다. thick/2 를 더해 완전히 잘라낸다. */
+  clip-path: inset(0 calc(var(--page-mark-margin) + var(--page-mark-thick) / 2) 0 0);
+}
+body.facing-pages .page-right::before{
+  clip-path: inset(0 0 0 calc(var(--page-mark-margin) + var(--page-mark-thick) / 2));
+}
+body.facing-pages .page-left  .page-marks .reg.right{ display:none; }
+body.facing-pages .page-right .page-marks .reg.left{  display:none; }
+/* 컬러바도 inner-side 로 흘러나가지 않게 page 안쪽까지로 제한.
+   기본 .page-marks .color-bar 는 left/right: calc(mark-margin + 14mm) 로
+   sheet 가장자리 양쪽에서 들어와 있으므로 outer-side 는 그대로, inner-side 는
+   page 모서리 가까이까지 — 14mm 마진을 그대로 유지. (별도 override 불필요.) */
 
 /* ============================================================
    Printer's Marks — 인디자인식 인쇄용 마크
@@ -813,11 +989,39 @@ body.show-printer-marks .page-marks{ display:block; }
   background-repeat:no-repeat;
   background-size:100% 100%;
 }
-/* 마크는 bleed 외곽(즉 .page-marks 경계) 바로 위/아래/좌/우 중앙. */
-.page-marks .reg.top{    top:0;                        left:50%; transform:translate(-50%, -50%); }
-.page-marks .reg.bottom{ bottom:0;                     left:50%; transform:translate(-50%, 50%); }
-.page-marks .reg.left{   left:0;                       top:50%;  transform:translate(-50%, -50%); }
-.page-marks .reg.right{  right:0;                      top:50%;  transform:translate(50%, -50%); }
+/* 맞춤표 위치 정정 (2026-04-26 — 인쇄소 표준):
+   이전 코드는 마크 중심을 sheet 가장자리(top:0/bottom:0/...) 에 두어
+   마크의 절반이 sheet 밖으로 나가 출력 시 잘려 보였다(사용자 피드백:
+   "맞춤표가 두개로 보여진다" — 잘린 반쪽 마크가 다른 마크처럼 인식됨).
+
+   표준은 슬러그 영역(= bleed 와 sheet 가장자리 사이) 한가운데에
+   온전한 원 + 십자가 들어가야 함. .page-marks 좌표계에서:
+     · 슬러그 시작(=bleed 외곽) = mark-margin − bleed     [.page-marks 안쪽]
+     · 슬러그 끝(=sheet 가장자리) = 0                      [.page-marks 모서리]
+     · 슬러그 정중앙 = (mark-margin − bleed) / 2          (mark-margin=9mm,
+                                                          bleed=3mm → 3mm)
+   따라서 reg.top 의 중심은 sheet 상단에서 3mm 안쪽 = trim 상단에서
+   외향 6mm. 3mm 마크가 슬러그 6mm 한가운데 자리잡고 1.5mm 씩 여유. */
+.page-marks .reg.top{
+  top:    calc((var(--page-mark-margin) - var(--page-bleed)) / 2);
+  left:   50%;
+  transform:translate(-50%, -50%);
+}
+.page-marks .reg.bottom{
+  bottom: calc((var(--page-mark-margin) - var(--page-bleed)) / 2);
+  left:   50%;
+  transform:translate(-50%, 50%);
+}
+.page-marks .reg.left{
+  left:   calc((var(--page-mark-margin) - var(--page-bleed)) / 2);
+  top:    50%;
+  transform:translate(-50%, -50%);
+}
+.page-marks .reg.right{
+  right:  calc((var(--page-mark-margin) - var(--page-bleed)) / 2);
+  top:    50%;
+  transform:translate(50%, -50%);
+}
 
 /* 컬러바 — 페이지 하단의 마크 영역(slug-like) 안 중앙에 CMYK + 주요 프로세스 색
    을 나란히 배치. bleed(이미지가 흘러나가는 영역) 와는 겹치지 않게 sheet 가장자리
@@ -859,7 +1063,9 @@ body.show-printer-marks .page-marks{ display:block; }
   right:calc(var(--page-mark-margin) * 0.25);
   font-size:6pt;
   color:#222;
-  font-family:var(--ui-family);
+  /* 본문 폰트로 통일 — 슬러그에 그려지는 텍스트가 다른 fallback 으로
+     떨어지면 Type 3 임베딩 발생 (2026-04-27 픽스). */
+  font-family:var(--body-family);
   line-height:1;
   transform:translateY(100%);
   white-space:nowrap;
@@ -869,7 +1075,11 @@ body.show-printer-marks .page-marks{ display:block; }
 .page-head,.page-foot{
   position:absolute;left:0;right:0;
   font-size:9pt;color:var(--meta);
-  font-family:var(--ui-family);
+  /* 본문과 동일 폰트 체인 사용 — 머리말·꼬리말·페이지번호가 본문과 다른
+     fallback 으로 떨어지면 Chrome 이 일부 글리프(특히 숫자) 를 Type 3
+     폰트로 임베딩해 Acrobat Preflight PDF/X-4 변환이 실패한다. UI 폰트
+     체인에 Noto Sans KR 이 포함되어 있어 발생하는 문제 (2026-04-27 픽스). */
+  font-family:var(--body-family);
   padding:0 var(--page-mr) 0 var(--page-ml);
   display:flex;align-items:center;justify-content:space-between;
   pointer-events:none;z-index:3;
@@ -928,7 +1138,10 @@ body.show-printer-marks .page-marks{ display:block; }
    - hyphens:auto            → 영어는 소프트 하이픈, 한글은 음절 개행
      (브라우저가 lang 속성 따라 자동 선택).
    - word-break:normal       → 한글 어절 공백 폭주 방지 (keep-all 금지). */
-.page-content p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:justify;overflow-wrap:anywhere;word-break:normal;hyphens:auto;-webkit-hyphens:auto;text-indent:var(--body-indent);orphans:2;widows:2}
+/* white-space:break-spaces — 에디터(.ProseMirror)와 동일하게 단락 선두의
+   리터럴 공백(들여쓰기 띄어쓰기)을 보존. 기본값 normal 은 인라인 컨텍스트
+   시작부의 공백을 무너뜨려 에디터↔프리뷰 들여쓰기 불일치를 유발한다. */
+.page-content p{margin:0 0 calc(var(--body-para-gap) + 0.25em);text-align:justify;overflow-wrap:anywhere;word-break:normal;hyphens:auto;-webkit-hyphens:auto;text-indent:var(--body-indent);orphans:2;widows:2;white-space:break-spaces}
 .page-content p + p{margin-top:0}
 .page-content h1+p,.page-content h2+p,.page-content h3+p{text-indent:0}
 .page-content ul,.page-content ol{margin:0 0 10pt;padding-left:18pt}
@@ -996,10 +1209,40 @@ body.show-printer-marks .page-marks{ display:block; }
 .ProseMirror mark[data-color="#EEEEEE"],.page-content mark[data-color="#EEEEEE"]{
   background:#EEEEEE;padding:2pt 8pt;border-radius:3pt;display:inline-block;
 }
-/* 자동분류가 부여하는 "📷 이미지 첨부" 라벨 */
+/* 자동분류가 부여하는 "이미지 첨부" 라벨.
+   2026-04-26: 단일 <p> → 1×1 표 placeholder 로 구조 변경.
+   <mark data-color="#DDEBF7"> 는 그대로 유지(검출 마커) 하되, 셀 안에 들어가므로
+   기존 highlight 칩 스타일은 제거하고 셀 자체를 placeholder 로 보이게 한다.
+   주의: TipTap Highlight 확장이 inline `style="background-color:#DDEBF7"` 를
+   직렬화하므로 표 셀 내부에서는 !important 로 무효화한다. */
 .ProseMirror mark[data-color="#DDEBF7"],.page-content mark[data-color="#DDEBF7"]{
   background:#DDEBF7;padding:1pt 6pt;border-radius:3pt;
   font-size:9pt;color:#1F4E79;letter-spacing:.2px;
+}
+/* 1×1 표 placeholder — 자동분류 fig 라벨 전용.
+   셀 안에 검출 마커(<mark data-color="#DDEBF7">) 가 있는 표만 매칭한다.
+   일반 표는 영향 없음. */
+.ProseMirror table:has(td > p mark[data-color="#DDEBF7"]),
+.page-content table:has(td > p mark[data-color="#DDEBF7"]){
+  width:100%;margin:8pt 0 4pt;table-layout:fixed;break-inside:avoid;
+}
+.ProseMirror table:has(td > p mark[data-color="#DDEBF7"]) td,
+.page-content table:has(td > p mark[data-color="#DDEBF7"]) td{
+  border:1px dashed #B7C9DD !important;background:#F4F8FC !important;
+  padding:22pt 12pt !important;text-align:center;vertical-align:middle !important;
+  color:#1F4E79;min-width:auto;
+}
+.ProseMirror table:has(td > p mark[data-color="#DDEBF7"]) td p,
+.page-content table:has(td > p mark[data-color="#DDEBF7"]) td p{
+  text-indent:0;margin:0;text-align:center;
+}
+/* 셀 내부의 검출 마커 mark 는 인라인 background-color(highlight 칩) 무효화 →
+   placeholder 셀의 단정한 외관을 유지한다. 검출 자체는 data-color 로 계속 작동. */
+.ProseMirror table:has(td > p mark[data-color="#DDEBF7"]) td mark[data-color="#DDEBF7"],
+.page-content table:has(td > p mark[data-color="#DDEBF7"]) td mark[data-color="#DDEBF7"]{
+  background:transparent !important;background-color:transparent !important;
+  padding:0 !important;border-radius:0 !important;
+  font-size:11pt;color:#1F4E79;font-style:normal;letter-spacing:.4px;
 }
 .ProseMirror [style*="color"],.page-content [style*="color"]{/* inline */}
 .ProseMirror h1+p,.ProseMirror h2+p,.ProseMirror h3+p{text-indent:0}
@@ -1585,6 +1828,7 @@ ul.toc-list > li::before{
       <button class="btn primary" id="btn-export"><i class="ph ph-export"></i> 내보내기 <i class="ph ph-caret-down"></i></button>
       <div class="menu" id="menu-export">
         <button data-kind="pdf">PDF · 인쇄 <small>⌘P</small></button>
+        <button data-kind="pdf-print-ready" title="브라우저로 저장한 PDF에 TrimBox·BleedBox·OutputIntent·문서 메타를 보강해 인쇄소 납품용으로 변환합니다">PDF · 인쇄소 납품용</button>
         <button data-kind="docx">Word (.docx)</button>
         <button data-kind="html">HTML</button>
         <button data-kind="md">Markdown</button>
@@ -1603,10 +1847,6 @@ ul.toc-list > li::before{
           <i class="ph ph-upload-simple"></i> 원고 파일 선택
         </button>
         <input type="file" id="file-input" accept=".hwpx,.hwp,.docx,.pptx,.pdf,.html,.htm,.md,.markdown,.txt,.idml,.indd,.xml,.zip" style="display:none" multiple>
-        <div class="upload-note">
-          <span class="fmt">HWPX · DOCX · PPTX · PDF · HTML · MD · TXT · IDML · XML</span>
-          <span class="warn">※ <b>HWP(바이너리)는 지원되지 않습니다</b>. 한글에서 <b>.hwpx</b>로 저장 후 업로드하세요.</span>
-        </div>
         <div class="pipeline" id="pipeline" style="display:none">
           <div class="step" data-step="unpack"><span class="ic">①</span><span>포맷 인식</span></div>
           <div class="step" data-step="parse"><span class="ic">②</span><span>문서 파싱</span></div>
@@ -1623,20 +1863,17 @@ ul.toc-list > li::before{
           <select id="sel-style-preset">
             <option value="Shinkook" selected>신국판 (기본)</option>
           </select>
-          <button class="btn" id="btn-apply-preset" style="font-size:11.5px;margin-left:4px" title="선택한 프리셋의 값(용지·단·여백·도련·본문 조판·머리말/꼬리말)을 모두 적용합니다">
+          <button class="btn" id="btn-apply-preset" style="font-size:11.5px;margin-left:4px">
             <i class="ph ph-check"></i> 적용
           </button>
         </div>
-        <div class="row" style="font-size:11px;color:var(--meta);line-height:1.5">
-          <span>용지·단·여백·도련·본문 조판·머리말/꼬리말을 한 번에 적용합니다.</span>
-        </div>
       </div>
 
-      <h3 data-sec="paper"><span><i class="ph ph-file ic"></i><span class="title-text">용지 · 여백</span></span></h3>
+      <h3 data-sec="paper"><span><i class="ph ph-file ic"></i><span class="title-text">판형 · 여백</span></span></h3>
       <div class="sec">
         <div class="row">
-          <label>용지</label>
-          <select id="sel-paper">
+          <label title="Trim Size — 재단 후 실제 책의 크기">판형</label>
+          <select id="sel-paper" title="판형(Trim Size) — 재단 후 실제 책 크기. 신국판은 한국 단행본 표준.">
             <option value="Shinkook" selected>신국판 (152×225)</option>
             <option value="B5">B5 (182×257)</option>
             <option value="A4">A4 (210×297)</option>
@@ -1644,71 +1881,73 @@ ul.toc-list > li::before{
             <option value="46">46판 (127×188)</option>
           </select>
         </div>
-        <div class="row paper-preset-ctrl" title="현재 용지·도련·여백·단·Facing Pages 설정을 프리셋으로 저장합니다. 저장된 프리셋은 이 브라우저의 로컬 저장소에 남아 다음 세션에도 복원됩니다.">
+        <div class="row info" title="작업 영역(Work Area) = 트림 + 도련. 인디자인의 'Document Setup' 기준 페이지 크기. 본문이 흘러나가는 이미지·배경은 도련까지 채워야 재단 후 흰 가장자리가 생기지 않습니다.">
+          <label style="flex:0 0 90px;min-width:90px;opacity:.7;white-space:nowrap">작업 영역</label>
+          <span class="info-val" id="info-work-size">158 × 231 mm <em id="info-work-detail">(= 152 × 225 + 도련 3mm)</em></span>
+        </div>
+        <div class="row paper-preset-ctrl" title="현재 판형·도련·여백·단·펼침 페이지 설정을 프리셋으로 저장합니다. 이 브라우저의 로컬 저장소에 남아 다음 세션에도 복원됩니다.">
           <label style="opacity:.7">프리셋</label>
           <button type="button" class="btn-preset" id="btn-paper-save" title="현재 설정을 프리셋으로 저장">＋ 저장</button>
           <button type="button" class="btn-preset" id="btn-paper-delete" disabled title="내장 프리셋은 삭제할 수 없습니다">− 삭제</button>
         </div>
         <div class="row">
-          <label>단</label>
+          <label title="Columns — 한 페이지 안 본문 단(컬럼) 수">단</label>
           <div class="seg" id="seg-columns">
             <button data-val="1" class="active">1단</button>
             <button data-val="2">2단</button>
           </div>
         </div>
-        <div class="row">
-          <label>상·하</label>
-          <input type="number" id="m-top" value="20" min="0" max="60" step="1">
-          <input type="number" id="m-bot" value="20" min="0" max="60" step="1">
+        <div class="row" title="Top · Bottom Margin — 위·아래 본문 여백 (mm)">
+          <label>위·아래</label>
+          <input type="number" id="m-top" value="20" min="0" max="60" step="1" title="Top Margin — 위 여백 (mm)">
+          <input type="number" id="m-bot" value="20" min="0" max="60" step="1" title="Bottom Margin — 아래 여백 (mm)">
         </div>
-        <div class="row" id="row-margin-lr">
+        <div class="row" id="row-margin-lr" title="Left · Right Margin — 좌·우 본문 여백 (mm). 펼침 페이지 OFF 일 때만 사용.">
           <label>좌·우</label>
-          <input type="number" id="m-left" value="20" min="0" max="60" step="1">
-          <input type="number" id="m-right" value="20" min="0" max="60" step="1">
+          <input type="number" id="m-left" value="20" min="0" max="60" step="1" title="Left Margin — 왼쪽 여백 (mm)">
+          <input type="number" id="m-right" value="20" min="0" max="60" step="1" title="Right Margin — 오른쪽 여백 (mm)">
         </div>
-        <div class="row">
-          <label>마주보기</label>
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer" title="책 제본용 — 홀/짝 페이지를 좌우 대칭으로 배치하고, 안쪽(제본) 여백을 따로 설정합니다">
-            <input type="checkbox" id="chk-facing-pages" checked> Facing Pages
+        <div class="row" title="Facing Pages — 책 제본용 펼침 페이지. 홀/짝 페이지를 좌우 대칭으로 배치하고 안쪽(제본) 여백을 따로 설정합니다.">
+          <label>펼침 페이지</label>
+          <label class="chk-line" style="font-size:11.5px" title="Facing Pages — 마주보기 펼침 배치">
+            <input type="checkbox" id="chk-facing-pages" checked>
+            <span class="lbl">Facing Pages</span>
           </label>
         </div>
-        <div class="row" id="row-margin-io">
-          <label title="안쪽(Inner/Gutter) · 바깥쪽(Outer) — 제본 시 안쪽을 바깥보다 넓게 잡는 것이 일반적입니다.">안·바깥(mm)</label>
-          <input type="number" id="m-inner" value="25" min="0" max="60" step="1" title="안쪽(Inner / Gutter) — 제본 쪽 여백">
-          <input type="number" id="m-outer" value="15" min="0" max="60" step="1" title="바깥쪽(Outer) — 책장 바깥 쪽 여백">
+        <div class="row" id="row-margin-io" title="Inner (Gutter) · Outer Margin — 안쪽(제본) · 바깥쪽 여백 (mm). 펼침 페이지에서 안쪽을 바깥보다 넓게 잡는 것이 일반적.">
+          <label>안·바깥</label>
+          <input type="number" id="m-inner" value="25" min="0" max="60" step="1" title="Inner / Gutter — 안쪽(제본) 여백 (mm)">
+          <input type="number" id="m-outer" value="15" min="0" max="60" step="1" title="Outer — 바깥쪽 여백 (mm)">
         </div>
-        <div class="row">
-          <label>도련(mm)</label>
-          <input type="number" id="in-bleed" value="3" min="0" max="10" step="0.5" title="재단 시 잘려나가는 여분(일반적으로 3mm)">
-          <label style="min-width:72px;margin-left:4px;font-size:11.5px;color:var(--meta)">bleed</label>
+        <div class="row" title="Bleed — 재단 시 잘려나가는 여분. 한국 단행본 표준 3mm. 작업 영역 = 트림 + 도련.">
+          <label>도련</label>
+          <input type="number" id="in-bleed" value="3" min="0" max="10" step="0.5">
+          <label style="min-width:24px;margin-left:4px;font-size:11.5px;color:var(--meta)">mm</label>
         </div>
-        <div class="row">
-          <label>재단선</label>
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer" title="Crop Marks — 페이지 4모서리에 L자 재단 기준선. PDF 인쇄 시 그대로 출력되어 인쇄소가 재단(트림) 위치를 잡는 기준이 됩니다. 인쇄소 납품용 PDF 에서는 반드시 ON.">
-            <input type="checkbox" id="chk-crop-marks" checked> 표시 <small style="color:var(--meta);font-size:10.5px">· PDF 출력 ✓</small>
-          </label>
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer;margin-left:8px" title="Bleed Guide — 도련 영역의 점선 표시. 편집 화면 보조용이며 PDF 인쇄 시에는 출력되지 않습니다(실제 인쇄물에는 불필요).">
-            <input type="checkbox" id="chk-bleed-guide" checked> 도련 가이드 <small style="color:var(--meta);font-size:10.5px">· 편집용</small>
-          </label>
-        </div>
-        <div class="row">
-          <label>인쇄 마크</label>
-          <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;cursor:pointer" title="Printer's Marks — 맞춤표(Registration) + CMYK 컬러바(Color Bars). 인쇄소가 색상·견양 정합성을 검수하는 기준입니다. PDF 인쇄 시 그대로 출력되어 인쇄소 납품용 PDF 에서는 ON 권장.">
-            <input type="checkbox" id="chk-printer-marks" checked> 맞춤표·컬러바 <small style="color:var(--meta);font-size:10.5px">· PDF 출력 ✓</small>
+      </div>
+
+      <h3 data-sec="marks"><span><i class="ph ph-crosshair ic"></i><span class="title-text">인쇄 마크 (Printer's Marks)</span></span></h3>
+      <div class="sec" title="인디자인 출력 표준의 인쇄 마크. 인쇄소가 재단·색·정합 검수에 사용합니다.">
+        <div class="row mark-row">
+          <label class="chk-line" title="Crop Marks — 페이지 4모서리 L자 재단 기준선. 인쇄소가 트림 위치를 잡는 기준입니다. 납품용 PDF 에는 반드시 ON.">
+            <input type="checkbox" id="chk-crop-marks" checked>
+            <span class="lbl">재단선</span>
+            <span class="tag ok">PDF</span>
           </label>
         </div>
-        <!-- 편집부 실무 가이드: 토글 조합에 따라 PDF 산출물의 용도가 결정됨을 명시.
-             신규 편집자가 토글을 깜빡 잊고 잘못된 PDF 를 발송하는 사고를 방지. -->
-        <div class="row" style="margin-top:-2px">
-          <small style="font-size:10.5px;line-height:1.4;color:var(--meta);display:block;padding:4px 6px;background:var(--soft);border-radius:4px;width:100%">
-            <b style="color:var(--ink)">인쇄소 납품용</b> = 재단선·맞춤표 ON ·
-            <b style="color:var(--ink)">검토용</b> = 둘 다 OFF.
-            PDF 내보내기 시 토스트와 저장 파일명에 현재 용도가 표시됩니다.
-            <br>
-            <span style="display:inline-block;margin-top:3px">PDF sheet 사이즈 = 용지 + 4면 9mm 마크 영역 (인디자인 표준).
-            예: 신국판 152×225 → <b style="color:var(--ink)">170×243mm</b> (= 483×690pt).
-            마크는 sheet 안 trim 모서리 기준, 4면 균등 배치.</span>
-          </small>
+        <div class="row mark-row">
+          <label class="chk-line">
+            <input type="checkbox" id="chk-bleed-guide" checked>
+            <span class="lbl">도련 가이드</span>
+            <span class="tag screen">화면</span>
+          </label>
+        </div>
+        <div class="row mark-row">
+          <label class="chk-line">
+            <input type="checkbox" id="chk-printer-marks" checked>
+            <span class="lbl">맞춤표·컬러바</span>
+            <span class="tag ok">PDF</span>
+          </label>
         </div>
       </div>
 
@@ -1717,10 +1956,10 @@ ul.toc-list > li::before{
         <div class="row">
           <label>서체</label>
           <select id="sel-font">
-            <option value='"Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif' selected>Noto Serif (명조)</option>
+            <option value='"Nanum Myeongjo","NanumMyeongjo","AppleMyungjo","Batang","Apple SD Gothic Neo",serif' selected>나눔명조 (기본)</option>
+            <option value='"Nanum Gothic","Malgun Gothic","Apple SD Gothic Neo",sans-serif'>나눔고딕</option>
+            <option value='"Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif'>Noto Serif (명조)</option>
             <option value='"Noto Sans KR","SF Pro Text","Helvetica Neue",sans-serif'>Noto Sans (고딕)</option>
-            <option value='"Nanum Myeongjo","Batang",serif'>나눔명조</option>
-            <option value='"Nanum Gothic","Malgun Gothic",sans-serif'>나눔고딕</option>
             <option value='"Pretendard Variable","Pretendard","Apple SD Gothic Neo",sans-serif'>Pretendard</option>
           </select>
         </div>
@@ -1794,6 +2033,48 @@ ul.toc-list > li::before{
           <label>시작쪽수</label>
           <input type="number" id="in-start-page" value="1" min="1" step="1">
         </div>
+        <div class="row">
+          <label>챕터별 머리글</label>
+          <button type="button" class="btn" id="btn-chapter-heads" style="font-size:11.5px">
+            <i class="ph ph-list-bullets"></i> 챕터별 설정
+          </button>
+        </div>
+      </div>
+
+      <h3 data-sec="printcolor"><span><i class="ph ph-palette ic"></i><span class="title-text">인쇄 색상</span></span></h3>
+      <div class="sec">
+        <div class="row">
+          <label>색상 모드</label>
+          <div class="seg" id="seg-color-mode">
+            <button data-mode="1">1도</button>
+            <button data-mode="2">2도</button>
+            <button data-mode="3">3도</button>
+            <button data-mode="4" class="active">4도</button>
+          </div>
+        </div>
+        <div class="row" data-spot-row="1">
+          <label>별색 1</label>
+          <select id="sel-spot-1">
+            <option value="">— 선택 —</option>
+            <option value="navy">진청 (C100·M70·Y0·K30)</option>
+            <option value="wine">와인 (C30·M100·Y70·K30)</option>
+            <option value="green">녹 (C70·M0·Y100·K30)</option>
+            <option value="gold">황 (C0·M30·Y100·K30)</option>
+          </select>
+        </div>
+        <div class="row" data-spot-row="2">
+          <label>별색 2</label>
+          <select id="sel-spot-2">
+            <option value="">— 선택 —</option>
+            <option value="navy">진청</option>
+            <option value="wine">와인</option>
+            <option value="green">녹</option>
+            <option value="gold">황</option>
+          </select>
+        </div>
+        <div class="row" id="row-color-mode-info">
+          <div id="color-mode-info" style="font-size:11px;color:var(--mute);line-height:1.5;width:100%;padding:6px 8px;background:var(--soft);border-radius:3px"></div>
+        </div>
       </div>
     </aside>
 
@@ -1801,9 +2082,12 @@ ul.toc-list > li::before{
       <!-- 툴바는 #edit-pane 안으로 이동했습니다 (에디터 영역 전용). 프리뷰에는 도구 모음이 표시되지 않습니다. -->
       <div class="book" id="book">
         <!-- Spreads are populated by the pagination engine.
-             Each page has .page-content where chunked blocks are placed. -->
-        <div class="spread" data-spread-idx="0">
-          <div class="page page-left" data-page-idx="0">
+             첫 spread 는 cover spread — 중철제본(saddle-stitched) 표준에 따라
+             첫 페이지는 우면(recto)으로 시작한다. 좌측은 .page-blank 자리잡이로
+             grid 위치를 유지해 stage 가로 레이아웃이 흔들리지 않게 한다. -->
+        <div class="spread cover" data-spread-idx="0">
+          <div class="page page-blank" aria-hidden="true"></div>
+          <div class="page page-right" data-page-idx="0">
             <div class="page-head center" data-head></div>
             <div class="page-inner">
               <div class="page-clip">
@@ -1820,25 +2104,6 @@ ul.toc-list > li::before{
                 <div class="sw k25"></div><div class="sw k50"></div><div class="sw k75"></div>
               </div>
               <div class="slug">page 1</div>
-            </div>
-          </div>
-          <div class="page page-right" data-page-idx="1">
-            <div class="page-head center" data-head></div>
-            <div class="page-inner">
-              <div class="page-clip">
-                <div class="page-content" data-page-idx="1"></div>
-              </div>
-            </div>
-            <div class="page-foot center" data-foot><span class="pagenum">2</span></div>
-            <div class="page-marks" aria-hidden="true">
-              <div class="reg top"></div><div class="reg bottom"></div>
-              <div class="reg left"></div><div class="reg right"></div>
-              <div class="color-bar">
-                <div class="sw c"></div><div class="sw m"></div><div class="sw y"></div><div class="sw k"></div>
-                <div class="sw r"></div><div class="sw g"></div><div class="sw b"></div>
-                <div class="sw k25"></div><div class="sw k50"></div><div class="sw k75"></div>
-              </div>
-              <div class="slug">page 2</div>
             </div>
           </div>
         </div>
@@ -2252,11 +2517,11 @@ ul.toc-list > li::before{
      버튼 클릭 시 setTextSelection+setColor 를 atomic chain 으로 실행한다. -->
 <div id="color-popover" class="color-popover" role="dialog" aria-label="글자 색">
   <div class="cp-tabs" role="tablist">
-    <button type="button" class="cp-tab active" data-mode="hex" role="tab" aria-selected="true">HEX · sRGB</button>
-    <button type="button" class="cp-tab"        data-mode="cmyk" role="tab" aria-selected="false">CMYK · Japan 2001</button>
+    <button type="button" class="cp-tab active" data-mode="cmyk" role="tab" aria-selected="true">CMYK · 인쇄</button>
+    <button type="button" class="cp-tab"        data-mode="hex"  role="tab" aria-selected="false">HEX · sRGB</button>
   </div>
-  <!-- HEX / sRGB 패널 -->
-  <div class="cp-panel" data-panel="hex">
+  <!-- HEX / sRGB 패널 — 보조 입력. 인쇄 색상은 CMYK 패널이 기본 -->
+  <div class="cp-panel" data-panel="hex" hidden>
     <div class="cp-preview-row">
       <div class="cp-preview" id="cp-preview"></div>
       <div style="flex:1;display:flex;flex-direction:column;gap:6px">
@@ -2265,21 +2530,23 @@ ul.toc-list > li::before{
                style="font-family:var(--ui-family);text-transform:uppercase;letter-spacing:.5px">
       </div>
     </div>
+    <!-- HEX 스와치도 인쇄 표준 CMYK 의 sRGB 근사값으로 통일.
+         이 탭은 화면 전용 보조 입력이지만, 자주 쓰는 색은 인쇄와의
+         일관성을 위해 CMYK 패널과 동일한 컬러를 노출한다. -->
     <div class="cp-swatches" id="cp-hex-swatches">
-      <!-- 자주 쓰는 sRGB 색 9개 -->
-      <button type="button" class="cp-swatch" data-hex="#1A1A1A" title="검정 #1A1A1A"></button>
-      <button type="button" class="cp-swatch" data-hex="#555555" title="회색 #555555"></button>
-      <button type="button" class="cp-swatch" data-hex="#999999" title="연회색 #999999"></button>
-      <button type="button" class="cp-swatch" data-hex="#D32F2F" title="빨강 #D32F2F"></button>
-      <button type="button" class="cp-swatch" data-hex="#E67E22" title="주황 #E67E22"></button>
-      <button type="button" class="cp-swatch" data-hex="#F1C40F" title="노랑 #F1C40F"></button>
-      <button type="button" class="cp-swatch" data-hex="#2E6B52" title="초록 #2E6B52"></button>
-      <button type="button" class="cp-swatch" data-hex="#2E6BD6" title="파랑 #2E6BD6"></button>
-      <button type="button" class="cp-swatch" data-hex="#7B3FA0" title="보라 #7B3FA0"></button>
+      <button type="button" class="cp-swatch" data-hex="#1A1A1A" title="검정 (CMYK 0/0/0/100)"></button>
+      <button type="button" class="cp-swatch" data-hex="#4D4D4D" title="짙은 회색 (CMYK 0/0/0/80)"></button>
+      <button type="button" class="cp-swatch" data-hex="#9C9C9C" title="중간 회색 (CMYK 0/0/0/50)"></button>
+      <button type="button" class="cp-swatch" data-hex="#D72020" title="빨강 (CMYK 0/100/100/0)"></button>
+      <button type="button" class="cp-swatch" data-hex="#E7C300" title="황금 (CMYK 0/20/100/10)"></button>
+      <button type="button" class="cp-swatch" data-hex="#00873B" title="초록 (CMYK 100/0/100/0)"></button>
+      <button type="button" class="cp-swatch" data-hex="#287064" title="짙은 청록 (CMYK 80/0/60/20)"></button>
+      <button type="button" class="cp-swatch" data-hex="#1F3B91" title="파랑 (CMYK 100/100/0/0)"></button>
+      <button type="button" class="cp-swatch" data-hex="#9A3070" title="자주 (CMYK 40/90/20/10)"></button>
     </div>
   </div>
-  <!-- CMYK 패널 -->
-  <div class="cp-panel" data-panel="cmyk" hidden>
+  <!-- CMYK 패널 — 인쇄 표준. 기본 활성. -->
+  <div class="cp-panel" data-panel="cmyk">
     <div class="cp-preview-row">
       <div class="cp-preview" id="cp-cmyk-preview"></div>
       <div style="flex:1;display:grid;grid-template-columns:24px 1fr 42px;gap:5px 8px;align-items:center;font-size:12px">
@@ -2293,8 +2560,8 @@ ul.toc-list > li::before{
         <input type="range" id="cp-y" min="0" max="100" step="1" value="0">
         <input type="number" id="cp-y-n" min="0" max="100" step="1" value="0">
         <label for="cp-k" style="font-weight:600">K</label>
-        <input type="range" id="cp-k" min="0" max="100" step="1" value="90">
-        <input type="number" id="cp-k-n" min="0" max="100" step="1" value="90">
+        <input type="range" id="cp-k" min="0" max="100" step="1" value="100">
+        <input type="number" id="cp-k-n" min="0" max="100" step="1" value="100">
       </div>
     </div>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;margin:10px 0;font-size:11.5px;color:var(--mute)">
@@ -2304,16 +2571,34 @@ ul.toc-list > li::before{
         <option value="srgb">sRGB (프로필 미적용)</option>
       </select>
     </div>
-    <div class="cp-swatches" id="cp-cmyk-swatches">
-      <button type="button" class="cp-swatch" data-cmyk="0,0,0,100"   title="Process Black 0/0/0/100" style="background:#1A1A1A"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,0,0,80"    title="짙은 회색 0/0/0/80" style="background:#404040"></button>
-      <button type="button" class="cp-swatch" data-cmyk="100,0,0,0"   title="Cyan 100/0/0/0" style="background:#00A2E8"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,100,0,0"   title="Magenta 0/100/0/0" style="background:#E3007F"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,0,100,0"   title="Yellow 0/0/100/0" style="background:#FFDD00"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,20,100,10" title="따뜻한 황금" style="background:#E7C300"></button>
-      <button type="button" class="cp-swatch" data-cmyk="60,40,0,0"   title="인디고" style="background:#697CCB"></button>
-      <button type="button" class="cp-swatch" data-cmyk="20,80,80,0"  title="진홍" style="background:#BE3F31"></button>
-      <button type="button" class="cp-swatch" data-cmyk="80,0,60,20"  title="짙은 청록" style="background:#287064"></button>
+    <!-- 인쇄 표준 CMYK 스와치. 모든 색상은 process color (4도) 기준값.
+         숫자는 인쇄소 RIP 가 그대로 받는 CMYK 좌표이며, 프리뷰의 background
+         는 Japan Color 2001 Coated 프로필로 변환한 sRGB 근사값. -->
+    <!-- 모드 안내 — 색상 모드(1·2·3·4도)에 따라 동적으로 갱신 -->
+    <div id="cp-mode-banner" class="cp-mode-banner" style="font-size:11px;color:var(--mute);margin-bottom:6px;padding:5px 8px;background:var(--soft);border-radius:3px;display:none"></div>
+    <!-- K-only(1도 기본 색조) — 모든 모드에서 사용 가능 -->
+    <div class="cp-swatches" id="cp-cmyk-swatches" data-tier-group="k">
+      <button type="button" class="cp-swatch" data-tier="k" data-cmyk="0,0,0,100" title="Process Black 0/0/0/100" style="background:#1A1A1A"></button>
+      <button type="button" class="cp-swatch" data-tier="k" data-cmyk="0,0,0,80"  title="짙은 회색 0/0/0/80"   style="background:#4D4D4D"></button>
+      <button type="button" class="cp-swatch" data-tier="k" data-cmyk="0,0,0,50"  title="중간 회색 0/0/0/50"   style="background:#9C9C9C"></button>
+      <button type="button" class="cp-swatch" data-tier="k" data-cmyk="0,0,0,20"  title="연회색 0/0/0/20"     style="background:#D5D5D5"></button>
+    </div>
+    <!-- 별색 영역 — 2도/3도 모드에서 동적 채움 -->
+    <div class="cp-swatches" id="cp-spot-swatches" data-tier-group="spot" style="display:none"></div>
+    <!-- CMYK 풀 팔레트 — 4도 모드에서만 노출 -->
+    <div class="cp-swatches" id="cp-cmyk-full-swatches" data-tier-group="cmyk">
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="100,0,0,0"   title="Cyan 100/0/0/0"      style="background:#00A2E8"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="0,100,0,0"   title="Magenta 0/100/0/0"   style="background:#E3007F"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="0,0,100,0"   title="Yellow 0/0/100/0"    style="background:#FFDD00"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="0,100,100,0" title="Red 0/100/100/0"     style="background:#D72020"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="100,0,100,0" title="Green 100/0/100/0"   style="background:#00873B"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="100,100,0,0" title="Blue 100/100/0/0"    style="background:#1F3B91"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="20,80,80,0"  title="진홍 (브랜드 빨강) 20/80/80/0" style="background:#BE3F31"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="0,20,100,10" title="따뜻한 황금 0/20/100/10"   style="background:#E7C300"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="60,40,0,0"   title="인디고 60/40/0/0"     style="background:#697CCB"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="80,0,60,20"  title="짙은 청록 80/0/60/20"  style="background:#287064"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="40,90,20,10" title="자주 40/90/20/10"     style="background:#9A3070"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="60,60,80,40" title="녹슨 갈색 60/60/80/40" style="background:#5C4D33"></button>
     </div>
   </div>
   <div class="cp-foot">
@@ -2391,6 +2676,7 @@ import TableCell from 'https://esm.sh/@tiptap/extension-table-cell@2.6.6';
 import TableHeader from 'https://esm.sh/@tiptap/extension-table-header@2.6.6';
 import TextAlign from 'https://esm.sh/@tiptap/extension-text-align@2.6.6';
 import TextStyle from 'https://esm.sh/@tiptap/extension-text-style@2.6.6';
+import FontFamily from 'https://esm.sh/@tiptap/extension-font-family@2.6.6';
 import { Color } from 'https://esm.sh/@tiptap/extension-color@2.6.6';
 import Highlight from 'https://esm.sh/@tiptap/extension-highlight@2.6.6';
 import JSZip from 'https://esm.sh/jszip@3.10.1';
@@ -2625,6 +2911,110 @@ async function loadDocxWriter(){
   _docxLib = m.default || m;
   return _docxLib;
 }
+let _pdfLib = null;
+async function loadPdfLib(){
+  if (_pdfLib) return _pdfLib;
+  /* pdf-lib (Apache 2.0, ~280KB) — 클라이언트에서 PDF 메타데이터(TrimBox·
+     BleedBox·CropBox·OutputIntent·/Info dict) 를 보강해 인쇄소 납품용 PDF
+     로 변환할 때 사용. 픽셀·콘텐츠 스트림은 건드리지 않으며 PDF 의 페이지
+     dictionary 와 카탈로그에 메타만 얹는다. */
+  const m = await import('https://esm.sh/pdf-lib@1.17.1?bundle');
+  _pdfLib = m.default || m;
+  return _pdfLib;
+}
+
+/**
+ * 브라우저 출력 PDF 를 인쇄소 납품용으로 보강.
+ *
+ * 입력 PDF 는 우리 buildPrintHtml() 출력 → window.print() → "PDF 로 저장"
+ * 으로 만들어진 시트 단위 PDF. MediaBox 가 시트 크기(예: 신국판 483×690 pt)
+ * 와 일치하는 것을 가정하고, 그 안쪽에 트림(152×225)·도련(158×231) 좌표를
+ * TrimBox / BleedBox 로 박는다.
+ *
+ * @param {Uint8Array} bytes  원본 PDF 바이트
+ * @param {Object} ctx        { trimW, trimH, bleed, slug, title, author }
+ *                            모든 단위 mm.
+ * @returns {Promise<Uint8Array>}  보강된 PDF 바이트
+ */
+async function buildPrintReadyPdf(bytes, ctx){
+  const PDFLib = await loadPdfLib();
+  const { PDFDocument, PDFName, PDFArray, PDFNumber, PDFString, PDFHexString } = PDFLib;
+  /* ignoreEncryption: 사용자가 저장 시 비밀번호 없이 저장한 일반 케이스에서도
+     혹시 모를 미세 헤더 차이로 reject 되지 않게 한다. */
+  const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+
+  const MM_TO_PT = 2.83464567;
+  const trimW = (ctx.trimW || 152) * MM_TO_PT;
+  const trimH = (ctx.trimH || 225) * MM_TO_PT;
+  const bleed = (ctx.bleed || 3) * MM_TO_PT;
+  const slug  = (ctx.slug  || 6) * MM_TO_PT;
+
+  /* 페이지마다 TrimBox / BleedBox / CropBox 박기 -----------------------
+     좌표계: PDF 는 좌하단 (0,0). 시트 가운데에 트림이 놓이므로 좌하단 모서리
+     로부터 (slug+bleed) 만큼 안쪽으로 들어간 지점이 트림 좌하단. */
+  for (const page of pdf.getPages()){
+    const { width: pw, height: ph } = page.getSize();
+    /* MediaBox 가 시트 크기와 다른 경우(예: Safari 의 A4 출력) 자동 보정.
+       시트 가운데에 트림이 떨어지도록 (pw - trimW)/2, (ph - trimH)/2 사용. */
+    const tx = (pw - trimW) / 2;
+    const ty = (ph - trimH) / 2;
+    const trimRect    = [tx,         ty,         tx + trimW,         ty + trimH];
+    const bleedRect   = [tx - bleed, ty - bleed, tx + trimW + bleed, ty + trimH + bleed];
+
+    const node = page.node;
+    node.set(PDFName.of('TrimBox'),  PDFArray.withContext(node.context));
+    node.set(PDFName.of('BleedBox'), PDFArray.withContext(node.context));
+    /* CropBox = MediaBox 와 동일 (전체 시트 표시). 일부 RIP 가 CropBox 가
+       있어야 안정적으로 인식한다. */
+    node.set(PDFName.of('CropBox'),  PDFArray.withContext(node.context));
+
+    const setRect = (key, rect) => {
+      const arr = node.lookup(PDFName.of(key), PDFArray);
+      while (arr.size()) arr.remove(0);
+      for (const v of rect) arr.push(PDFNumber.of(v));
+    };
+    setRect('TrimBox',  trimRect);
+    setRect('BleedBox', bleedRect);
+    setRect('CropBox',  [0, 0, pw, ph]);
+  }
+
+  /* /Info dict — Acrobat·인디자인의 문서 정보 패널에 표시. PDF/X 변환
+     단계에서 누락되면 경고가 나오는 항목들을 모두 채운다. */
+  const today = new Date();
+  pdf.setTitle(ctx.title || 'Untitled');
+  pdf.setAuthor(ctx.author || '');
+  pdf.setCreator('HCG Pub Editor');
+  pdf.setProducer('HCG Pub Editor + pdf-lib (print-ready post-process)');
+  pdf.setSubject(ctx.subject || '인쇄소 납품용 PDF');
+  pdf.setKeywords(['HCG', 'print-ready', 'trim', 'bleed']);
+  pdf.setCreationDate(today);
+  pdf.setModificationDate(today);
+
+  /* OutputIntent (sRGB IEC61966-2.1) — PDF/X 컨버전 시 출력 색공간 명시.
+     ICC 프로파일을 임베딩하는 본격 PDF/X-4 가 아니더라도, OutputIntent 가
+     없으면 Acrobat Preflight 가 "출력 의도 누락" 오류를 낸다. 우리는 색공간
+     식별자만 명시하는 Identifier 기반 OutputIntent 를 박는다 (DestOutputProfile
+     ICC 미포함 — 인쇄소 RIP 가 자체 프로파일로 변환). */
+  const ctxObj = pdf.context;
+  const outputIntent = ctxObj.obj({
+    Type: 'OutputIntent',
+    S: 'GTS_PDFX',
+    OutputConditionIdentifier: PDFString.of('sRGB IEC61966-2.1'),
+    Info: PDFString.of('sRGB IEC61966-2.1'),
+    RegistryName: PDFString.of('http://www.color.org'),
+  });
+  const outputIntentRef = ctxObj.register(outputIntent);
+  const catalog = pdf.catalog;
+  const arr = PDFArray.withContext(ctxObj);
+  arr.push(outputIntentRef);
+  catalog.set(PDFName.of('OutputIntents'), arr);
+
+  /* GTS_PDFX 식별자를 Catalog 에 박으면 Acrobat 이 PDF/X 호환 후보로 인식. */
+  catalog.set(PDFName.of('Version'), PDFName.of('1.4'));
+
+  return await pdf.save({ useObjectStreams: false });
+}
+
 
 /* ============================================================
    Parsers
@@ -2811,7 +3201,72 @@ function sanitizeHtml(html){
    - 스캔(이미지 전용) PDF 는 텍스트 층이 없으므로 빈 결과로 마무리하지 않고
      명시적 에러로 OCR 필요성을 안내.
    ============================================================ */
-async function parsePdfFile(file){
+/**
+ * PDF 가져오기 옵션 모달.
+ * 3가지 모드 중 선택:
+ *  - 'text-only'        : 텍스트만 추출 (기존 동작, 빠름)
+ *  - 'text-with-images' : 텍스트 + 페이지 안 raster 이미지(JPEG/PNG) 추출
+ *  - 'page-capture'     : 각 페이지를 통째 이미지로 캡처 — 디자인 박제
+ *                         (인쇄용 PDF 의 표지·목차·디자인 페이지 보존용)
+ * @returns {Promise<string|null>} 모드 문자열 또는 null(취소)
+ */
+function showPdfImportOptionsModal(file){
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position:fixed;inset:0;background:rgba(20,24,32,.55);z-index:9999;
+      display:flex;align-items:center;justify-content:center;
+    `;
+    overlay.innerHTML = `
+      <div role="dialog" aria-modal="true" style="
+        width:min(560px,92vw);background:#fff;border-radius:12px;
+        box-shadow:0 24px 60px rgba(0,0,0,.28);padding:22px 22px 18px;
+        font-family:var(--ui-family);color:#1A1A1A;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:4px">PDF 가져오기 방식 선택</div>
+        <div style="font-size:11px;color:#666;margin-bottom:14px;line-height:1.55">
+          ${escapeHtml(file.name)} ─ 어떻게 가져올까요?
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button type="button" data-mode="text-only" class="pdf-mode-btn" style="
+            text-align:left;border:1px solid #DDD;background:#fff;padding:12px 14px;border-radius:6px;cursor:pointer;font-family:inherit">
+            <div style="font-size:13px;font-weight:600;margin-bottom:3px">📝 텍스트만</div>
+            <div style="font-size:11px;color:#666;line-height:1.5">제목·본문·문단을 자동 추출. 가장 빠르며 편집 가능. <b>이미지·디자인은 무시</b>.</div>
+          </button>
+          <button type="button" data-mode="text-with-images" class="pdf-mode-btn" style="
+            text-align:left;border:1px solid #DDD;background:#fff;padding:12px 14px;border-radius:6px;cursor:pointer;font-family:inherit">
+            <div style="font-size:13px;font-weight:600;margin-bottom:3px">🖼️ 텍스트 + 이미지</div>
+            <div style="font-size:11px;color:#666;line-height:1.5">텍스트와 함께 페이지 안 raster 이미지(사진·삽화)도 추출. <b>벡터 도형·텍스트가 들어간 디자인은 분리됨</b>.</div>
+          </button>
+          <button type="button" data-mode="page-capture" class="pdf-mode-btn" style="
+            text-align:left;border:1px solid #DDD;background:#fff;padding:12px 14px;border-radius:6px;cursor:pointer;font-family:inherit">
+            <div style="font-size:13px;font-weight:600;margin-bottom:3px">📄 페이지 캡처 (디자인 박제)</div>
+            <div style="font-size:11px;color:#666;line-height:1.5">각 페이지를 <b>통째로 이미지화</b>해 본문에 삽입. 디자인된 표지·목차·일러스트 페이지의 시각 100% 보존. <b>편집 불가</b>.</div>
+          </button>
+        </div>
+        <div style="margin-top:14px;text-align:right">
+          <button type="button" id="pdf-import-cancel" style="border:1px solid #DDD;background:#fff;padding:7px 14px;border-radius:5px;font-size:12px;cursor:pointer;font-family:inherit">취소</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = (val) => { overlay.remove(); resolve(val); };
+    overlay.querySelectorAll('.pdf-mode-btn').forEach(btn => {
+      btn.addEventListener('mouseenter', () => btn.style.borderColor = '#1A1A1A');
+      btn.addEventListener('mouseleave', () => btn.style.borderColor = '#DDD');
+      btn.addEventListener('click', () => close(btn.dataset.mode));
+    });
+    overlay.querySelector('#pdf-import-cancel').addEventListener('click', () => close(null));
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+  });
+}
+
+/**
+ * @param {File} file PDF 파일
+ * @param {string} mode 'text-only' | 'text-with-images' | 'page-capture'
+ * @returns {Promise<string>} HTML 문자열
+ */
+async function parsePdfFile(file, mode){
+  mode = mode || 'text-only';
   const pdfjs = await loadPdfJs();
   const buf = await file.arrayBuffer();
   let pdf;
@@ -2829,6 +3284,27 @@ async function parsePdfFile(file){
       throw new Error('PDF 가 암호로 보호되어 있어 열 수 없습니다. 암호를 해제한 뒤 다시 업로드하세요.');
     }
     throw new Error('PDF 파싱 실패: ' + (e?.message || e));
+  }
+
+  /* ===== Page Capture 모드 — 각 페이지를 한 장 이미지로 ===== */
+  if (mode === 'page-capture'){
+    const out = [];
+    for (let i = 1; i <= pdf.numPages; i++){
+      const page = await pdf.getPage(i);
+      /* 인쇄 품질 보존을 위해 2배 (≈ 144dpi @ web 72dpi) 로 렌더 */
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      out.push(`<p><img src="${dataUrl}" alt="페이지 ${i}" style="max-width:100%;height:auto"></p>`);
+      if (i < pdf.numPages) out.push('<p> </p>', '<p> </p>');
+      /* 메모리 회수 */
+      canvas.width = canvas.height = 0;
+    }
+    return out.join('\n');
   }
 
   const htmlChunks = [];
@@ -2910,14 +3386,92 @@ async function parsePdfFile(file){
       htmlChunks.push(pageHtml);
       lastPageTail = pageParas[pageParas.length - 1] || '';
     }
+    /* === text-with-images 모드 — 페이지 안 raster 이미지 별도 추출 후 추가 === */
+    if (mode === 'text-with-images'){
+      try {
+        const imagesHtml = await extractRasterImagesFromPdfPage(page, pdfjs);
+        if (imagesHtml) htmlChunks.push(imagesHtml);
+      } catch(e){
+        console.warn('[parsePdf] image extract page', i, 'failed:', e?.message || e);
+      }
+    }
   }
 
   /* 이미지 전용 스캔 PDF 진단 — 텍스트 항목이 거의 없으면 OCR 안내 */
-  if (totalChars < 30){
-    throw new Error('이 PDF 는 스캔(이미지) 원본으로 보여 텍스트 층이 없습니다. OCR(예: Adobe Acrobat · Google Docs) 도구로 변환한 PDF 를 업로드해 주세요.');
+  if (totalChars < 30 && mode === 'text-only'){
+    throw new Error('이 PDF 는 스캔(이미지) 원본으로 보여 텍스트 층이 없습니다. OCR(예: Adobe Acrobat · Google Docs) 도구로 변환한 PDF 를 업로드하거나, 「페이지 캡처」 모드로 다시 가져와 주세요.');
   }
 
   return htmlChunks.join('\n');
+}
+
+/**
+ * PDF 페이지의 raster 이미지(JPEG/PNG XObject) 들을 추출해
+ * dataURL <img> 태그 문자열로 반환. 벡터 도형은 추출하지 않음
+ * (정확 재구성 불가). 추출 실패한 항목은 silently skip.
+ */
+async function extractRasterImagesFromPdfPage(page, pdfjs){
+  const ops = await page.getOperatorList();
+  const OPS = pdfjs.OPS;
+  if (!OPS) return '';
+  const targets = new Set();
+  for (let i = 0; i < ops.fnArray.length; i++){
+    const fn = ops.fnArray[i];
+    if (fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject || fn === OPS.paintImageMaskXObject){
+      const args = ops.argsArray[i];
+      if (args && args[0]) targets.add(args[0]);
+    }
+  }
+  if (targets.size === 0) return '';
+  const out = [];
+  for (const name of targets){
+    try {
+      const img = await new Promise((resolve) => {
+        try { page.objs.get(name, (obj) => resolve(obj)); }
+        catch(_){ resolve(null); }
+      });
+      if (!img) continue;
+      const w = img.width || (img.bitmap && img.bitmap.width);
+      const h = img.height || (img.bitmap && img.bitmap.height);
+      if (!w || !h) continue;
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (img.bitmap){
+        ctx.drawImage(img.bitmap, 0, 0);
+      } else if (img.data){
+        const componentsPerPixel = img.data.length / (w * h);
+        const pixels = ctx.createImageData(w, h);
+        if (componentsPerPixel === 4){
+          pixels.data.set(img.data);
+        } else if (componentsPerPixel === 3){
+          for (let p = 0, q = 0; p < pixels.data.length; p += 4, q += 3){
+            pixels.data[p]   = img.data[q];
+            pixels.data[p+1] = img.data[q+1];
+            pixels.data[p+2] = img.data[q+2];
+            pixels.data[p+3] = 255;
+          }
+        } else if (componentsPerPixel === 1){
+          for (let p = 0, q = 0; p < pixels.data.length; p += 4, q += 1){
+            const v = img.data[q];
+            pixels.data[p] = pixels.data[p+1] = pixels.data[p+2] = v;
+            pixels.data[p+3] = 255;
+          }
+        } else {
+          continue;
+        }
+        ctx.putImageData(pixels, 0, 0);
+      } else {
+        continue;
+      }
+      const dataUrl = canvas.toDataURL('image/png');
+      out.push(`<p><img src="${dataUrl}" alt="" style="max-width:100%;height:auto"></p>`);
+      canvas.width = canvas.height = 0;
+    } catch(e){
+      console.warn('[pdf img] skip', name, e?.message || e);
+    }
+  }
+  return out.join('\n');
 }
 
 async function parseMarkdown(md){
@@ -2986,8 +3540,13 @@ async function handleUploadedFile(file, sourceHint='upload'){
         html = parseTxt(await file.text()); break;
       case 'idml':
         html = await parseIdmlFile(file); break;
-      case 'pdf':
-        html = await parsePdfFile(file); break;
+      case 'pdf': {
+        /* PDF 는 텍스트만/텍스트+이미지/페이지 캡처 박제 3가지 모드 — 사용자 선택 */
+        const mode = await showPdfImportOptionsModal(file);
+        if (!mode){ hideLoader(); return; } /* 사용자 취소 */
+        html = await parsePdfFile(file, mode);
+        break;
+      }
       case 'hwp':
         throw new Error('HWP(한글 바이너리)는 한컴에서 "다른 이름으로 저장 → .hwpx"로 변환 후 업로드해 주세요');
       case 'indd':
@@ -3160,7 +3719,46 @@ function commitHtmlToEditor(html, source){
     console.error('[commit] json-classify failed (' + source + '):', e);
     toast('자동 분류(JSON) 실패: ' + (e?.message || e), 'err');
   }
+  /* 원고 제목 자동 채움 — doc-title 이 비어있거나 기본값("원고 제목") 일 때만
+     첫 H1 텍스트로 자동 채운다. 사용자가 이미 임의 제목을 입력했다면 보존. */
+  try { autoFillTitleFromFirstHeading(); } catch(e){ console.warn('[commit] title autofill:', e); }
   resetViewportsToTop();
+}
+
+/**
+ * 에디터 콘텐츠의 첫 H1 텍스트를 doc-title 입력란에 자동 채움.
+ * - doc-title 이 비어있거나 placeholder/기본값("원고 제목") 일 때만 동작
+ * - 사용자가 이미 다른 값을 넣었으면 절대 덮어쓰지 않음
+ * - 가져오기·새 문서·복원 어느 경로든 호출 가능
+ */
+function autoFillTitleFromFirstHeading(){
+  const titleEl = document.getElementById('doc-title');
+  if (!titleEl) return;
+  const cur = (titleEl.value || '').trim();
+  /* 자동 채움 허용 조건: 비어있거나, 시스템 기본값/placeholder 와 동일 */
+  const isEmptyOrDefault = !cur || cur === '원고 제목' || cur === '새 문서';
+  if (!isEmptyOrDefault) return;
+  /* 첫 H1 노드의 텍스트 추출 */
+  const json = editor.getJSON();
+  const firstH1 = (function find(n){
+    if (!n) return null;
+    if (n.type === 'heading' && n.attrs && n.attrs.level === 1){
+      const txt = (n.content || []).map(c => (c.type === 'text') ? (c.text || '') : '').join('').trim();
+      return txt || null;
+    }
+    if (Array.isArray(n.content)){
+      for (const c of n.content){
+        const r = find(c); if (r) return r;
+      }
+    }
+    return null;
+  })(json);
+  if (firstH1){
+    titleEl.value = firstH1;
+    /* change 이벤트 디스패치 — 머리말·자동저장 등 의존자가 반응하도록 */
+    titleEl.dispatchEvent(new Event('input', { bubbles: true }));
+    titleEl.dispatchEvent(new Event('change', { bubbles: true }));
+  }
 }
 
 /* 커서를 문서 맨 앞으로 되돌리고, 에디터·프리뷰 뷰포트를 최상단으로 스크롤.
@@ -3210,6 +3808,7 @@ const editor = window.editor = new Editor({
     TableRow, TableCell, TableHeader,
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     TextStyle,
+    FontFamily.configure({ types: ['textStyle'] }),
     Color.configure({ types: ['textStyle'] }),
     Highlight.configure({ multicolor: true }),
     IndentExtension,
@@ -3638,13 +4237,18 @@ function paginate(){
      - 현재 페이지의 남은 공간이 유의미하면(≥ MIN_SPLIT_REMAINING_PX)
      블록을 남은 공간 기준으로 나눠 첫 조각을 현재 페이지, 나머지를 새 페이지로
      이월한다. 페이지 하단에 불필요하게 비어 있는 "orphan" 공백을 없애는 것이
-     주 목적 (실측 사례: "이 책을 쓰게 되었다" 문단 다음에 페이지가 텅 비고
-     내용이 다음 쪽에서 이어지던 버그). 너무 작은 잔여공간(≤ 4줄) 은 1~2줄만
-     남는 widow 현상을 만들기 쉬우므로 분할하지 않고 통째로 이월한다.
+     주 목적 (실측 사례: "D. 배려의 중요성" 헤딩 다음에 본문 단락이 통째로
+     다음 페이지로 넘어가 페이지 하단이 비던 버그).
+     2026-04-26: 임계값 80px(≈5줄) → 24px(≈1.5줄) 로 완화.
+     이전 80px 은 헤딩 + bottom-margin 만 남는 케이스(잔여 60–79px)에서 분할이
+     스킵되어 페이지 하단이 그대로 빈 채로 두 페이지로 갈렸음. 24px 로 낮추면
+     "헤딩 바로 아래 한두 줄이라도 채워서 다음 단락 본문이 시작" 하는 한국 책
+     조판 관행에 맞춰 페이지를 채운다. splitTextBlockVariable 의 이진 탐색이
+     자체적으로 단어/어절 경계 스냅을 하므로 widow(1글자 단독행) 위험은 낮다.
      columns 레이아웃에서는 clip 의 높이가 컬럼 흐름에 의해 결정되므로, 여기서
      말하는 '남은 공간'은 pageCapH (전체 페이지 용량) - bucketHeight (이미
      배치된 누적 높이) 로 근사한다. */
-  const MIN_SPLIT_REMAINING_PX = 80;
+  const MIN_SPLIT_REMAINING_PX = 24;
   for (const item of flattened){
     if (item.break){
       if (pages[pages.length - 1].length > 0) startNewPage();
@@ -3700,13 +4304,17 @@ function paginate(){
   if (pages.length === 0 || (pages.length === 1 && pages[0].length === 0)){
     pages[0] = [];
   }
-  if (pages.length % 2 === 1) pages.push([]);
+  /* 중철제본(saddle-stitched) 정합 — 첫 페이지(idx=0) 는 cover spread 의 우면 단독.
+     이후엔 (verso, recto) 쌍으로 묶여야 하므로, 총 페이지 수는 1 또는 홀수여야 한다.
+     pages.length 가 짝수면 빈 페이지 1장을 더해 홀수로 맞춘다(마지막 spread 의 우면).
+     spreadsNeeded = (pages.length + 1) / 2 — 1+(N-1)/2 와 동치, cover 1 + 일반쌍 (N-1)/2. */
+  if (pages.length > 1 && pages.length % 2 === 0) pages.push([]);
 
   /* 버킷 비움 — 불필요한 DOM 유지로 리플로우를 늘리지 않도록 */
   clip.innerHTML = '';
   clip.classList.remove('is-front-matter');
 
-  const spreadsNeeded = pages.length / 2;
+  const spreadsNeeded = (pages.length + 1) / 2;
   syncSpreads(spreadsNeeded);
 
   /* 페이지별로 DocumentFragment 에 먼저 조립한 뒤 한 번에 교체 — innerHTML 비우고
@@ -3748,6 +4356,12 @@ function paginate(){
   applyHeaderFooter();
   updateStatus(editor);
   try { markTocListsInPreview(); } catch(e){ console.warn('markTocListsInPreview:', e); }
+  /* 프리뷰의 목차 LI 를 <a href="#anchor"> 로 감싸 진짜 하이퍼링크화.
+     → 마우스 오버 시 native 링크 표시, PDF 출력 시 PDF 링크 어노테이션 발행. */
+  try {
+    const bookEl = document.getElementById('book');
+    if (bookEl) decorateTocLinksAsAnchors(bookEl);
+  } catch(e){ console.warn('decorateTocLinksAsAnchors:', e); }
   /* 새 레이아웃이 반영된 뒤에 스크롤 동기화를 갱신 — onUpdate 경로에서 paginate
      보다 먼저 sync가 실행되면 신규 블록이 아직 프리뷰에 없어 매칭이 실패한다. */
   try { schedulePreviewSyncFromCursor(); } catch(_){}
@@ -4441,12 +5055,32 @@ function printerMarksHtml(pageIdx){
   </div>`;
 }
 
+/* spread → page idx 매핑 (중철제본 표준):
+     spread 0 (cover)        : right = 0           (단일 우면)
+     spread N (N ≥ 1)        : left  = 2N − 1, right = 2N
+   결과적으로 짝수 idx(0,2,4,…) = recto(우면), 홀수 idx(1,3,5,…) = verso(좌면).
+   첫 페이지가 우면 단독으로 시작하므로 booklet/saddle-stitched binding 의
+   페이지 흐름과 정합 (첨부된 인디자인 출력본의 첫 페이지 위치와 동일). */
 function createExtraSpread(spreadIdx){
-  const leftIdx  = spreadIdx * 2;
-  const rightIdx = spreadIdx * 2 + 1;
   const sp = document.createElement('div');
-  sp.className = 'spread';
   sp.dataset.spreadIdx = String(spreadIdx);
+  if (spreadIdx === 0){
+    sp.className = 'spread cover';
+    sp.innerHTML = `
+      <div class="page page-blank" aria-hidden="true"></div>
+      <div class="page page-right" data-page-idx="0">
+        <div class="page-head center" data-head></div>
+        <div class="page-inner"><div class="page-clip">
+          <div class="page-content" data-page-idx="0"></div>
+        </div></div>
+        <div class="page-foot center" data-foot><span class="pagenum">1</span></div>
+        ${printerMarksHtml(0)}
+      </div>`;
+    return sp;
+  }
+  const leftIdx  = spreadIdx * 2 - 1;
+  const rightIdx = spreadIdx * 2;
+  sp.className = 'spread';
   sp.innerHTML = `
     <div class="page page-left" data-page-idx="${leftIdx}">
       <div class="page-head center" data-head></div>
@@ -4472,12 +5106,50 @@ function createExtraSpread(spreadIdx){
    ============================================================ */
 function getStartPage(){ return Math.max(1, parseInt($('#in-start-page').value || '1', 10) || 1); }
 
+/* 챕터별 머리글 오버라이드 저장소 (key = H1 의 chapterKey, value = 사용자 텍스트).
+   localStorage 백업해 새로고침 후에도 유지. */
+const CHAPTER_HEAD_KEY = 'hcg_chapter_head_overrides_v1';
+function getChapterHeadOverrides(){
+  try {
+    const raw = localStorage.getItem(CHAPTER_HEAD_KEY);
+    return raw ? new Map(Object.entries(JSON.parse(raw))) : new Map();
+  } catch { return new Map(); }
+}
+function setChapterHeadOverrides(map){
+  try {
+    const obj = {};
+    for (const [k, v] of map) obj[k] = v;
+    localStorage.setItem(CHAPTER_HEAD_KEY, JSON.stringify(obj));
+  } catch(e){ console.warn('saveChapterHeads:', e); }
+}
+/* H1 텍스트에서 안정적 키 생성 — id 가 있으면 id, 없으면 정규화 텍스트 */
+function chapterKeyOfH1(h1){
+  if (!h1) return null;
+  if (h1.id) return h1.id;
+  const txt = (h1.textContent || '').trim().replace(/\s+/g, '');
+  return txt || null;
+}
+
 function applyHeaderFooter(){
-  const title = $('#doc-title').value || '';
+  const docTitle = $('#doc-title').value || '';
   const headPos = $('#sel-head-pos').value;
   const footPos = $('#sel-foot-pos').value;
   const startPage = getStartPage();
+  const overrides = getChapterHeadOverrides();
+  /* 페이지 순회 — 가장 최근에 시작한 H1 을 추적해 그 페이지의 머리글로 사용. */
+  let currentTitle = docTitle;
+  let currentKey = null;
   $$('.page').forEach(page=>{
+    /* 이 페이지에 H1 이 있으면 currentChapter 갱신 */
+    const h1 = page.querySelector('.page-content h1');
+    if (h1){
+      const text = (h1.textContent || '').trim();
+      const key = chapterKeyOfH1(h1);
+      if (text){
+        currentTitle = text;
+        currentKey = key;
+      }
+    }
     const idx = parseInt(page.dataset.pageIdx || '0', 10);
     const isRight = page.classList.contains('page-right');
     const logicalPos = pos => pos === 'outer' ? (isRight ? 'right' : 'left') : pos;
@@ -4488,7 +5160,11 @@ function applyHeaderFooter(){
       else {
         head.style.display = 'flex';
         head.className = `page-head ${logicalPos(headPos)}`;
-        head.textContent = title;
+        /* 우선순위: 사용자 오버라이드 > 현재 챕터 H1 > 문서 제목 */
+        const effective = (currentKey && overrides.has(currentKey))
+          ? overrides.get(currentKey)
+          : currentTitle;
+        head.textContent = effective;
       }
     }
     if (foot){
@@ -4500,6 +5176,92 @@ function applyHeaderFooter(){
         foot.innerHTML = `<span class="pagenum">${num}</span>`;
       }
     }
+  });
+}
+
+/**
+ * 챕터별 머리글 모달 — 에디터의 모든 H1 을 나열해 챕터별 머리글을
+ * 사용자가 수동 오버라이드할 수 있게 한다. 비워두면 자동(H1 텍스트) 적용.
+ */
+function openChapterHeadsModal(){
+  /* 에디터에서 H1 수집 — 순서·텍스트·키 */
+  const editorRoot = document.querySelector('#edit-pane #editor');
+  if (!editorRoot){ toast('에디터를 먼저 로드해주세요', 'err'); return; }
+  const h1s = Array.from(editorRoot.querySelectorAll('h1'))
+    .map(h => ({ key: chapterKeyOfH1(h), text: (h.textContent || '').trim() }))
+    .filter(c => c.key && c.text);
+  const overrides = getChapterHeadOverrides();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'chapter-heads-overlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(20,24,32,.55);z-index:9999;
+    display:flex;align-items:center;justify-content:center;
+  `;
+  const rowsHtml = h1s.length === 0
+    ? `<div style="padding:32px 12px;text-align:center;color:#666;font-size:12px">
+         아직 H1(챕터 제목) 이 없습니다. 본문에 제목1 을 적용한 뒤 다시 열어주세요.
+       </div>`
+    : h1s.map((c, i) => `
+        <div class="ch-row" style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #EEE">
+          <div style="flex:0 0 28px;font-size:11px;color:#999;text-align:right">${i + 1}.</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;color:#1A1A1A;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(c.text)}">${escapeHtml(c.text)}</div>
+            <input type="text" data-ch-key="${escapeHtml(c.key)}" placeholder="${escapeHtml(c.text)} (자동)"
+              value="${escapeHtml(overrides.get(c.key) || '')}"
+              style="margin-top:4px;width:100%;padding:5px 8px;font-size:12px;border:1px solid #DDD;border-radius:3px;font-family:var(--ui-family);box-sizing:border-box">
+          </div>
+        </div>`).join('');
+
+  overlay.innerHTML = `
+    <div role="dialog" aria-modal="true" style="
+      width:min(540px,92vw);max-height:80vh;display:flex;flex-direction:column;
+      background:#fff;border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.28);
+      font-family:var(--ui-family);color:#1A1A1A;">
+      <div style="padding:18px 20px 12px;border-bottom:1px solid #EEE;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div>
+          <div style="font-size:15px;font-weight:700">챕터별 머리글 설정</div>
+          <div style="font-size:11px;color:#666;margin-top:4px;line-height:1.55">
+            챕터(H1) 마다 도곽 머리말을 다르게 표시할 수 있습니다.<br>
+            비워두면 챕터 제목이 그대로 머리글에 들어갑니다.
+          </div>
+        </div>
+        <button type="button" id="ch-close" aria-label="닫기" style="border:0;background:transparent;font-size:20px;cursor:pointer;color:#888">×</button>
+      </div>
+      <div style="padding:8px 20px;overflow-y:auto;flex:1">
+        ${rowsHtml}
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid #EEE;display:flex;justify-content:space-between;gap:8px">
+        <button type="button" id="ch-reset" style="border:1px solid #DDD;background:#fff;padding:7px 14px;border-radius:5px;font-size:12px;cursor:pointer">전체 초기화 (자동)</button>
+        <div style="display:flex;gap:8px">
+          <button type="button" id="ch-cancel" style="border:1px solid #DDD;background:#fff;padding:7px 14px;border-radius:5px;font-size:12px;cursor:pointer">취소</button>
+          <button type="button" id="ch-save" style="border:0;background:#1A1A1A;color:#fff;padding:7px 14px;border-radius:5px;font-size:12px;cursor:pointer;font-weight:600">저장 · 적용</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector('#ch-close').addEventListener('click', close);
+  overlay.querySelector('#ch-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector('#ch-reset').addEventListener('click', () => {
+    setChapterHeadOverrides(new Map());
+    try { applyHeaderFooter(); } catch(_){}
+    toast('챕터별 머리글을 모두 자동으로 되돌렸습니다', 'info');
+    close();
+  });
+  overlay.querySelector('#ch-save').addEventListener('click', () => {
+    const map = new Map();
+    overlay.querySelectorAll('input[data-ch-key]').forEach(inp => {
+      const v = (inp.value || '').trim();
+      if (v) map.set(inp.dataset.chKey, v);
+    });
+    setChapterHeadOverrides(map);
+    try { applyHeaderFooter(); } catch(_){}
+    toast('챕터별 머리글이 적용되었습니다', 'ok');
+    close();
   });
 }
 
@@ -4658,11 +5420,147 @@ function hexToRgb(hex){
       바로 갱신.
    ============================================================ */
 
-/* 팝오버 상태 */
+/* ============================================================
+   인쇄 색상 모드 (1도 / 2도 / 3도 / 4도)
+
+   1도 — Process Black 단색 + 회색조(K100/80/50/20)
+   2도 — 1도 + 별색 1
+   3도 — 1도 + 별색 1·2
+   4도 — 풀 CMYK (모든 process 색상)
+
+   상태는 localStorage 에 저장되어 새로고침 후에도 유지.
+   별색은 정의된 4종(진청·와인·녹·황) 중 선택. CMYK 좌표는 절대값
+   고정 — 인쇄소 RIP 가 받는 그대로의 별색 좌표. 각 스와치는
+   data-tier (k / spot / cmyk) 로 라벨링되어 모드별 가시성이
+   CSS+JS 조합으로 잠금된다.
+   ============================================================ */
+const PRINT_COLOR_MODE_KEY = 'hcg_print_color_mode_v1';
+const SPOT_COLORS_KEY = 'hcg_spot_colors_v1';
+
+const SPOT_COLOR_DEFS = {
+  navy:  { name: '진청', cmyk: [100, 70,  0, 30], tints: [100, 70, 40] },
+  wine:  { name: '와인', cmyk: [ 30, 100, 70, 30], tints: [100, 70, 40] },
+  green: { name: '녹',   cmyk: [ 70,  0,  100, 30], tints: [100, 70, 40] },
+  gold:  { name: '황',   cmyk: [  0, 30,  100, 30], tints: [100, 70, 40] },
+};
+
+function getPrintColorMode(){
+  const v = parseInt(localStorage.getItem(PRINT_COLOR_MODE_KEY) || '4', 10);
+  return (v >= 1 && v <= 4) ? v : 4;
+}
+function setPrintColorModeSetting(mode){
+  localStorage.setItem(PRINT_COLOR_MODE_KEY, String(mode));
+  applyPrintColorMode();
+}
+function getSpotSelection(){
+  try { return JSON.parse(localStorage.getItem(SPOT_COLORS_KEY) || '{}'); }
+  catch { return {}; }
+}
+function setSpotSelection(obj){
+  localStorage.setItem(SPOT_COLORS_KEY, JSON.stringify(obj));
+  applyPrintColorMode();
+}
+
+/* CMYK 농도(틴트) 적용 — 별색을 100%/70%/40% 로 사용 */
+function applyTintToCmyk(cmyk, tintPct){
+  const t = tintPct / 100;
+  return cmyk.map(v => Math.round(v * t));
+}
+
+/* CMYK → sRGB 근사값 (background-color 용). cmykToHex 는 기존 함수 활용 (없으면 폴백) */
+function cmykPreviewHex([c, m, y, k]){
+  if (typeof cmykToHex === 'function'){
+    try { return cmykToHex(c, m, y, k); } catch(_){}
+  }
+  /* 폴백 — 단순 변환 */
+  const r = Math.round(255 * (1 - c/100) * (1 - k/100));
+  const g = Math.round(255 * (1 - m/100) * (1 - k/100));
+  const b = Math.round(255 * (1 - y/100) * (1 - k/100));
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('').toUpperCase();
+}
+
+/* 별색 선택을 보고 cp-spot-swatches 를 동적 생성 */
+function rebuildSpotSwatches(){
+  const cont = document.getElementById('cp-spot-swatches');
+  if (!cont) return;
+  const sel = getSpotSelection();
+  const slots = [sel.spot1, sel.spot2].filter(Boolean);
+  if (slots.length === 0){ cont.innerHTML = ''; cont.style.display = 'none'; return; }
+  const html = slots.flatMap(spotKey => {
+    const def = SPOT_COLOR_DEFS[spotKey];
+    if (!def) return [];
+    return def.tints.map(t => {
+      const cmyk = applyTintToCmyk(def.cmyk, t);
+      const hex = cmykPreviewHex(cmyk);
+      const cmykStr = cmyk.join(',');
+      const title = `${def.name} ${t}% — CMYK ${cmykStr}`;
+      return `<button type="button" class="cp-swatch" data-tier="spot" data-cmyk="${cmykStr}" title="${title}" style="background:${hex}"></button>`;
+    });
+  }).join('');
+  cont.innerHTML = html;
+  cont.style.display = '';
+}
+
+/* 모드 적용 — 사이드바 · 팝오버 · body class 모두 갱신 */
+function applyPrintColorMode(){
+  const mode = getPrintColorMode();
+  const sel = getSpotSelection();
+  /* body class 토글 */
+  document.body.classList.remove('color-mode-1', 'color-mode-2', 'color-mode-3', 'color-mode-4');
+  document.body.classList.add('color-mode-' + mode);
+  /* 사이드바 segmented 활성 표시 */
+  document.querySelectorAll('#seg-color-mode button').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === String(mode));
+  });
+  /* 별색 슬롯 row 표시/숨김 */
+  document.querySelectorAll('[data-spot-row]').forEach(el => {
+    const slot = parseInt(el.dataset.spotRow, 10);
+    const show = (mode === 2 && slot === 1) || (mode === 3 && (slot === 1 || slot === 2));
+    el.style.display = show ? '' : 'none';
+  });
+  /* 별색 select 값 동기화 */
+  const s1 = document.getElementById('sel-spot-1'); if (s1) s1.value = sel.spot1 || '';
+  const s2 = document.getElementById('sel-spot-2'); if (s2) s2.value = sel.spot2 || '';
+  /* 안내문 갱신 */
+  const info = document.getElementById('color-mode-info');
+  if (info){
+    const labels = {
+      1: '검정 + 회색조 (K100·80·50·20) 만 사용',
+      2: '검정 + 별색 1 — 별색을 선택하세요',
+      3: '검정 + 별색 1·2',
+      4: '풀 CMYK — 모든 인쇄 색상 사용 가능',
+    };
+    let txt = labels[mode];
+    if (mode >= 2){
+      const names = [sel.spot1, sel.spot2].filter(Boolean).map(k => SPOT_COLOR_DEFS[k]?.name).filter(Boolean);
+      if (names.length) txt += ` · ${names.join(' + ')}`;
+    }
+    info.textContent = txt;
+  }
+  /* 팝오버 모드 배너 */
+  const banner = document.getElementById('cp-mode-banner');
+  if (banner){
+    banner.textContent = `${mode}도 모드 — ` + ({
+      1: '검정·회색만 사용 가능',
+      2: '검정 + 별색 1',
+      3: '검정 + 별색 1·2',
+      4: '모든 CMYK 색상',
+    })[mode];
+    banner.style.display = mode === 4 ? 'none' : '';
+  }
+  /* 팝오버 별색 스와치 재생성 */
+  rebuildSpotSwatches();
+  /* CMYK 풀 팔레트 표시/숨김 */
+  const fullPalette = document.getElementById('cp-cmyk-full-swatches');
+  if (fullPalette) fullPalette.style.display = mode === 4 ? '' : 'none';
+}
+
+/* 팝오버 상태 — 인쇄 컬러는 CMYK 가 기본 모드.
+   기본 색상은 Process Black (0/0/0/100) — 인쇄 표준 검정. */
 const __cp = {
-  mode: 'hex',                 /* 'hex' | 'cmyk' */
-  hex: '#1A1A1A',
-  cmyk: { c:0, m:0, y:0, k:90 },
+  mode: 'cmyk',                /* 'cmyk' | 'hex'  ← CMYK 가 기본 */
+  hex: '#1A1A1A',              /* preview 용 sRGB 근사값 */
+  cmyk: { c:0, m:0, y:0, k:100 },
   profile: 'japan2001',
   savedSel: null,              /* { from, to } — 팝오버 열릴 때 capture */
 };
@@ -4725,10 +5623,23 @@ function openTextColorPopover(anchorBtn){
     const s = editor?.state?.selection;
     __cp.savedSel = s ? { from: s.from, to: s.to } : null;
   } catch(_){ __cp.savedSel = null; }
-  /* 초기값: 현재 선택의 글자색 */
+  /* 초기값: 현재 선택의 글자색 (없으면 sRGB 근사 #1A1A1A) */
   const cur = editor?.getAttributes('textStyle')?.color || '#1A1A1A';
   __cp.hex = cur;
   const hi = document.getElementById('cp-hex-input'); if (hi) hi.value = cur;
+  /* CMYK 패널 입력값을 현재 hex 의 CMYK 변환값으로 동기화.
+     이렇게 해두지 않으면 _cpSwitchMode('cmyk') → _cpSyncPreviews 시
+     슬라이더의 HTML 기본값을 거꾸로 hex 로 변환해 색이 어긋난다. */
+  const _rgbInit = hexToRgb(cur);
+  if (_rgbInit){
+    const _cmykInit = rgbToCmyk(_rgbInit.r, _rgbInit.g, _rgbInit.b, __cp.profile);
+    __cp.cmyk = _cmykInit;
+    _cpWriteCmyk(_cmykInit.c, _cmykInit.m, _cmykInit.y, _cmykInit.k);
+  } else {
+    /* hex 파싱 실패 — Process Black 으로 fallback */
+    __cp.cmyk = { c:0, m:0, y:0, k:100 };
+    _cpWriteCmyk(0, 0, 0, 100);
+  }
   /* 위치: 앵커 버튼 아래 */
   pop.style.visibility = 'hidden';
   pop.classList.add('show');
@@ -4739,7 +5650,8 @@ function openTextColorPopover(anchorBtn){
   pop.style.left = left + 'px';
   pop.style.top  = (rect.bottom + 6) + 'px';
   pop.style.visibility = '';
-  _cpSwitchMode('hex');
+  /* 인쇄 작업 흐름에서는 CMYK 가 기본. 사용자가 sRGB 가 필요하면 탭 전환. */
+  _cpSwitchMode('cmyk');
 }
 function closeTextColorPopover(){
   const pop = document.getElementById('color-popover');
@@ -5556,6 +6468,7 @@ function applyPaper(key){
     }
   }
   syncPrintPageSize();
+  if (typeof updateWorkSizeInfo === 'function') updateWorkSizeInfo();
   scheduleReflow();
 }
 /* ── 용지 select option 렌더 ──
@@ -5663,7 +6576,23 @@ function applyBleed(){
   const inp = $('#in-bleed');
   const v = inp ? Math.max(0, parseFloat(inp.value || '0') || 0) : 3;
   root.style.setProperty('--page-bleed', `${v}mm`);
+  updateWorkSizeInfo();
   scheduleReflow();
+}
+
+/* 작업 영역(Work Area) 표시 갱신 — 트림 + 도련 사방 합산.
+   디자이너가 사이드바에서 "현재 작업 사이즈" 를 한눈에 확인 가능. */
+function updateWorkSizeInfo(){
+  const el = document.getElementById('info-work-size');
+  if (!el) return;
+  const cs = getComputedStyle(root);
+  const w = parseFloat(cs.getPropertyValue('--page-w')) || 152;
+  const h = parseFloat(cs.getPropertyValue('--page-h')) || 225;
+  const b = parseFloat(cs.getPropertyValue('--page-bleed')) || 0;
+  const ww = (w + b * 2);
+  const wh = (h + b * 2);
+  const fmt = n => (Number.isInteger(n) ? n.toString() : n.toFixed(1));
+  el.innerHTML = `${fmt(ww)} × ${fmt(wh)} mm <em>(= ${fmt(w)} × ${fmt(h)} + 도련 ${fmt(b)}mm)</em>`;
 }
 function applyCropMarksToggle(){
   const on = !!($('#chk-crop-marks') && $('#chk-crop-marks').checked);
@@ -5724,8 +6653,31 @@ $('#seg-columns').addEventListener('click', e=>{
   scheduleReflow();
 });
 
+/* 서체 선택 — 부분/전체 적용 분기.
+   ───────────────────────────────────────────────────────────────
+   • 텍스트가 선택되어 있을 때(from < to) → TipTap FontFamily 마크로
+     **선택 영역에만** 적용 (부분 적용).
+   • 선택이 없을 때 → CSS var --body-family 갱신으로 **본문 전역** 적용
+     (이전 동작 유지).
+   • 두 경우 모두 sel-font 의 표시값과 적용값이 1:1 일치한다.
+   ─────────────────────────────────────────────────────────────── */
 $('#sel-font').addEventListener('change', e=>{
-  root.style.setProperty('--body-family', e.target.value);
+  const family = e.target.value;
+  let appliedToSelection = false;
+  try {
+    if (window.editor){
+      const sel = editor.state?.selection;
+      if (sel && sel.from < sel.to){
+        editor.chain().focus().setFontFamily(family).run();
+        appliedToSelection = true;
+      }
+    }
+  } catch(err){ console.warn('[sel-font] setFontFamily failed:', err); }
+  /* 선택이 없거나 전역 폰트 변경이 더 자연스러운 경우엔 본문 기본 폰트도 갱신.
+     선택 영역 적용 시에는 부분 변경이 우선이므로 전역은 건드리지 않음. */
+  if (!appliedToSelection){
+    root.style.setProperty('--body-family', family);
+  }
   scheduleReflow();
 });
 /* 본문 굵기 — CSS var 로 적용해 .page-content 와 .ProseMirror 에 공통 반영 */
@@ -5864,7 +6816,7 @@ applyHeaderFooter();
    ============================================================ */
 const STYLE_PRESETS = {
   /* 신국판: 현재까지의 기본값을 그대로 번들 — 152×225mm, 1단, 20mm 여백,
-     도련 3mm(재단선·가이드 ON), Noto Serif 10pt / 1.75 / 자간 0 /
+     도련 3mm(재단선·가이드 ON), 나눔고딕 10pt / 1.75 / 자간 0 /
      단락 간격 0 / 들여쓰기 0, 머리말 바깥쪽, 쪽번호 가운데, 시작쪽수 1. */
   Shinkook: {
     label: '신국판',
@@ -5878,7 +6830,7 @@ const STYLE_PRESETS = {
     cropMarks: true,
     bleedGuide: true,
     printerMarks: true,  /* 맞춤표 + 컬러바 */
-    fontFamily: '"Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif',
+    fontFamily: '"Nanum Myeongjo","NanumMyeongjo","AppleMyungjo","Batang","Apple SD Gothic Neo",serif',
     fontWeight: '400',
     fontSize: 10,
     leading: 1.75,
@@ -5969,6 +6921,47 @@ if (_btnApplyPreset){
     applyStylePreset(name);
   });
 }
+
+const _btnChapterHeads = document.getElementById('btn-chapter-heads');
+if (_btnChapterHeads){
+  _btnChapterHeads.addEventListener('click', () => {
+    try { openChapterHeadsModal(); } catch(e){ console.error('chapter heads modal:', e); toast('챕터 머리글 모달 오류', 'err'); }
+  });
+}
+
+/* ===== 인쇄 색상 모드 — 사이드바 이벤트 + 초기화 ===== */
+const _segColorMode = document.getElementById('seg-color-mode');
+if (_segColorMode){
+  _segColorMode.addEventListener('click', e => {
+    const b = e.target.closest('button[data-mode]');
+    if (!b) return;
+    const mode = parseInt(b.dataset.mode, 10);
+    setPrintColorModeSetting(mode);
+    /* 모드 1·4 로 갈 때 별색 선택 정리 */
+    if (mode === 1){
+      setSpotSelection({});
+    } else if (mode === 2){
+      const cur = getSpotSelection();
+      if (cur.spot2) setSpotSelection({ spot1: cur.spot1 || '' });
+    }
+  });
+}
+const _selSpot1 = document.getElementById('sel-spot-1');
+const _selSpot2 = document.getElementById('sel-spot-2');
+if (_selSpot1){
+  _selSpot1.addEventListener('change', () => {
+    const cur = getSpotSelection();
+    setSpotSelection({ ...cur, spot1: _selSpot1.value });
+  });
+}
+if (_selSpot2){
+  _selSpot2.addEventListener('change', () => {
+    const cur = getSpotSelection();
+    setSpotSelection({ ...cur, spot2: _selSpot2.value });
+  });
+}
+/* DOM 준비된 직후 1회 적용 (저장된 모드/별색 복원) */
+try { applyPrintColorMode(); } catch(e){ console.warn('applyPrintColorMode init:', e); }
 
 /* ============================================================
    File upload / drag-drop
@@ -6298,6 +7291,10 @@ async function runExport(kind){
       download(`${base}.docx`, blob, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       return;
     }
+    if (kind === 'pdf-print-ready'){
+      await openPrintReadyModal();
+      return;
+    }
   }catch(err){
     hideLoader();
     /* 인쇄 미리보기는 이미 떠 있는데 Chromium 내부의 cross-origin 스타일시트
@@ -6381,10 +7378,12 @@ function buildPrintHtml(){
   const bleed = Math.max(0, parseFloat(getComputedStyle(root).getPropertyValue('--page-bleed')) || 0);
   /* mark-margin: sheet 가장자리부터 trim 까지의 거리.
      PDF sheet = trim + 2 × mark-margin. 인쇄소가 받는 PDF 의 실제 페이지 크기.
-     인디자인 표준 PDF 출력의 신국판 = 170×243mm (= trim 152×225 + 양쪽 9mm) 와
-     정합. mark-margin 이 정의되지 않은 경우 bleed 와 동일하게 폴백 — 단, 그
-     상황에서는 마크가 sheet 가장자리에 붙어 인쇄소 검수 신뢰도가 떨어진다는
-     점에 유의(첨부 표준 PDF 와 어긋남). */
+     기본 9mm = 도련 3mm + 슬러그 6mm. 신국판(152×225) 출력 시 sheet = 170×243mm
+     (= 483×690 pt) — 학지사 기존 출판물(화타) 및 InDesign 표준 시방과 동일.
+     슬러그 6mm 안에 3mm 맞춤표가 위·아래 여유 1.5mm 씩으로 자리잡고, 컬러바
+     (높이 3.2mm) 도 슬러그 한가운데에 깔린다. mark-margin 이 정의되지 않은
+     경우 bleed 와 동일하게 폴백 — 단, 그 상황에선 마크가 sheet 가장자리에
+     붙어 출력 시 절반이 잘리는 문제가 발생한다. */
   const markMargin = Math.max(
     bleed,
     parseFloat(getComputedStyle(root).getPropertyValue('--page-mark-margin')) || 0
@@ -6447,12 +7446,20 @@ function buildPrintHtml(){
   }).filter(Boolean).join('');
   const bookNode = document.getElementById('book')?.cloneNode(true);
   if (bookNode){
+    /* cover spread 의 좌측 placeholder(.page-blank) 는 화면 레이아웃 안정용 — PDF
+       에는 빈 흰 페이지로 출력되면 안 되므로 sheet 으로 래핑하기 전에 제거한다.
+       (제거 후 cover spread 안에는 .page-right 한 장만 남아 PDF 첫 장 = 우면 = 1쪽.) */
+    Array.from(bookNode.querySelectorAll('.page-blank')).forEach(b => b.remove());
     Array.from(bookNode.querySelectorAll('.page')).forEach(page => {
       const sheet = document.createElement('div');
       sheet.className = 'print-sheet';
       page.parentNode.insertBefore(sheet, page);
       sheet.appendChild(page);
     });
+    /* 목차 LI → <a href="#id"> 보강: 인쇄 PDF 에 클릭 가능한 PDF 링크
+       어노테이션이 발행된다. 프리뷰 단에서 이미 적용되었더라도 cloneNode
+       으로 복제됐으므로 멱등 호출만 한 번 더 보장한다. */
+    try { decorateTocLinksAsAnchors(bookNode); } catch(e){ console.warn('toc anchors (print):', e); }
   }
   const bookHtml = bookNode?.outerHTML || '';
   return `<!DOCTYPE html>
@@ -6551,6 +7558,17 @@ body.facing-pages .print-root .page-right .page-foot{
 body.show-crop-marks .page::before{display:block !important;}
 body.show-bleed-guide .page::after{display:block !important;}
 body.show-printer-marks .page-marks{display:block !important;}
+/* PDF export 는 페이지마다 별도 sheet 으로 출력된다. 화면(.spread) 처럼
+   facing-pages 시 inner-side 마크를 숨기면 인쇄소가 받는 PDF 의 각 sheet
+   에서 일부 모서리 마크가 빠져 위험하다. export 에선 4 모서리 풀세트 복구. */
+body.facing-pages .print-root .page-left::before,
+body.facing-pages .print-root .page-right::before{ clip-path: none !important; }
+body.facing-pages .print-root .page-left  .page-marks .reg.right{ display:block !important; }
+body.facing-pages .print-root .page-right .page-marks .reg.left{  display:block !important; }
+/* export 시엔 spread 가 layout 컨테이너로만 쓰이고 각 .page 가 독립 sheet 로
+   래핑되므로, 화면 모드에서 .spread 의 background:transparent / .page 의
+   box-shadow 는 그대로 둬도 인쇄에 영향 없음 (.print-sheet 가 자기 background:#fff
+   를 갖고 .page 의 box-shadow 는 PDF 출력에 노출되지 않는다). */
 @media screen{
   body{display:flex;justify-content:center;padding:24px;background:#d9d9d2;}
 }
@@ -6616,6 +7634,133 @@ function printRenderedBook(){
     };
     iframe.srcdoc = buildPrintHtml();
     document.body.appendChild(iframe);
+  });
+}
+
+/* ============================================================
+   인쇄소 납품용 PDF 변환 모달
+   - 사용자가 ⌘P 로 먼저 PDF 를 저장
+   - 이 모달에서 저장된 PDF 를 드롭/선택
+   - PDF-lib 가 TrimBox/BleedBox/CropBox/OutputIntent/Info 박음
+   - "[제목]_인쇄소납품용_YYYY-MM-DD.pdf" 로 다운로드
+   ============================================================ */
+function openPrintReadyModal(){
+  return new Promise(resolve => {
+    /* 기존 트림 / 도련 / 슬러그 시방값을 CSS 변수에서 그대로 읽어와
+       buildPrintReadyPdf 에 전달. (편집 중 판형이 바뀌어도 자동 반영) */
+    const cs = getComputedStyle(root);
+    const trimW = parseFloat(cs.getPropertyValue('--page-w')) || 152;
+    const trimH = parseFloat(cs.getPropertyValue('--page-h')) || 225;
+    const bleed = Math.max(0, parseFloat(cs.getPropertyValue('--page-bleed')) || 3);
+    const markMargin = Math.max(bleed, parseFloat(cs.getPropertyValue('--page-mark-margin')) || 9);
+    const slug  = Math.max(0, markMargin - bleed);
+    const title = ($('#doc-title').value || 'HCG_print_ready').trim();
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'print-ready-overlay';
+    overlay.style.cssText = `
+      position:fixed;inset:0;background:rgba(20,24,32,.55);z-index:9999;
+      display:flex;align-items:center;justify-content:center;
+    `;
+    overlay.innerHTML = `
+      <div role="dialog" aria-modal="true" style="
+        width:min(560px,92vw);background:#fff;border-radius:14px;
+        box-shadow:0 24px 60px rgba(0,0,0,.28);padding:24px 24px 20px;
+        font-family:var(--ui-family,system-ui,sans-serif);color:#1A1A1A;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px">
+          <div>
+            <div style="font-size:16px;font-weight:700;letter-spacing:-.2px">PDF · 인쇄소 납품용 변환</div>
+            <div style="font-size:12px;color:#666;margin-top:4px;line-height:1.55">
+              ⌘P 로 저장한 PDF 를 끌어다 놓으면<br>
+              TrimBox · BleedBox · OutputIntent · 문서 메타를 보강합니다.
+            </div>
+          </div>
+          <button type="button" id="pr-close" aria-label="닫기" style="
+            border:0;background:transparent;font-size:20px;cursor:pointer;color:#888;line-height:1">×</button>
+        </div>
+        <div id="pr-drop" style="
+          margin-top:12px;border:2px dashed #B7C9DD;border-radius:10px;
+          padding:28px 16px;text-align:center;background:#F4F8FC;color:#1F4E79;
+          transition:background .12s, border-color .12s;cursor:pointer;">
+          <div style="font-size:32px;line-height:1;margin-bottom:6px">📄</div>
+          <div style="font-size:13px;font-weight:600">PDF 를 여기에 드롭</div>
+          <div style="font-size:11px;color:#5078A3;margin-top:4px">또는 클릭해서 파일 선택</div>
+          <input type="file" id="pr-file" accept="application/pdf,.pdf" style="display:none">
+        </div>
+        <div id="pr-info" style="margin-top:12px;font-size:12px;color:#444;line-height:1.6">
+          <div><b>트림</b> ${trimW}×${trimH} mm · <b>도련</b> ${bleed} mm · <b>슬러그</b> ${slug} mm</div>
+          <div><b>제목</b> ${escapeHtml(title)}</div>
+        </div>
+        <div id="pr-status" style="margin-top:10px;font-size:12px;color:#1F4E79;min-height:18px"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = () => {
+      overlay.remove();
+      window.removeEventListener('keydown', onEsc);
+      resolve();
+    };
+    const onEsc = (e) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('keydown', onEsc);
+    overlay.querySelector('#pr-close').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+    const drop = overlay.querySelector('#pr-drop');
+    const fileInput = overlay.querySelector('#pr-file');
+    const statusEl = overlay.querySelector('#pr-status');
+
+    const setStatus = (msg, kind) => {
+      statusEl.textContent = msg;
+      statusEl.style.color = kind === 'err' ? '#B23A3A' : kind === 'ok' ? '#1F7A3D' : '#1F4E79';
+    };
+
+    drop.addEventListener('click', () => fileInput.click());
+    drop.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      drop.style.background = '#E6F0FB';
+      drop.style.borderColor = '#5B8DEF';
+    });
+    drop.addEventListener('dragleave', () => {
+      drop.style.background = '#F4F8FC';
+      drop.style.borderColor = '#B7C9DD';
+    });
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      drop.style.background = '#F4F8FC';
+      drop.style.borderColor = '#B7C9DD';
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) handleFile(f);
+    });
+    fileInput.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) handleFile(f);
+    });
+
+    async function handleFile(file){
+      if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf'){
+        setStatus('PDF 파일만 변환할 수 있습니다.', 'err');
+        return;
+      }
+      setStatus('변환 중… (메타데이터 보강)', 'info');
+      try {
+        const buf = new Uint8Array(await file.arrayBuffer());
+        const out = await buildPrintReadyPdf(buf, {
+          trimW, trimH, bleed, slug, title,
+          author: '', subject: '인쇄소 납품용 PDF',
+        });
+        const blob = new Blob([out], { type: 'application/pdf' });
+        const fname = `${title}_인쇄소납품용_${dateStr}.pdf`;
+        download(fname, blob, 'application/pdf');
+        setStatus(`완료 — ${fname} 다운로드`, 'ok');
+        toast('인쇄소 납품용 PDF 변환 완료', 'ok');
+        setTimeout(close, 900);
+      } catch (err){
+        console.error('[HCG] print-ready 변환 실패:', err);
+        setStatus(`변환 실패: ${err.message || err}`, 'err');
+      }
+    }
   });
 }
 
@@ -6892,10 +8037,10 @@ function openFloatPopup(){
   :root{
     --ink:#1A1A1A;--panel:#FBFBF8;--bg:#F5F5F2;--soft:#F0EDE7;
     --line:#E5E5DF;--accent:#8B6E3E;--accent-soft:#F5EFE4;--mute:#6B6B66;
-    --body-family:"Nanum Myeongjo","Noto Serif KR","Apple SD Gothic Neo","Malgun Gothic",serif;
+    --body-family:"Nanum Myeongjo","NanumMyeongjo","AppleMyungjo","Batang","Apple SD Gothic Neo",serif;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR","Malgun Gothic",sans-serif;color:var(--ink)}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);font-family:"Pretendard",-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;color:var(--ink)}
   .fw-head{display:flex;align-items:center;gap:10px;padding:8px 14px;background:linear-gradient(180deg,#FBFBF8,#fff);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
   .fw-head .fw-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
   .fw-head .fw-dot{width:8px;height:8px;border-radius:50%;background:#2E7D32;display:inline-block}
@@ -8066,17 +9211,22 @@ function installTocHyperlinks(rootEl){
     });
   });
 }
-/* 에디터 전용 클릭 델리게이트 (한 번만 설치 — 상태는 이 파일 상단에 선언) */
+/* 클릭 델리게이트 (한 번만 설치 — 상태는 이 파일 상단에 선언).
+   에디터(#edit-pane #editor) 와 프리뷰(.book) 양쪽에서 작동.
+   각 컨테이너 내부에서 ID 를 검색하므로 같은 ID 가 두 곳에 동시
+   존재해도(에디터 클론 → 프리뷰) 정확한 대상으로 스크롤한다. */
 function ensureTocClickHandler(){
   if (__tocClickInstalled) return;
   __tocClickInstalled = true;
   document.addEventListener('click', (e) => {
     const li = e.target.closest('.toc-link[data-toc-target]');
     if (!li) return;
-    /* 에디터 내부에서만 작동 (프리뷰에는 목차 리스트 없음) */
-    if (!li.closest('#edit-pane #editor')) return;
+    const container = li.closest('#edit-pane #editor, .book');
+    if (!container) return;
     e.preventDefault();
-    const target = document.getElementById(li.dataset.tocTarget);
+    /* 같은 컨테이너 내부에서 ID 매칭 — 중복 ID 가 있어도 안전 */
+    const tid = li.dataset.tocTarget;
+    const target = container.querySelector('#' + CSS.escape(tid)) || document.getElementById(tid);
     if (!target) return;
     target.scrollIntoView({ behavior:'smooth', block:'start' });
     const prev = target.style.background;
@@ -8084,6 +9234,35 @@ function ensureTocClickHandler(){
     target.style.background = '#FFF3B8';
     setTimeout(() => { target.style.background = prev || ''; }, 1100);
   }, true);
+}
+
+/**
+ * 프리뷰(.book) 와 인쇄용 HTML 에서 사용할 — 목차 LI 내용을 <a href="#id">
+ * 로 감싸 진짜 하이퍼링크로 만든다. 에디터(.ProseMirror) 에는 적용하지 않음
+ * (TipTap 의 노드/마크 정합 깨질 수 있음 — 거기는 클릭 델리게이트로 처리).
+ *
+ * 효과
+ * - 프리뷰: 마우스 오버 시 native 링크 인디케이터 표시, 클릭 = 스크롤
+ * - 인쇄 PDF: 브라우저가 <a href="#anchor"> 를 PDF 링크 어노테이션으로 발행
+ *
+ * 멱등 — 이미 <a> 로 감싸진 LI 는 건너뜀. paginate 후 반복 호출해도 안전.
+ */
+function decorateTocLinksAsAnchors(rootEl){
+  if (!rootEl) return;
+  const links = rootEl.querySelectorAll('.toc-link[data-toc-target]');
+  links.forEach(li => {
+    if (li.querySelector(':scope > a[data-toc-anchor]')) return; /* 이미 처리됨 */
+    const tid = li.dataset.tocTarget;
+    if (!tid) return;
+    const a = document.createElement('a');
+    a.href = '#' + tid;
+    a.dataset.tocAnchor = '1';
+    a.style.color = 'inherit';
+    a.style.textDecoration = 'none';
+    /* 기존 자식들을 <a> 안으로 이동 */
+    while (li.firstChild) a.appendChild(li.firstChild);
+    li.appendChild(a);
+  });
 }
 
 /* ───────────────────────────────────────────────────────────────
@@ -8149,7 +9328,7 @@ function extractPlainText(node){
     · H2     : 숫자 접두  — '제N장/절/편/부', 'N.', '1.1', 'Chapter N'
     · H3     : 알파벳·로마자 접두 — 'A.', 'B.', 'I.', 'II.', 'Part III'
     · FIG    : 도판 캡션 '그림 N', '표 N', 'Figure N' — 본문 크기 + 굵게,
-               위에 "📷 이미지 첨부" 라벨 자동 삽입
+               위에 1×1 표(가운데 '이미지 첨부' placeholder) 자동 삽입
     · CALLOUT: 블릿(· • ● ▪ □ ○ ◇ ■ ◆) 또는 소문자 로마자(i. ii. iii.)
                → 볼드 + 회색 음영 + 상단 2행 / 하단 1행 여백
                  (상단에 이미 빈 행이 있으면 여백 추가 생략)
@@ -8274,13 +9453,29 @@ function splitParagraphOnHardBreak(node){
 function applyKeywordRules(docJson){
   if (!docJson || !Array.isArray(docJson.content)) return docJson;
   const emptyPara = () => ({ type:'paragraph', content:[] });
+  /* 2026-04-26: fig 라벨을 단락이 아닌 1×1 표(placeholder) 로 변경.
+     - 사용자 요구: "캡션 위 '이미지 첨부' 자리는 표 1×1 영역, 가운데에 '이미지 첨부' 글".
+     - 셀 안에 <mark data-color="#DDEBF7"> 텍스트를 그대로 두어 기존 검출 마커
+       (CLF_BLUE) 가 유지되고, isFigLabelNode 가 멱등성 판별을 계속 할 수 있다.
+     - CSS `:has()` 셀렉터로 placeholder 스타일(점선 테두리·연한 배경·중앙정렬)을
+       이 표에만 한정 적용. 일반 표는 영향 없음. */
   const figLabel  = () => ({
-    type:'paragraph',
-    attrs: docJson.content[0]?.attrs ? undefined : undefined,
-    content:[{ type:'text', text:'📷 이미지 첨부', marks:[
-      { type:'italic' },
-      { type:'highlight', attrs:{ color: CLF_BLUE }},
-    ]}],
+    type:'table',
+    content:[{
+      type:'tableRow',
+      content:[{
+        type:'tableCell',
+        attrs:{ colspan:1, rowspan:1, colwidth:null },
+        content:[{
+          type:'paragraph',
+          attrs:{ textAlign:'center' },
+          content:[{ type:'text', text:'이미지 첨부', marks:[
+            { type:'italic' },
+            { type:'highlight', attrs:{ color: CLF_BLUE }},
+          ]}]
+        }]
+      }]
+    }]
   });
   /* 메인 루프 진입 전: paragraph 안의 hardBreak를 경계로 paragraph 배열을 펼친다. */
   const expanded = [];
@@ -8289,11 +9484,38 @@ function applyKeywordRules(docJson){
     for (const p of parts) expanded.push(p);
   }
   /* fig/callout 멱등성 판별 헬퍼 — HTML 단계(applyKeywordRulesToHtml)가 이미
-     라벨/패딩을 붙여 놓았으면 JSON 단계가 중복으로 붙이지 않는다. */
+     라벨/패딩을 붙여 놓았으면 JSON 단계가 중복으로 붙이지 않는다.
+     2026-04-26: 라벨이 단락에서 1×1 표로 바뀌어 두 형태를 모두 인식한다.
+       - 신형: table > tableRow > tableCell > paragraph(text "이미지 첨부" + CLF_BLUE highlight)
+       - 구형: paragraph(text "📷 이미지 첨부") — 기존 문서 호환용
+     멱등성 보장: 자동분류 재실행 시 둘 다 "이미 라벨 있음" 으로 판단해 라벨을 새로
+     푸시하지 않는다. */
   const isFigLabelPara = (n) => {
-    if (!n || n.type !== 'paragraph' || !Array.isArray(n.content)) return false;
-    const s = n.content.map(x => (x && typeof x.text === 'string') ? x.text : '').join('');
-    return s.trim().startsWith('📷 이미지 첨부');
+    if (!n || typeof n !== 'object') return false;
+    /* 신형 (1×1 표) */
+    if (n.type === 'table' && Array.isArray(n.content) && n.content.length === 1){
+      const row = n.content[0];
+      if (row && row.type === 'tableRow' && Array.isArray(row.content) && row.content.length === 1){
+        const cell = row.content[0];
+        if (cell && cell.type === 'tableCell' && Array.isArray(cell.content)){
+          const txt = (function collect(nodes){
+            let s = '';
+            for (const c of nodes){
+              if (c && c.type === 'text' && typeof c.text === 'string') s += c.text;
+              else if (c && Array.isArray(c.content)) s += collect(c.content);
+            }
+            return s;
+          })(cell.content);
+          if (/이미지\s*첨부/.test(txt)) return true;
+        }
+      }
+    }
+    /* 구형 (단락) */
+    if (n.type === 'paragraph' && Array.isArray(n.content)){
+      const s = n.content.map(x => (x && typeof x.text === 'string') ? x.text : '').join('');
+      return s.trim().startsWith('📷 이미지 첨부');
+    }
+    return false;
   };
   const hasMarkType = (inline, typeName) => {
     if (!Array.isArray(inline)) return false;
@@ -8565,12 +9787,20 @@ function applyKeywordRulesToHtml(html){
       frag.appendChild(p);
       node.replaceWith(frag);
     } else if (tag === 'fig'){
-      /* JSON 버전과 동형: 앞에 빈 단락 + 📷 라벨 + 굵은 캡션 */
+      /* JSON 버전과 동형: 앞에 빈 단락 + 1×1 표 placeholder + 굵은 캡션.
+         2026-04-26: 라벨을 <p> 가 아닌 <table><tr><td><p>이미지 첨부</p></td></tr></table>
+         로 변경. CSS `:has(mark[data-color="#DDEBF7"])` 셀렉터가 이 표에만
+         placeholder 스타일을 적용한다. */
       const frag = document.createDocumentFragment();
       const prev = node.previousElementSibling;
       if (!isEmptyP(prev)) frag.appendChild(mkEmpty());
-      const label = document.createElement('p');
-      label.innerHTML = '<em><mark data-color="' + CLF_BLUE + '" style="background:' + CLF_BLUE + '">📷 이미지 첨부</mark></em>';
+      const label = document.createElement('table');
+      label.innerHTML =
+        '<tbody><tr><td colspan="1" rowspan="1">' +
+          '<p style="text-align:center">' +
+            '<em><mark data-color="' + CLF_BLUE + '" style="background:' + CLF_BLUE + '">이미지 첨부</mark></em>' +
+          '</p>' +
+        '</td></tr></tbody>';
       const p = document.createElement('p');
       const b = document.createElement('strong');
       while (node.firstChild) b.appendChild(node.firstChild);
