@@ -2040,6 +2040,42 @@ ul.toc-list > li::before{
           </button>
         </div>
       </div>
+
+      <h3 data-sec="printcolor"><span><i class="ph ph-palette ic"></i><span class="title-text">인쇄 색상</span></span></h3>
+      <div class="sec">
+        <div class="row">
+          <label>색상 모드</label>
+          <div class="seg" id="seg-color-mode">
+            <button data-mode="1">1도</button>
+            <button data-mode="2">2도</button>
+            <button data-mode="3">3도</button>
+            <button data-mode="4" class="active">4도</button>
+          </div>
+        </div>
+        <div class="row" data-spot-row="1">
+          <label>별색 1</label>
+          <select id="sel-spot-1">
+            <option value="">— 선택 —</option>
+            <option value="navy">진청 (C100·M70·Y0·K30)</option>
+            <option value="wine">와인 (C30·M100·Y70·K30)</option>
+            <option value="green">녹 (C70·M0·Y100·K30)</option>
+            <option value="gold">황 (C0·M30·Y100·K30)</option>
+          </select>
+        </div>
+        <div class="row" data-spot-row="2">
+          <label>별색 2</label>
+          <select id="sel-spot-2">
+            <option value="">— 선택 —</option>
+            <option value="navy">진청</option>
+            <option value="wine">와인</option>
+            <option value="green">녹</option>
+            <option value="gold">황</option>
+          </select>
+        </div>
+        <div class="row" id="row-color-mode-info">
+          <div id="color-mode-info" style="font-size:11px;color:var(--mute);line-height:1.5;width:100%;padding:6px 8px;background:var(--soft);border-radius:3px"></div>
+        </div>
+      </div>
     </aside>
 
     <section class="stage" id="stage">
@@ -2538,23 +2574,31 @@ ul.toc-list > li::before{
     <!-- 인쇄 표준 CMYK 스와치. 모든 색상은 process color (4도) 기준값.
          숫자는 인쇄소 RIP 가 그대로 받는 CMYK 좌표이며, 프리뷰의 background
          는 Japan Color 2001 Coated 프로필로 변환한 sRGB 근사값. -->
-    <div class="cp-swatches" id="cp-cmyk-swatches">
-      <button type="button" class="cp-swatch" data-cmyk="0,0,0,100"   title="Process Black 0/0/0/100" style="background:#1A1A1A"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,0,0,80"    title="짙은 회색 0/0/0/80"   style="background:#4D4D4D"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,0,0,50"    title="중간 회색 0/0/0/50"   style="background:#9C9C9C"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,0,0,20"    title="연회색 0/0/0/20"     style="background:#D5D5D5"></button>
-      <button type="button" class="cp-swatch" data-cmyk="100,0,0,0"   title="Cyan 100/0/0/0"      style="background:#00A2E8"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,100,0,0"   title="Magenta 0/100/0/0"   style="background:#E3007F"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,0,100,0"   title="Yellow 0/0/100/0"    style="background:#FFDD00"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,100,100,0" title="Red 0/100/100/0"     style="background:#D72020"></button>
-      <button type="button" class="cp-swatch" data-cmyk="100,0,100,0" title="Green 100/0/100/0"   style="background:#00873B"></button>
-      <button type="button" class="cp-swatch" data-cmyk="100,100,0,0" title="Blue 100/100/0/0"    style="background:#1F3B91"></button>
-      <button type="button" class="cp-swatch" data-cmyk="20,80,80,0"  title="진홍 (브랜드 빨강) 20/80/80/0" style="background:#BE3F31"></button>
-      <button type="button" class="cp-swatch" data-cmyk="0,20,100,10" title="따뜻한 황금 0/20/100/10"   style="background:#E7C300"></button>
-      <button type="button" class="cp-swatch" data-cmyk="60,40,0,0"   title="인디고 60/40/0/0"     style="background:#697CCB"></button>
-      <button type="button" class="cp-swatch" data-cmyk="80,0,60,20"  title="짙은 청록 80/0/60/20"  style="background:#287064"></button>
-      <button type="button" class="cp-swatch" data-cmyk="40,90,20,10" title="자주 40/90/20/10"     style="background:#9A3070"></button>
-      <button type="button" class="cp-swatch" data-cmyk="60,60,80,40" title="녹슨 갈색 60/60/80/40" style="background:#5C4D33"></button>
+    <!-- 모드 안내 — 색상 모드(1·2·3·4도)에 따라 동적으로 갱신 -->
+    <div id="cp-mode-banner" class="cp-mode-banner" style="font-size:11px;color:var(--mute);margin-bottom:6px;padding:5px 8px;background:var(--soft);border-radius:3px;display:none"></div>
+    <!-- K-only(1도 기본 색조) — 모든 모드에서 사용 가능 -->
+    <div class="cp-swatches" id="cp-cmyk-swatches" data-tier-group="k">
+      <button type="button" class="cp-swatch" data-tier="k" data-cmyk="0,0,0,100" title="Process Black 0/0/0/100" style="background:#1A1A1A"></button>
+      <button type="button" class="cp-swatch" data-tier="k" data-cmyk="0,0,0,80"  title="짙은 회색 0/0/0/80"   style="background:#4D4D4D"></button>
+      <button type="button" class="cp-swatch" data-tier="k" data-cmyk="0,0,0,50"  title="중간 회색 0/0/0/50"   style="background:#9C9C9C"></button>
+      <button type="button" class="cp-swatch" data-tier="k" data-cmyk="0,0,0,20"  title="연회색 0/0/0/20"     style="background:#D5D5D5"></button>
+    </div>
+    <!-- 별색 영역 — 2도/3도 모드에서 동적 채움 -->
+    <div class="cp-swatches" id="cp-spot-swatches" data-tier-group="spot" style="display:none"></div>
+    <!-- CMYK 풀 팔레트 — 4도 모드에서만 노출 -->
+    <div class="cp-swatches" id="cp-cmyk-full-swatches" data-tier-group="cmyk">
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="100,0,0,0"   title="Cyan 100/0/0/0"      style="background:#00A2E8"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="0,100,0,0"   title="Magenta 0/100/0/0"   style="background:#E3007F"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="0,0,100,0"   title="Yellow 0/0/100/0"    style="background:#FFDD00"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="0,100,100,0" title="Red 0/100/100/0"     style="background:#D72020"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="100,0,100,0" title="Green 100/0/100/0"   style="background:#00873B"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="100,100,0,0" title="Blue 100/100/0/0"    style="background:#1F3B91"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="20,80,80,0"  title="진홍 (브랜드 빨강) 20/80/80/0" style="background:#BE3F31"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="0,20,100,10" title="따뜻한 황금 0/20/100/10"   style="background:#E7C300"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="60,40,0,0"   title="인디고 60/40/0/0"     style="background:#697CCB"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="80,0,60,20"  title="짙은 청록 80/0/60/20"  style="background:#287064"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="40,90,20,10" title="자주 40/90/20/10"     style="background:#9A3070"></button>
+      <button type="button" class="cp-swatch" data-tier="cmyk" data-cmyk="60,60,80,40" title="녹슨 갈색 60/60/80/40" style="background:#5C4D33"></button>
     </div>
   </div>
   <div class="cp-foot">
@@ -5207,6 +5251,141 @@ function hexToRgb(hex){
       바로 갱신.
    ============================================================ */
 
+/* ============================================================
+   인쇄 색상 모드 (1도 / 2도 / 3도 / 4도)
+
+   1도 — Process Black 단색 + 회색조(K100/80/50/20)
+   2도 — 1도 + 별색 1
+   3도 — 1도 + 별색 1·2
+   4도 — 풀 CMYK (모든 process 색상)
+
+   상태는 localStorage 에 저장되어 새로고침 후에도 유지.
+   별색은 정의된 4종(진청·와인·녹·황) 중 선택. CMYK 좌표는 절대값
+   고정 — 인쇄소 RIP 가 받는 그대로의 별색 좌표. 각 스와치는
+   data-tier (k / spot / cmyk) 로 라벨링되어 모드별 가시성이
+   CSS+JS 조합으로 잠금된다.
+   ============================================================ */
+const PRINT_COLOR_MODE_KEY = 'hcg_print_color_mode_v1';
+const SPOT_COLORS_KEY = 'hcg_spot_colors_v1';
+
+const SPOT_COLOR_DEFS = {
+  navy:  { name: '진청', cmyk: [100, 70,  0, 30], tints: [100, 70, 40] },
+  wine:  { name: '와인', cmyk: [ 30, 100, 70, 30], tints: [100, 70, 40] },
+  green: { name: '녹',   cmyk: [ 70,  0,  100, 30], tints: [100, 70, 40] },
+  gold:  { name: '황',   cmyk: [  0, 30,  100, 30], tints: [100, 70, 40] },
+};
+
+function getPrintColorMode(){
+  const v = parseInt(localStorage.getItem(PRINT_COLOR_MODE_KEY) || '4', 10);
+  return (v >= 1 && v <= 4) ? v : 4;
+}
+function setPrintColorModeSetting(mode){
+  localStorage.setItem(PRINT_COLOR_MODE_KEY, String(mode));
+  applyPrintColorMode();
+}
+function getSpotSelection(){
+  try { return JSON.parse(localStorage.getItem(SPOT_COLORS_KEY) || '{}'); }
+  catch { return {}; }
+}
+function setSpotSelection(obj){
+  localStorage.setItem(SPOT_COLORS_KEY, JSON.stringify(obj));
+  applyPrintColorMode();
+}
+
+/* CMYK 농도(틴트) 적용 — 별색을 100%/70%/40% 로 사용 */
+function applyTintToCmyk(cmyk, tintPct){
+  const t = tintPct / 100;
+  return cmyk.map(v => Math.round(v * t));
+}
+
+/* CMYK → sRGB 근사값 (background-color 용). cmykToHex 는 기존 함수 활용 (없으면 폴백) */
+function cmykPreviewHex([c, m, y, k]){
+  if (typeof cmykToHex === 'function'){
+    try { return cmykToHex(c, m, y, k); } catch(_){}
+  }
+  /* 폴백 — 단순 변환 */
+  const r = Math.round(255 * (1 - c/100) * (1 - k/100));
+  const g = Math.round(255 * (1 - m/100) * (1 - k/100));
+  const b = Math.round(255 * (1 - y/100) * (1 - k/100));
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('').toUpperCase();
+}
+
+/* 별색 선택을 보고 cp-spot-swatches 를 동적 생성 */
+function rebuildSpotSwatches(){
+  const cont = document.getElementById('cp-spot-swatches');
+  if (!cont) return;
+  const sel = getSpotSelection();
+  const slots = [sel.spot1, sel.spot2].filter(Boolean);
+  if (slots.length === 0){ cont.innerHTML = ''; cont.style.display = 'none'; return; }
+  const html = slots.flatMap(spotKey => {
+    const def = SPOT_COLOR_DEFS[spotKey];
+    if (!def) return [];
+    return def.tints.map(t => {
+      const cmyk = applyTintToCmyk(def.cmyk, t);
+      const hex = cmykPreviewHex(cmyk);
+      const cmykStr = cmyk.join(',');
+      const title = `${def.name} ${t}% — CMYK ${cmykStr}`;
+      return `<button type="button" class="cp-swatch" data-tier="spot" data-cmyk="${cmykStr}" title="${title}" style="background:${hex}"></button>`;
+    });
+  }).join('');
+  cont.innerHTML = html;
+  cont.style.display = '';
+}
+
+/* 모드 적용 — 사이드바 · 팝오버 · body class 모두 갱신 */
+function applyPrintColorMode(){
+  const mode = getPrintColorMode();
+  const sel = getSpotSelection();
+  /* body class 토글 */
+  document.body.classList.remove('color-mode-1', 'color-mode-2', 'color-mode-3', 'color-mode-4');
+  document.body.classList.add('color-mode-' + mode);
+  /* 사이드바 segmented 활성 표시 */
+  document.querySelectorAll('#seg-color-mode button').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === String(mode));
+  });
+  /* 별색 슬롯 row 표시/숨김 */
+  document.querySelectorAll('[data-spot-row]').forEach(el => {
+    const slot = parseInt(el.dataset.spotRow, 10);
+    const show = (mode === 2 && slot === 1) || (mode === 3 && (slot === 1 || slot === 2));
+    el.style.display = show ? '' : 'none';
+  });
+  /* 별색 select 값 동기화 */
+  const s1 = document.getElementById('sel-spot-1'); if (s1) s1.value = sel.spot1 || '';
+  const s2 = document.getElementById('sel-spot-2'); if (s2) s2.value = sel.spot2 || '';
+  /* 안내문 갱신 */
+  const info = document.getElementById('color-mode-info');
+  if (info){
+    const labels = {
+      1: '검정 + 회색조 (K100·80·50·20) 만 사용',
+      2: '검정 + 별색 1 — 별색을 선택하세요',
+      3: '검정 + 별색 1·2',
+      4: '풀 CMYK — 모든 인쇄 색상 사용 가능',
+    };
+    let txt = labels[mode];
+    if (mode >= 2){
+      const names = [sel.spot1, sel.spot2].filter(Boolean).map(k => SPOT_COLOR_DEFS[k]?.name).filter(Boolean);
+      if (names.length) txt += ` · ${names.join(' + ')}`;
+    }
+    info.textContent = txt;
+  }
+  /* 팝오버 모드 배너 */
+  const banner = document.getElementById('cp-mode-banner');
+  if (banner){
+    banner.textContent = `${mode}도 모드 — ` + ({
+      1: '검정·회색만 사용 가능',
+      2: '검정 + 별색 1',
+      3: '검정 + 별색 1·2',
+      4: '모든 CMYK 색상',
+    })[mode];
+    banner.style.display = mode === 4 ? 'none' : '';
+  }
+  /* 팝오버 별색 스와치 재생성 */
+  rebuildSpotSwatches();
+  /* CMYK 풀 팔레트 표시/숨김 */
+  const fullPalette = document.getElementById('cp-cmyk-full-swatches');
+  if (fullPalette) fullPalette.style.display = mode === 4 ? '' : 'none';
+}
+
 /* 팝오버 상태 — 인쇄 컬러는 CMYK 가 기본 모드.
    기본 색상은 Process Black (0/0/0/100) — 인쇄 표준 검정. */
 const __cp = {
@@ -6580,6 +6759,40 @@ if (_btnChapterHeads){
     try { openChapterHeadsModal(); } catch(e){ console.error('chapter heads modal:', e); toast('챕터 머리글 모달 오류', 'err'); }
   });
 }
+
+/* ===== 인쇄 색상 모드 — 사이드바 이벤트 + 초기화 ===== */
+const _segColorMode = document.getElementById('seg-color-mode');
+if (_segColorMode){
+  _segColorMode.addEventListener('click', e => {
+    const b = e.target.closest('button[data-mode]');
+    if (!b) return;
+    const mode = parseInt(b.dataset.mode, 10);
+    setPrintColorModeSetting(mode);
+    /* 모드 1·4 로 갈 때 별색 선택 정리 */
+    if (mode === 1){
+      setSpotSelection({});
+    } else if (mode === 2){
+      const cur = getSpotSelection();
+      if (cur.spot2) setSpotSelection({ spot1: cur.spot1 || '' });
+    }
+  });
+}
+const _selSpot1 = document.getElementById('sel-spot-1');
+const _selSpot2 = document.getElementById('sel-spot-2');
+if (_selSpot1){
+  _selSpot1.addEventListener('change', () => {
+    const cur = getSpotSelection();
+    setSpotSelection({ ...cur, spot1: _selSpot1.value });
+  });
+}
+if (_selSpot2){
+  _selSpot2.addEventListener('change', () => {
+    const cur = getSpotSelection();
+    setSpotSelection({ ...cur, spot2: _selSpot2.value });
+  });
+}
+/* DOM 준비된 직후 1회 적용 (저장된 모드/별색 복원) */
+try { applyPrintColorMode(); } catch(e){ console.warn('applyPrintColorMode init:', e); }
 
 /* ============================================================
    File upload / drag-drop
