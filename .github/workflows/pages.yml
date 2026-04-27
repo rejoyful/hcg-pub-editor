@@ -16,6 +16,10 @@ concurrency:
 
 jobs:
   deploy:
+    # GitHub Pages 가 활성화된 저장소에서만 실행. 미러 저장소(Inpsyt/HCG_book_editor
+    # 등) 에서는 Pages 미설정으로 configure-pages 단계가 실패하므로 skip.
+    # Pages 를 켠 저장소가 추가되면 OR 조건으로 확장.
+    if: github.repository == 'rejoyful/hcg-pub-editor'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
