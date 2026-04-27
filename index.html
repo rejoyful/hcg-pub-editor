@@ -7,6 +7,10 @@
 <meta name="description" content="HCG typesetting editor — 웹 기반 자동 조판 에디터. HWPX·DOCX·PPTX·HTML·MD·TXT·IDML 자동 파싱.">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
+<!-- Pretendard 웹폰트 (UI 전용) — 시스템 폰트 차이로 인한 UI 렌더링 불일치 제거.
+     본문은 시스템 나눔명조를 사용하므로 PDF 임베딩은 영향 없음. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.min.css">
 <style>
 /* ============================================================
    Design tokens
@@ -77,8 +81,11 @@
   --color-bar-swatch: 4mm;     /* 각 스와치 폭 */
 
   /* typography */
-  --body-family: "Nanum Gothic","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
-  --ui-family: "Noto Sans KR","SF Pro Text","Helvetica Neue","Segoe UI",sans-serif;
+  /* 본문 = 시스템 나눔명조 (Nanum Myeongjo) — macOS/Windows 표준 명조체 폴백.
+     PDF 임베딩 시 CIDFontType2 로 정상 임베딩되어 PDF/X-4 변환 통과. */
+  --body-family: "Nanum Myeongjo","NanumMyeongjo","AppleMyungjo","Batang","Apple SD Gothic Neo",serif;
+  /* UI = Pretendard 웹폰트 — head 의 link 로 로드. 시스템 차이 무관 일관 렌더링. */
+  --ui-family: "Pretendard","Pretendard Variable",-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
   --body-size: 10pt;
   --body-leading: 1.75;
   --body-tracking: 0em;
@@ -1840,10 +1847,6 @@ ul.toc-list > li::before{
           <i class="ph ph-upload-simple"></i> 원고 파일 선택
         </button>
         <input type="file" id="file-input" accept=".hwpx,.hwp,.docx,.pptx,.pdf,.html,.htm,.md,.markdown,.txt,.idml,.indd,.xml,.zip" style="display:none" multiple>
-        <div class="upload-note">
-          <span class="fmt">HWPX · DOCX · PPTX · PDF · HTML · MD · TXT · IDML · XML</span>
-          <span class="warn">※ <b>HWP(바이너리)는 지원되지 않습니다</b>. 한글에서 <b>.hwpx</b>로 저장 후 업로드하세요.</span>
-        </div>
         <div class="pipeline" id="pipeline" style="display:none">
           <div class="step" data-step="unpack"><span class="ic">①</span><span>포맷 인식</span></div>
           <div class="step" data-step="parse"><span class="ic">②</span><span>문서 파싱</span></div>
@@ -1860,12 +1863,9 @@ ul.toc-list > li::before{
           <select id="sel-style-preset">
             <option value="Shinkook" selected>신국판 (기본)</option>
           </select>
-          <button class="btn" id="btn-apply-preset" style="font-size:11.5px;margin-left:4px" title="선택한 프리셋의 값(용지·단·여백·도련·본문 조판·머리말/꼬리말)을 모두 적용합니다">
+          <button class="btn" id="btn-apply-preset" style="font-size:11.5px;margin-left:4px">
             <i class="ph ph-check"></i> 적용
           </button>
-        </div>
-        <div class="row" style="font-size:11px;color:var(--meta);line-height:1.5">
-          <span>용지·단·여백·도련·본문 조판·머리말/꼬리말을 한 번에 적용합니다.</span>
         </div>
       </div>
 
@@ -1911,7 +1911,7 @@ ul.toc-list > li::before{
           <label>펼침 페이지</label>
           <label class="chk-line" style="font-size:11.5px" title="Facing Pages — 마주보기 펼침 배치">
             <input type="checkbox" id="chk-facing-pages" checked>
-            <span class="lbl">Facing Pages <small>좌·우 대칭 + 안쪽/바깥쪽 여백</small></span>
+            <span class="lbl">Facing Pages</span>
           </label>
         </div>
         <div class="row" id="row-margin-io" title="Inner (Gutter) · Outer Margin — 안쪽(제본) · 바깥쪽 여백 (mm). 펼침 페이지에서 안쪽을 바깥보다 넓게 잡는 것이 일반적.">
@@ -1921,8 +1921,8 @@ ul.toc-list > li::before{
         </div>
         <div class="row" title="Bleed — 재단 시 잘려나가는 여분. 한국 단행본 표준 3mm. 작업 영역 = 트림 + 도련.">
           <label>도련</label>
-          <input type="number" id="in-bleed" value="3" min="0" max="10" step="0.5" title="Bleed (mm) — 재단 여분, 표준 3mm">
-          <label style="min-width:72px;margin-left:4px;font-size:11.5px;color:var(--meta)">mm · Bleed</label>
+          <input type="number" id="in-bleed" value="3" min="0" max="10" step="0.5">
+          <label style="min-width:24px;margin-left:4px;font-size:11.5px;color:var(--meta)">mm</label>
         </div>
       </div>
 
@@ -1931,38 +1931,23 @@ ul.toc-list > li::before{
         <div class="row mark-row">
           <label class="chk-line" title="Crop Marks — 페이지 4모서리 L자 재단 기준선. 인쇄소가 트림 위치를 잡는 기준입니다. 납품용 PDF 에는 반드시 ON.">
             <input type="checkbox" id="chk-crop-marks" checked>
-            <span class="lbl">재단선 <small>Crop Marks · 4모서리 L자</small></span>
-            <span class="tag ok">PDF 포함</span>
+            <span class="lbl">재단선</span>
+            <span class="tag ok">PDF</span>
           </label>
         </div>
         <div class="row mark-row">
-          <label class="chk-line" title="Bleed Guide — 도련 영역을 점선으로 시각화. 편집 화면 보조용이며 PDF 출력에는 표시되지 않습니다.">
+          <label class="chk-line">
             <input type="checkbox" id="chk-bleed-guide" checked>
-            <span class="lbl">도련 가이드 <small>Bleed Guide · 편집 보조선</small></span>
-            <span class="tag screen">화면용</span>
+            <span class="lbl">도련 가이드</span>
+            <span class="tag screen">화면</span>
           </label>
         </div>
         <div class="row mark-row">
-          <label class="chk-line" title="Registration Marks + Color Bars — 맞춤표(원형 +) 와 CMYK 컬러바. 인쇄소가 견양·색 정합성을 검수하는 기준입니다.">
+          <label class="chk-line">
             <input type="checkbox" id="chk-printer-marks" checked>
-            <span class="lbl">맞춤표·컬러바 <small>Reg Marks + Color Bars</small></span>
-            <span class="tag ok">PDF 포함</span>
+            <span class="lbl">맞춤표·컬러바</span>
+            <span class="tag ok">PDF</span>
           </label>
-        </div>
-        <!-- 편집부 실무 가이드: 토글 조합에 따라 PDF 산출물의 용도가 결정됨을 명시.
-             신규 편집자가 토글을 깜빡 잊고 잘못된 PDF 를 발송하는 사고를 방지. -->
-        <div class="row" style="margin-top:2px">
-          <small style="font-size:10.5px;line-height:1.5;color:var(--meta);display:block;padding:6px 8px;background:var(--soft);border-radius:4px;width:100%">
-            <b style="color:var(--ink)">인쇄소 납품용</b> — 재단선·맞춤표 ON.<br>
-            <b style="color:var(--ink)">검토용 (Review)</b> — 둘 다 OFF.<br>
-            <span style="display:inline-block;margin-top:4px">PDF 내보내기 시 토스트와 저장 파일명에 현재 용도가 자동 표기됩니다.</span>
-            <br>
-            <span style="display:inline-block;margin-top:4px;padding-top:4px;border-top:1px dashed var(--line)">
-              <b style="color:var(--ink)">PDF Sheet 크기</b> = 트림 + 4면 9mm 마크 영역 (도련 3mm + 슬러그 6mm).<br>
-              예) 신국판 152×225 → <b style="color:var(--ink)">170×243 mm</b> (= 483×690 pt) — InDesign 표준 / 학지사 출판물 시방.<br>
-              재단선은 트림 모서리에서 2mm 떨어져 그려지며, 맞춤표(3mm)는 슬러그 한가운데에 놓입니다.
-            </span>
-          </small>
         </div>
       </div>
 
@@ -1971,8 +1956,8 @@ ul.toc-list > li::before{
         <div class="row">
           <label>서체</label>
           <select id="sel-font">
-            <option value='"Nanum Gothic","Malgun Gothic","Apple SD Gothic Neo",sans-serif' selected>나눔고딕</option>
-            <option value='"Nanum Myeongjo","Batang",serif'>나눔명조</option>
+            <option value='"Nanum Myeongjo","NanumMyeongjo","AppleMyungjo","Batang","Apple SD Gothic Neo",serif' selected>나눔명조 (기본)</option>
+            <option value='"Nanum Gothic","Malgun Gothic","Apple SD Gothic Neo",sans-serif'>나눔고딕</option>
             <option value='"Noto Serif KR","Source Han Serif K","Nanum Myeongjo","Batang",serif'>Noto Serif (명조)</option>
             <option value='"Noto Sans KR","SF Pro Text","Helvetica Neue",sans-serif'>Noto Sans (고딕)</option>
             <option value='"Pretendard Variable","Pretendard","Apple SD Gothic Neo",sans-serif'>Pretendard</option>
@@ -3515,7 +3500,46 @@ function commitHtmlToEditor(html, source){
     console.error('[commit] json-classify failed (' + source + '):', e);
     toast('자동 분류(JSON) 실패: ' + (e?.message || e), 'err');
   }
+  /* 원고 제목 자동 채움 — doc-title 이 비어있거나 기본값("원고 제목") 일 때만
+     첫 H1 텍스트로 자동 채운다. 사용자가 이미 임의 제목을 입력했다면 보존. */
+  try { autoFillTitleFromFirstHeading(); } catch(e){ console.warn('[commit] title autofill:', e); }
   resetViewportsToTop();
+}
+
+/**
+ * 에디터 콘텐츠의 첫 H1 텍스트를 doc-title 입력란에 자동 채움.
+ * - doc-title 이 비어있거나 placeholder/기본값("원고 제목") 일 때만 동작
+ * - 사용자가 이미 다른 값을 넣었으면 절대 덮어쓰지 않음
+ * - 가져오기·새 문서·복원 어느 경로든 호출 가능
+ */
+function autoFillTitleFromFirstHeading(){
+  const titleEl = document.getElementById('doc-title');
+  if (!titleEl) return;
+  const cur = (titleEl.value || '').trim();
+  /* 자동 채움 허용 조건: 비어있거나, 시스템 기본값/placeholder 와 동일 */
+  const isEmptyOrDefault = !cur || cur === '원고 제목' || cur === '새 문서';
+  if (!isEmptyOrDefault) return;
+  /* 첫 H1 노드의 텍스트 추출 */
+  const json = editor.getJSON();
+  const firstH1 = (function find(n){
+    if (!n) return null;
+    if (n.type === 'heading' && n.attrs && n.attrs.level === 1){
+      const txt = (n.content || []).map(c => (c.type === 'text') ? (c.text || '') : '').join('').trim();
+      return txt || null;
+    }
+    if (Array.isArray(n.content)){
+      for (const c of n.content){
+        const r = find(c); if (r) return r;
+      }
+    }
+    return null;
+  })(json);
+  if (firstH1){
+    titleEl.value = firstH1;
+    /* change 이벤트 디스패치 — 머리말·자동저장 등 의존자가 반응하도록 */
+    titleEl.dispatchEvent(new Event('input', { bubbles: true }));
+    titleEl.dispatchEvent(new Event('change', { bubbles: true }));
+  }
 }
 
 /* 커서를 문서 맨 앞으로 되돌리고, 에디터·프리뷰 뷰포트를 최상단으로 스크롤.
@@ -6318,7 +6342,7 @@ const STYLE_PRESETS = {
     cropMarks: true,
     bleedGuide: true,
     printerMarks: true,  /* 맞춤표 + 컬러바 */
-    fontFamily: '"Nanum Gothic","Malgun Gothic","Apple SD Gothic Neo",sans-serif',
+    fontFamily: '"Nanum Myeongjo","NanumMyeongjo","AppleMyungjo","Batang","Apple SD Gothic Neo",serif',
     fontWeight: '400',
     fontSize: 10,
     leading: 1.75,
@@ -7480,10 +7504,10 @@ function openFloatPopup(){
   :root{
     --ink:#1A1A1A;--panel:#FBFBF8;--bg:#F5F5F2;--soft:#F0EDE7;
     --line:#E5E5DF;--accent:#8B6E3E;--accent-soft:#F5EFE4;--mute:#6B6B66;
-    --body-family:"Nanum Gothic","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    --body-family:"Nanum Myeongjo","NanumMyeongjo","AppleMyungjo","Batang","Apple SD Gothic Neo",serif;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR","Malgun Gothic",sans-serif;color:var(--ink)}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);font-family:"Pretendard",-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;color:var(--ink)}
   .fw-head{display:flex;align-items:center;gap:10px;padding:8px 14px;background:linear-gradient(180deg,#FBFBF8,#fff);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
   .fw-head .fw-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
   .fw-head .fw-dot{width:8px;height:8px;border-radius:50%;background:#2E7D32;display:inline-block}
