@@ -2033,6 +2033,12 @@ ul.toc-list > li::before{
           <label>시작쪽수</label>
           <input type="number" id="in-start-page" value="1" min="1" step="1">
         </div>
+        <div class="row">
+          <label>챕터별 머리글</label>
+          <button type="button" class="btn" id="btn-chapter-heads" style="font-size:11.5px">
+            <i class="ph ph-list-bullets"></i> 챕터별 설정
+          </button>
+        </div>
       </div>
     </aside>
 
@@ -4137,6 +4143,12 @@ function paginate(){
   applyHeaderFooter();
   updateStatus(editor);
   try { markTocListsInPreview(); } catch(e){ console.warn('markTocListsInPreview:', e); }
+  /* 프리뷰의 목차 LI 를 <a href="#anchor"> 로 감싸 진짜 하이퍼링크화.
+     → 마우스 오버 시 native 링크 표시, PDF 출력 시 PDF 링크 어노테이션 발행. */
+  try {
+    const bookEl = document.getElementById('book');
+    if (bookEl) decorateTocLinksAsAnchors(bookEl);
+  } catch(e){ console.warn('decorateTocLinksAsAnchors:', e); }
   /* 새 레이아웃이 반영된 뒤에 스크롤 동기화를 갱신 — onUpdate 경로에서 paginate
      보다 먼저 sync가 실행되면 신규 블록이 아직 프리뷰에 없어 매칭이 실패한다. */
   try { schedulePreviewSyncFromCursor(); } catch(_){}
@@ -4881,12 +4893,50 @@ function createExtraSpread(spreadIdx){
    ============================================================ */
 function getStartPage(){ return Math.max(1, parseInt($('#in-start-page').value || '1', 10) || 1); }
 
+/* 챕터별 머리글 오버라이드 저장소 (key = H1 의 chapterKey, value = 사용자 텍스트).
+   localStorage 백업해 새로고침 후에도 유지. */
+const CHAPTER_HEAD_KEY = 'hcg_chapter_head_overrides_v1';
+function getChapterHeadOverrides(){
+  try {
+    const raw = localStorage.getItem(CHAPTER_HEAD_KEY);
+    return raw ? new Map(Object.entries(JSON.parse(raw))) : new Map();
+  } catch { return new Map(); }
+}
+function setChapterHeadOverrides(map){
+  try {
+    const obj = {};
+    for (const [k, v] of map) obj[k] = v;
+    localStorage.setItem(CHAPTER_HEAD_KEY, JSON.stringify(obj));
+  } catch(e){ console.warn('saveChapterHeads:', e); }
+}
+/* H1 텍스트에서 안정적 키 생성 — id 가 있으면 id, 없으면 정규화 텍스트 */
+function chapterKeyOfH1(h1){
+  if (!h1) return null;
+  if (h1.id) return h1.id;
+  const txt = (h1.textContent || '').trim().replace(/\s+/g, '');
+  return txt || null;
+}
+
 function applyHeaderFooter(){
-  const title = $('#doc-title').value || '';
+  const docTitle = $('#doc-title').value || '';
   const headPos = $('#sel-head-pos').value;
   const footPos = $('#sel-foot-pos').value;
   const startPage = getStartPage();
+  const overrides = getChapterHeadOverrides();
+  /* 페이지 순회 — 가장 최근에 시작한 H1 을 추적해 그 페이지의 머리글로 사용. */
+  let currentTitle = docTitle;
+  let currentKey = null;
   $$('.page').forEach(page=>{
+    /* 이 페이지에 H1 이 있으면 currentChapter 갱신 */
+    const h1 = page.querySelector('.page-content h1');
+    if (h1){
+      const text = (h1.textContent || '').trim();
+      const key = chapterKeyOfH1(h1);
+      if (text){
+        currentTitle = text;
+        currentKey = key;
+      }
+    }
     const idx = parseInt(page.dataset.pageIdx || '0', 10);
     const isRight = page.classList.contains('page-right');
     const logicalPos = pos => pos === 'outer' ? (isRight ? 'right' : 'left') : pos;
@@ -4897,7 +4947,11 @@ function applyHeaderFooter(){
       else {
         head.style.display = 'flex';
         head.className = `page-head ${logicalPos(headPos)}`;
-        head.textContent = title;
+        /* 우선순위: 사용자 오버라이드 > 현재 챕터 H1 > 문서 제목 */
+        const effective = (currentKey && overrides.has(currentKey))
+          ? overrides.get(currentKey)
+          : currentTitle;
+        head.textContent = effective;
       }
     }
     if (foot){
@@ -4909,6 +4963,92 @@ function applyHeaderFooter(){
         foot.innerHTML = `<span class="pagenum">${num}</span>`;
       }
     }
+  });
+}
+
+/**
+ * 챕터별 머리글 모달 — 에디터의 모든 H1 을 나열해 챕터별 머리글을
+ * 사용자가 수동 오버라이드할 수 있게 한다. 비워두면 자동(H1 텍스트) 적용.
+ */
+function openChapterHeadsModal(){
+  /* 에디터에서 H1 수집 — 순서·텍스트·키 */
+  const editorRoot = document.querySelector('#edit-pane #editor');
+  if (!editorRoot){ toast('에디터를 먼저 로드해주세요', 'err'); return; }
+  const h1s = Array.from(editorRoot.querySelectorAll('h1'))
+    .map(h => ({ key: chapterKeyOfH1(h), text: (h.textContent || '').trim() }))
+    .filter(c => c.key && c.text);
+  const overrides = getChapterHeadOverrides();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'chapter-heads-overlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(20,24,32,.55);z-index:9999;
+    display:flex;align-items:center;justify-content:center;
+  `;
+  const rowsHtml = h1s.length === 0
+    ? `<div style="padding:32px 12px;text-align:center;color:#666;font-size:12px">
+         아직 H1(챕터 제목) 이 없습니다. 본문에 제목1 을 적용한 뒤 다시 열어주세요.
+       </div>`
+    : h1s.map((c, i) => `
+        <div class="ch-row" style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #EEE">
+          <div style="flex:0 0 28px;font-size:11px;color:#999;text-align:right">${i + 1}.</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;color:#1A1A1A;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(c.text)}">${escapeHtml(c.text)}</div>
+            <input type="text" data-ch-key="${escapeHtml(c.key)}" placeholder="${escapeHtml(c.text)} (자동)"
+              value="${escapeHtml(overrides.get(c.key) || '')}"
+              style="margin-top:4px;width:100%;padding:5px 8px;font-size:12px;border:1px solid #DDD;border-radius:3px;font-family:var(--ui-family);box-sizing:border-box">
+          </div>
+        </div>`).join('');
+
+  overlay.innerHTML = `
+    <div role="dialog" aria-modal="true" style="
+      width:min(540px,92vw);max-height:80vh;display:flex;flex-direction:column;
+      background:#fff;border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.28);
+      font-family:var(--ui-family);color:#1A1A1A;">
+      <div style="padding:18px 20px 12px;border-bottom:1px solid #EEE;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div>
+          <div style="font-size:15px;font-weight:700">챕터별 머리글 설정</div>
+          <div style="font-size:11px;color:#666;margin-top:4px;line-height:1.55">
+            챕터(H1) 마다 도곽 머리말을 다르게 표시할 수 있습니다.<br>
+            비워두면 챕터 제목이 그대로 머리글에 들어갑니다.
+          </div>
+        </div>
+        <button type="button" id="ch-close" aria-label="닫기" style="border:0;background:transparent;font-size:20px;cursor:pointer;color:#888">×</button>
+      </div>
+      <div style="padding:8px 20px;overflow-y:auto;flex:1">
+        ${rowsHtml}
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid #EEE;display:flex;justify-content:space-between;gap:8px">
+        <button type="button" id="ch-reset" style="border:1px solid #DDD;background:#fff;padding:7px 14px;border-radius:5px;font-size:12px;cursor:pointer">전체 초기화 (자동)</button>
+        <div style="display:flex;gap:8px">
+          <button type="button" id="ch-cancel" style="border:1px solid #DDD;background:#fff;padding:7px 14px;border-radius:5px;font-size:12px;cursor:pointer">취소</button>
+          <button type="button" id="ch-save" style="border:0;background:#1A1A1A;color:#fff;padding:7px 14px;border-radius:5px;font-size:12px;cursor:pointer;font-weight:600">저장 · 적용</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector('#ch-close').addEventListener('click', close);
+  overlay.querySelector('#ch-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector('#ch-reset').addEventListener('click', () => {
+    setChapterHeadOverrides(new Map());
+    try { applyHeaderFooter(); } catch(_){}
+    toast('챕터별 머리글을 모두 자동으로 되돌렸습니다', 'info');
+    close();
+  });
+  overlay.querySelector('#ch-save').addEventListener('click', () => {
+    const map = new Map();
+    overlay.querySelectorAll('input[data-ch-key]').forEach(inp => {
+      const v = (inp.value || '').trim();
+      if (v) map.set(inp.dataset.chKey, v);
+    });
+    setChapterHeadOverrides(map);
+    try { applyHeaderFooter(); } catch(_){}
+    toast('챕터별 머리글이 적용되었습니다', 'ok');
+    close();
   });
 }
 
@@ -6434,6 +6574,13 @@ if (_btnApplyPreset){
   });
 }
 
+const _btnChapterHeads = document.getElementById('btn-chapter-heads');
+if (_btnChapterHeads){
+  _btnChapterHeads.addEventListener('click', () => {
+    try { openChapterHeadsModal(); } catch(e){ console.error('chapter heads modal:', e); toast('챕터 머리글 모달 오류', 'err'); }
+  });
+}
+
 /* ============================================================
    File upload / drag-drop
    ============================================================ */
@@ -6927,6 +7074,10 @@ function buildPrintHtml(){
       page.parentNode.insertBefore(sheet, page);
       sheet.appendChild(page);
     });
+    /* 목차 LI → <a href="#id"> 보강: 인쇄 PDF 에 클릭 가능한 PDF 링크
+       어노테이션이 발행된다. 프리뷰 단에서 이미 적용되었더라도 cloneNode
+       으로 복제됐으므로 멱등 호출만 한 번 더 보장한다. */
+    try { decorateTocLinksAsAnchors(bookNode); } catch(e){ console.warn('toc anchors (print):', e); }
   }
   const bookHtml = bookNode?.outerHTML || '';
   return `<!DOCTYPE html>
@@ -8678,17 +8829,22 @@ function installTocHyperlinks(rootEl){
     });
   });
 }
-/* 에디터 전용 클릭 델리게이트 (한 번만 설치 — 상태는 이 파일 상단에 선언) */
+/* 클릭 델리게이트 (한 번만 설치 — 상태는 이 파일 상단에 선언).
+   에디터(#edit-pane #editor) 와 프리뷰(.book) 양쪽에서 작동.
+   각 컨테이너 내부에서 ID 를 검색하므로 같은 ID 가 두 곳에 동시
+   존재해도(에디터 클론 → 프리뷰) 정확한 대상으로 스크롤한다. */
 function ensureTocClickHandler(){
   if (__tocClickInstalled) return;
   __tocClickInstalled = true;
   document.addEventListener('click', (e) => {
     const li = e.target.closest('.toc-link[data-toc-target]');
     if (!li) return;
-    /* 에디터 내부에서만 작동 (프리뷰에는 목차 리스트 없음) */
-    if (!li.closest('#edit-pane #editor')) return;
+    const container = li.closest('#edit-pane #editor, .book');
+    if (!container) return;
     e.preventDefault();
-    const target = document.getElementById(li.dataset.tocTarget);
+    /* 같은 컨테이너 내부에서 ID 매칭 — 중복 ID 가 있어도 안전 */
+    const tid = li.dataset.tocTarget;
+    const target = container.querySelector('#' + CSS.escape(tid)) || document.getElementById(tid);
     if (!target) return;
     target.scrollIntoView({ behavior:'smooth', block:'start' });
     const prev = target.style.background;
@@ -8696,6 +8852,35 @@ function ensureTocClickHandler(){
     target.style.background = '#FFF3B8';
     setTimeout(() => { target.style.background = prev || ''; }, 1100);
   }, true);
+}
+
+/**
+ * 프리뷰(.book) 와 인쇄용 HTML 에서 사용할 — 목차 LI 내용을 <a href="#id">
+ * 로 감싸 진짜 하이퍼링크로 만든다. 에디터(.ProseMirror) 에는 적용하지 않음
+ * (TipTap 의 노드/마크 정합 깨질 수 있음 — 거기는 클릭 델리게이트로 처리).
+ *
+ * 효과
+ * - 프리뷰: 마우스 오버 시 native 링크 인디케이터 표시, 클릭 = 스크롤
+ * - 인쇄 PDF: 브라우저가 <a href="#anchor"> 를 PDF 링크 어노테이션으로 발행
+ *
+ * 멱등 — 이미 <a> 로 감싸진 LI 는 건너뜀. paginate 후 반복 호출해도 안전.
+ */
+function decorateTocLinksAsAnchors(rootEl){
+  if (!rootEl) return;
+  const links = rootEl.querySelectorAll('.toc-link[data-toc-target]');
+  links.forEach(li => {
+    if (li.querySelector(':scope > a[data-toc-anchor]')) return; /* 이미 처리됨 */
+    const tid = li.dataset.tocTarget;
+    if (!tid) return;
+    const a = document.createElement('a');
+    a.href = '#' + tid;
+    a.dataset.tocAnchor = '1';
+    a.style.color = 'inherit';
+    a.style.textDecoration = 'none';
+    /* 기존 자식들을 <a> 안으로 이동 */
+    while (li.firstChild) a.appendChild(li.firstChild);
+    li.appendChild(a);
+  });
 }
 
 /* ───────────────────────────────────────────────────────────────
